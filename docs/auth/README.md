@@ -15,4 +15,3 @@ Sluice Portal uses a **single shared UI key**: operators sign in with `UI_API_KE
 
 - [User guide — Installation](../guia-usuario/03-installation.md) (deploy + `.env` setup)
 - [User guide — Reference / Security](../guia-usuario/04-reference.md) (glossary + retention + alerts)
-- [README — Authentication](../../README.md#autenticación) (quick summary in the main README)
