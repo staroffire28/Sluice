@@ -54,6 +54,9 @@ public sealed class ReconcileExecutor : IReconcileExecutor
         var pipeline = _pipelines.Get(task.PipelineId)
             ?? throw new InvalidOperationException($"Pipeline '{task.PipelineId}' not found.");
 
+        // Con DeleteMode.Delete las filas de borrado no llegan a SQL: tampoco cuentan en el parquet.
+        var excludeDeleteRows = pipeline.DeleteMode == DeleteMode.Delete;
+
         var stageStart = DateTimeOffset.UtcNow;
         _jobs.AppendEvent(task.JobId, EventLevel.Info, JobEventMarkers.ReconcileStarted);
         _jobs.Update(job.Id, job with
@@ -75,7 +78,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
 
         if (job.Type == JobType.CompareValues)
         {
-            await CompareValuesAsync(task, pipeline.SourceId, pipeline.Name, sql, sqlSchema, scopedEntities, progress, stageStart, cancellationToken);
+            await CompareValuesAsync(task, pipeline.SourceId, pipeline.Name, sql, sqlSchema, scopedEntities, excludeDeleteRows, progress, stageStart, cancellationToken);
             return;
         }
 
@@ -95,7 +98,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
                 long sourceRows = 0;
                 if (await parquetStore.ParquetExistsAsync(blobPath, cancellationToken))
                 {
-                    sourceRows = await parquetStore.CountParquetRowsAsync(blobPath, cancellationToken);
+                    sourceRows = await parquetStore.CountParquetRowsAsync(blobPath, excludeDeleteRows, cancellationToken);
                 }
 
                 var destRows = await _mergeExecutor.CountRowsAsync(sql, sqlSchema, scopedEntity, sqlVersion, cancellationToken);
@@ -122,7 +125,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
                 long sourceRows = 0;
                 if (await parquetStore.ParquetExistsAsync(entry.ParquetPath, cancellationToken))
                 {
-                    sourceRows = await parquetStore.CountParquetRowsAsync(entry.ParquetPath, cancellationToken);
+                    sourceRows = await parquetStore.CountParquetRowsAsync(entry.ParquetPath, excludeDeleteRows, cancellationToken);
                 }
 
                 var destRows = await _mergeExecutor.CountRowsAsync(sql, sqlSchema, entry.Entity, sqlVersion, cancellationToken);
@@ -151,7 +154,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
 
                 var entity = fileName[..^".parquet".Length];
                 progress.Report(JobStepCatalog.Compare, results.Count, total: artifacts.Count, item: entity);
-                var sourceRows = await parquetStore.CountParquetRowsAsync(artifact.Path, cancellationToken);
+                var sourceRows = await parquetStore.CountParquetRowsAsync(artifact.Path, excludeDeleteRows, cancellationToken);
 
                 var destRows = await _mergeExecutor.CountRowsAsync(sql, sqlSchema, entity, sqlVersion, cancellationToken);
                 results.Add(new ReconcileEntityResult
@@ -244,6 +247,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
         SqlConnection sql,
         string sqlSchema,
         IReadOnlyList<string> scopedEntities,
+        bool excludeDeleteRows,
         StageProgress progress,
         DateTimeOffset stageStart,
         CancellationToken cancellationToken)
@@ -257,7 +261,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
         foreach (var entity in entities)
         {
             progress.Report(JobStepCatalog.Compare, results.Count, total: entities.Count, item: entity, force: true);
-            results.Add(await CompareEntityValuesAsync(parquetStore, sql, sqlSchema, task.PipelineId, entity, cancellationToken));
+            results.Add(await CompareEntityValuesAsync(parquetStore, sql, sqlSchema, task.PipelineId, entity, excludeDeleteRows, cancellationToken));
         }
 
         progress.Report(JobStepCatalog.Compare, results.Count);
@@ -311,7 +315,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
     }
 
     private async Task<ValueCompareEntityResult> CompareEntityValuesAsync(
-        IParquetStore parquetStore, SqlConnection sql, string sqlSchema, string pipelineId, string entity, CancellationToken cancellationToken)
+        IParquetStore parquetStore, SqlConnection sql, string sqlSchema, string pipelineId, string entity, bool excludeDeleteRows, CancellationToken cancellationToken)
     {
         try
         {
@@ -328,10 +332,12 @@ public sealed class ReconcileExecutor : IReconcileExecutor
             // Las columnas de etiqueta de enum ([<col>_$label]) se derivan al cargar: no están en el parquet.
             var columns = schema.Attributes.Where(a => a.EnumSourceColumn is null).ToList();
             await using var stream = await parquetStore.OpenParquetReadAsync(parquetPath, cancellationToken);
+            var parquetRows = ParquetMaterializer.ReadStreamingAsync(stream, schema, cancellationToken);
             return await ValueComparer.CompareAsync(
                 entity,
                 columns,
-                ParquetMaterializer.ReadStreamingAsync(stream, schema, cancellationToken),
+                // Con DeleteMode.Delete las filas de borrado no están en SQL: no se comparan.
+                excludeDeleteRows ? parquetRows.Where(row => !DeleteRows.IsDeleteRow(row)) : parquetRows,
                 _mergeExecutor.ReadRowsAsync(sql, sqlSchema, entity, columns.Select(c => c.Name).ToList(), cancellationToken),
                 cancellationToken);
         }

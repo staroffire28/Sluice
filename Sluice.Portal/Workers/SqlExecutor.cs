@@ -5,6 +5,7 @@ using Sluice.Portal.Models;
 using Sluice.Portal.Services;
 using Sluice.Portal.Services.Adls;
 using Sluice.Portal.Services.Pipeline;
+using Sluice.Portal.Services.Stores;
 
 namespace Sluice.Portal.Workers;
 
@@ -25,6 +26,7 @@ public sealed class SqlExecutor : ISqlExecutor
     private readonly AppOptions _options;
     private readonly ILogger<SqlExecutor> _logger;
     private readonly JobProgressStore? _progressStore;
+    private readonly PipelineStateStore? _stateStore;
 
     public SqlExecutor(
         IJobService jobs,
@@ -36,7 +38,8 @@ public sealed class SqlExecutor : ISqlExecutor
         AlertService alerts,
         IOptions<AppOptions> options,
         ILogger<SqlExecutor> logger,
-        JobProgressStore? progress = null)
+        JobProgressStore? progress = null,
+        PipelineStateStore? stateStore = null)
     {
         _jobs = jobs;
         _pipelines = pipelines;
@@ -48,6 +51,7 @@ public sealed class SqlExecutor : ISqlExecutor
         _options = options.Value;
         _logger = logger;
         _progressStore = progress;
+        _stateStore = stateStore;
     }
 
     // Umbral del aviso de posible bloqueo: las sentencias no tienen límite de tiempo (ver
@@ -103,6 +107,7 @@ public sealed class SqlExecutor : ISqlExecutor
 
         var entityResults = new List<JobEntityResult>();
         var totalMerged = 0;
+        var entitySqlRows = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 
         // Re-sync por tabla en modo Reload: tras el upsert se borran las filas huérfanas (Id que
         // ya no está en el parquet) para garantizar SQL == parquet en ambas direcciones. NO se
@@ -178,6 +183,8 @@ public sealed class SqlExecutor : ISqlExecutor
                 var mergeBatch = SqlMergeExecutor.BatchSize;
                 var merged = 0;
                 var reloadKeys = reload ? new List<object?>() : null;
+                // DeleteMode.Delete: las filas de borrado no se cargan; sus Id se borran al final.
+                var deleteKeys = pipeline.DeleteMode == DeleteMode.Delete ? new List<object?>() : null;
                 await using (var parquetStream = fromDelta
                     ? File.OpenRead(deltaPath)
                     : await parquetStore.OpenParquetReadAsync(entry.ParquetPath, cancellationToken))
@@ -185,6 +192,16 @@ public sealed class SqlExecutor : ISqlExecutor
                     var batch = new List<Dictionary<string, object?>>(mergeBatch);
                     await foreach (var row in ParquetMaterializer.ReadStreamingAsync(parquetStream, cdmSchema, cancellationToken))
                     {
+                        if (deleteKeys is not null && DeleteRows.IsDeleteRow(row))
+                        {
+                            if (row.TryGetValue("Id", out var deletedId))
+                            {
+                                deleteKeys.Add(deletedId);
+                            }
+
+                            continue;
+                        }
+
                         if (reloadKeys is not null && row.TryGetValue("Id", out var idValue))
                         {
                             reloadKeys.Add(idValue);
@@ -223,10 +240,23 @@ public sealed class SqlExecutor : ISqlExecutor
                     }
                 }
 
+                // Una tabla vacía no tiene nada que borrar (InsertIntoEmpty ya las saltó).
+                if (deleteKeys is { Count: > 0 } && mode != MergeMode.InsertIntoEmpty)
+                {
+                    stallWatch.Touch($"{entry.Entity} · deletes");
+                    progress.Report(JobStepCatalog.Merge, entityResults.Count, item: entry.Entity, phase: "deletes", failed: failedEntities);
+                    var deleted = await _mergeExecutor.DeleteKeysAsync(connection, schema, entry.Entity, cdmSchema, deleteKeys, sqlVersion, cancellationToken);
+                    if (deleted > 0)
+                    {
+                        _jobs.AppendEvent(task.JobId, EventLevel.Info, $"{entry.Entity}: {deleted} fila(s) borrada(s) en F&O eliminada(s) del destino.");
+                    }
+                }
+
                 stallWatch.Touch($"{entry.Entity} · count");
                 progress.Report(JobStepCatalog.Merge, entityResults.Count, item: entry.Entity, phase: "count", failed: failedEntities);
                 var sqlRows = await _mergeExecutor.CountRowsAsync(connection, schema, entry.Entity, sqlVersion, cancellationToken);
                 totalMerged += merged;
+                entitySqlRows[entry.Entity] = sqlRows;
 
                 entityResults.Add(new JobEntityResult
                 {
@@ -264,6 +294,23 @@ public sealed class SqlExecutor : ISqlExecutor
 
         progress.Report(JobStepCatalog.Merge, entityResults.Count, failed: failedEntities, rows: totalMerged);
         progress.CompleteStep(JobStepCatalog.Merge);
+
+        // Un Force/ReloadFromParquet (o el re-sync en modo Reload) no pasa por el ingest, que es
+        // quien fija el conteo de Tablas: tras la recarga se toma el conteo real de SQL.
+        if (reload && _stateStore is not null && entitySqlRows.Count > 0)
+        {
+            var state = _stateStore.GetOrCreate(task.PipelineId);
+            var tables = new Dictionary<string, TableState>(state.Tables, StringComparer.OrdinalIgnoreCase);
+            foreach (var (entity, rows) in entitySqlRows)
+            {
+                if (tables.TryGetValue(entity, out var table))
+                {
+                    tables[entity] = table with { RowCount = rows };
+                }
+            }
+
+            _stateStore.Save(state with { Tables = tables });
+        }
 
         // El delta solo sirve dentro de este job: se borra al terminar la etapa (vaya bien o mal;
         // un reintento recarga desde el consolidado). Una cancelación sale antes por excepción

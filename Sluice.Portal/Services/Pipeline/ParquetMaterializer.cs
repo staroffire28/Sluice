@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using Parquet;
 using Parquet.Schema;
 using Sluice.Portal.Models;
+using Sluice.Portal.Services.Adls;
 
 namespace Sluice.Portal.Services.Pipeline;
 
@@ -78,31 +79,47 @@ public static class ParquetMaterializer
         }
     }
 
-    // Conteo de filas por metadatos (suma de RowCount de cada row group), sin materializar.
-    public static async Task<long> CountRowsAsync(Stream source, CancellationToken cancellationToken = default)
+    // Conteo de filas por metadatos (suma de RowCount de cada row group), sin materializar. Con
+    // excludeDeleteRows y una columna IsDelete, lee además esa columna (solo esa) para no contar
+    // las filas de borrado de F&O.
+    public static async Task<long> CountRowsAsync(Stream source, bool excludeDeleteRows = false, CancellationToken cancellationToken = default)
     {
         await using var reader = await ParquetReader.CreateAsync(source, cancellationToken: cancellationToken);
+        var isDeleteField = excludeDeleteRows
+            ? reader.Schema.DataFields.FirstOrDefault(f => string.Equals(f.Name, CdmSchemaParser.IsDeleteColumn, StringComparison.OrdinalIgnoreCase))
+            : null;
         long count = 0;
         for (var g = 0; g < reader.RowGroupCount; g++)
         {
             using var rowGroupReader = reader.OpenRowGroupReader(g);
-            count += rowGroupReader.RowCount;
+            if (isDeleteField is null)
+            {
+                count += rowGroupReader.RowCount;
+                continue;
+            }
+
+            var flags = await ReadFieldAsync(rowGroupReader, isDeleteField, (int)rowGroupReader.RowCount, cancellationToken);
+            count += flags.Count(flag => !DeleteRows.IsDeleteValue(flag));
         }
 
         return count;
     }
 
-    // Proyección de 2 columnas (Id + Watermark) para la pasada 1 del consolidador: lee solo
-    // esas columnas (columnar = barato) sin materializar las filas anchas.
-    public static async IAsyncEnumerable<(object? Id, object? Watermark)> ReadKeyWatermarksAsync(
+    // Proyección de Id + Watermark (+ versión, si se pide y existe) para la pasada 1 del
+    // consolidador: lee solo esas columnas (columnar = barato) sin materializar las filas anchas.
+    public static async IAsyncEnumerable<(object? Id, object? Watermark, object? Version)> ReadKeyWatermarksAsync(
         Stream source,
         string idColumn,
         string watermarkColumn,
+        string? versionColumn = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await using var reader = await ParquetReader.CreateAsync(source, cancellationToken: cancellationToken);
         var idField = reader.Schema.DataFields.FirstOrDefault(f => string.Equals(f.Name, idColumn, StringComparison.OrdinalIgnoreCase));
         var wmField = reader.Schema.DataFields.FirstOrDefault(f => string.Equals(f.Name, watermarkColumn, StringComparison.OrdinalIgnoreCase));
+        var versionField = versionColumn is null
+            ? null
+            : reader.Schema.DataFields.FirstOrDefault(f => string.Equals(f.Name, versionColumn, StringComparison.OrdinalIgnoreCase));
         if (idField is null)
         {
             yield break;
@@ -114,10 +131,11 @@ public static class ParquetMaterializer
             var rowCount = (int)rowGroupReader.RowCount;
             var ids = await ReadFieldAsync(rowGroupReader, idField, rowCount, cancellationToken);
             var wms = wmField is null ? null : await ReadFieldAsync(rowGroupReader, wmField, rowCount, cancellationToken);
+            var versions = versionField is null ? null : await ReadFieldAsync(rowGroupReader, versionField, rowCount, cancellationToken);
 
             for (var r = 0; r < rowCount; r++)
             {
-                yield return (ids[r], wms?[r]);
+                yield return (ids[r], wms?[r], versions?[r]);
             }
         }
     }

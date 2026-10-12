@@ -196,6 +196,10 @@
   <data name="Page.Pipelines.EmptyText" xml:space="preserve"><value>Aún no hay pipelines configurados.</value></data>
   <data name="Page.Pipelines.Source" xml:space="preserve"><value>Origen</value></data>
   <data name="Page.Pipelines.Destination" xml:space="preserve"><value>Destino</value></data>
+  <data name="Page.Pipelines.DeleteMode" xml:space="preserve"><value>Filas borradas en F&amp;O</value></data>
+  <data name="Page.Pipelines.DeleteMode.Delete" xml:space="preserve"><value>Borrarlas también en SQL</value></data>
+  <data name="Page.Pipelines.DeleteMode.Ignore" xml:space="preserve"><value>Cargarlas marcadas (IsDelete = 1, resto de columnas vacías)</value></data>
+  <data name="Page.Pipelines.DeleteModeHint" xml:space="preserve"><value>Synapse Link envía cada borrado como una fila con IsDelete = True y el resto de columnas vacías. El cambio se aplica a partir de la próxima ejecución; para corregir las filas ya cargadas, ejecuta Forzar.</value></data>
   <data name="Page.Pipelines.Toggle" xml:space="preserve"><value>Alternar</value></data>
   <data name="Page.Pipelines.Scheduler" xml:space="preserve"><value>Scheduler</value></data>
   <data name="Page.Pipelines.SchedulerActive" xml:space="preserve"><value>Activo</value></data>

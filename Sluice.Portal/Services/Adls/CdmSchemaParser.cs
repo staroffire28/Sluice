@@ -8,6 +8,12 @@ public static class CdmSchemaParser
     public const string IdColumn = "Id";
     public const string WatermarkColumn = "SinkModifiedOn";
 
+    // En F&O contiene el mismo valor que sysrowversion; desempata versiones con igual watermark.
+    public const string VersionColumn = "versionnumber";
+
+    // True en las filas de borrado del CSV incremental (cuerpo vacío, solo campos de sistema).
+    public const string IsDeleteColumn = "IsDelete";
+
     public static CdmEntitySchema Parse(string entityName, string json)
     {
         using var doc = JsonDocument.Parse(json);

@@ -2,7 +2,7 @@
 
 ## Glosario
 
-- **Pipeline** — un origen (ADLS) más un destino (SQL), con un nombre. Su interruptor de "scheduler" controla solo las corridas automáticas; nunca bloquea una corrida manual.
+- **Pipeline** — un origen (ADLS) más un destino (SQL), con un nombre. Su interruptor de "scheduler" controla solo las corridas automáticas; nunca bloquea una corrida manual. Su ajuste *Filas borradas en F&O* (`DeleteMode`) las borra en SQL (por defecto) o las carga marcadas con `IsDelete = 1`.
 - **Job (corrida)** — una ejecución de un pipeline, con un tipo, un estado, resultados por tabla y una línea de tiempo.
 - **Tipo de job** — **Incremental** (solo snapshots nuevos, el predeterminado), **Force** (recarga SQL desde parquet consolidado — todas las tablas, sin ingest), **Reconcile** (solo verifica conteos), **Diff** (reporta deltas de filas), **Re-sync tabla** (re-sincroniza una o varias tablas desde el Parquet existente; desde Conciliación, Tablas o la corrección automática), **Comparar valores** (compara fila a fila, por Id, el Parquet con SQL; desde Conciliación).
 - **Snapshot** — una carpeta de exportación de Synapse Link en ADLS (una foto de los datos en un punto en el tiempo).
