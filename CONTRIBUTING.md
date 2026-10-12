@@ -1,6 +1,6 @@
 # Contributing to Sluice
 
-Thanks for your interest! Bug reports, ideas and pull requests are welcome.
+Thanks for your interest! Bug reports, ideas and pull requests are welcome. Please follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Getting started
 
