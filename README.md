@@ -3,6 +3,13 @@
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-support%20Sluice-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/staroffire28)
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/sluice-flow-dark.svg">
+    <img src="assets/sluice-flow-light.svg" alt="Sluice as a workshop line: a batch of CSV rides a belt from ADLS Gen2 to the ingest press, is stamped into the SQL ledger and checked on the reconcile balance, while queue boards and the portal dial track every step." width="100%">
+  </picture>
+</p>
+
 Control and observability portal for data integration pipelines:
 **ADLS Gen2 (Azure Synapse Link) → Parquet → SQL Server MERGE**.
 
