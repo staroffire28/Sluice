@@ -1,0 +1,46 @@
+@* Diagnóstico de un error: si es conocido (KnownErrors), título, causa y qué hacer, con el mensaje
+   original plegado debajo; si no, solo el mensaje original. *@
+@inject IStringLocalizer<SharedResource> L
+
+@if (KnownErrors.IsKnown(Code))
+{
+    <div class="err-diag" data-testid="error-diagnosis" data-code="@Code">
+        <span class="err-diag__title">@KnownErrors.Title(L, Code!)</span>
+        <span>@KnownErrors.Cause(L, Code!)</span>
+        <span><strong>@L["Error.Diagnosis.Fix"]:</strong> @KnownErrors.Fix(L, Code!)</span>
+        @if (ShowLinks)
+        {
+            <span class="err-diag__links">
+                @if (KnownErrors.IsSourceError(Code!))
+                {
+                    <a href="sources" data-testid="error-diagnosis-link">@L["Error.Diagnosis.OpenSources"]</a>
+                }
+                else
+                {
+                    <a href="destinations" data-testid="error-diagnosis-link">@L["Error.Diagnosis.OpenDestinations"]</a>
+                }
+                · <a href="ayuda/reference">@L["Error.Diagnosis.Help"]</a>
+            </span>
+        }
+        @if (!string.IsNullOrWhiteSpace(Message))
+        {
+            <details class="err-diag__raw">
+                <summary>@L["Error.Diagnosis.Raw"]</summary>
+                <code>@Message</code>
+            </details>
+        }
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(Message))
+{
+    <span>@Message</span>
+}
+
+@code {
+    [Parameter] public string? Code { get; set; }
+
+    [Parameter] public string? Message { get; set; }
+
+    // Enlaces a la página donde se corrige (Orígenes/Destinos) y a la ayuda.
+    [Parameter] public bool ShowLinks { get; set; }
+}

@@ -84,3 +84,23 @@ A second janitor purges **already processed** CSV folders in the Synapse Link so
 - **Dry-run**: `SourceSnapshotRetentionDryRun` in `/settings` — **on by default**; simulates without deleting. Check `/snapshots` (Retention column) and activity log `snapshot-retention.dry-run` before disabling.
 - **Parquet certification**: `SourceSnapshotRetentionRequireParquet` (default on) — skips purge if any `{pipeline}/{entity}.parquet` is missing.
 - **Soft-delete**: enable blob soft-delete on the Azure storage account to recover mistakenly deleted folders (configured outside the portal).
+
+## Common errors
+
+When a job or a connection test fails with a known error, the portal shows what happened and what to do, with the original message below. Errors are recognized by their code (SQL Server error number, ADLS HTTP status, Entra ID `AADSTS` code), so they are recognized whatever the server language.
+
+| Error | Usual cause | What to do |
+|---|---|---|
+| Could not sign in to SQL Server (18456) | Wrong destination user or password, or disabled login. | Fix them in Destinations and press Test connection. |
+| The destination database does not exist (4060) | The database does not exist or the user cannot access it. | Create it (Sluice does not) or fix its name, and grant access. |
+| SQL Server cannot be reached | Host does not resolve, port closed or blocked by a firewall. | Check host and port (1433 by default) and that TCP connections are allowed. |
+| SQL Server took too long to respond | Slow network, or a busy or blocked server. | Check load and blocking, then Retry. |
+| Deadlock in SQL Server (1205) | Another session locked the same rows. | Retry; if it repeats, check concurrent writers. |
+| The destination transaction log is full (9002) | No room left in the log. | Grow the log or disk, or back up the log, then Retry. |
+| Duplicate Id in the destination table (2627/2601) | The table already has a row with that Id. | Re-sync the table from Tables (Reload). |
+| A value does not fit in the destination column (8152/2628) | A column type was changed by hand. | Restore the type (or drop the table) and run Force. |
+| The MERGE received the same Id twice (8672) | The consolidated Parquet has duplicate Ids. | Reset the pipeline and run it. |
+| No permission on the ADLS storage (403) | The identity lacks a role on a container. | Give it **Storage Blob Data Contributor** on the Synapse Link and Parquet containers. |
+| ADLS container or path not found (404) | Wrong account or container name. | Check them in Sources. |
+| The Azure credentials are not valid (`AADSTS…`) | Expired or wrong secret, or wrong tenant/client id. | Create a new secret and update it in Sources. |
+| The storage account cannot be found | The account name does not resolve. | Check the name and outbound access to `*.dfs.core.windows.net`. |

@@ -177,7 +177,7 @@ public sealed class WorkerHostService : BackgroundService
             _logger.LogError(ex, "Task {TaskId} failed in stage {Stage}", task.Id, stage);
             await StopHeartbeatAsync();
             await _tasks.FailAsync(task.Id, stage, workerId, ex.Message, ct);
-            await MarkJobFailedAsync(task.JobId, stage, ex.Message, ct);
+            await MarkJobFailedAsync(task.JobId, stage, ex.Message, ct, KnownErrors.CodeFrom(ex));
         }
         finally
         {
@@ -228,7 +228,7 @@ public sealed class WorkerHostService : BackgroundService
         }
     }
 
-    internal async Task MarkJobFailedAsync(string jobId, PipelineStage stage, string message, CancellationToken ct)
+    internal async Task MarkJobFailedAsync(string jobId, PipelineStage stage, string message, CancellationToken ct, string? code = null)
     {
         var job = _jobs.Get(jobId);
         if (job is null)
@@ -248,7 +248,7 @@ public sealed class WorkerHostService : BackgroundService
             FinishedAt = DateTimeOffset.UtcNow,
             StageStatus = stageStatus,
         });
-        _jobs.AppendEvent(jobId, EventLevel.Error, message);
+        _jobs.AppendEvent(jobId, EventLevel.Error, message, code);
         _activity.LogSystem("job.failed", $"Job {jobId} falló en la etapa {stage}: {message}", job.PipelineId, jobId, level: "error");
 
         var pipeline = _pipelines.GetById(job.PipelineId);

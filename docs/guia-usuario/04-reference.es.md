@@ -84,3 +84,23 @@ Un segundo janitor purga carpetas CSV **ya procesadas** en el container origen d
 - **Dry-run**: `SourceSnapshotRetentionDryRun` en `/settings` — **activo por defecto**; simula sin borrar. Revisa `/snapshots` (columna Retención) y activity log `snapshot-retention.dry-run` antes de desactivarlo.
 - **Certificación parquet**: `SourceSnapshotRetentionRequireParquet` (default activo) — no purga si falta algún `{pipeline}/{entity}.parquet`.
 - **Soft-delete**: habilita blob soft-delete en la storage account de Azure para recuperar carpetas borradas por error (configuración fuera del portal).
+
+## Errores frecuentes
+
+Cuando un job o una prueba de conexión falla con un error conocido, el portal muestra qué pasó y qué hacer, con el mensaje original debajo. Los errores se reconocen por su código (número de error de SQL Server, estado HTTP de ADLS, código `AADSTS` de Entra ID), así que se reconocen sea cual sea el idioma del servidor.
+
+| Error | Causa habitual | Qué hacer |
+|---|---|---|
+| No se pudo iniciar sesión en SQL Server (18456) | Usuario o contraseña del destino incorrectos, o login deshabilitado. | Corrígelos en Destinos y pulsa Probar conexión. |
+| No existe la base de datos de destino (4060) | La base no existe o el usuario no tiene acceso. | Créala (Sluice no la crea) o corrige su nombre, y da acceso. |
+| No se puede llegar al servidor SQL | El host no se resuelve, el puerto está cerrado o un firewall lo bloquea. | Revisa host y puerto (1433 por defecto) y que se permitan conexiones TCP. |
+| SQL Server tardó demasiado en responder | Red lenta, o servidor saturado o bloqueado. | Revisa la carga y los bloqueos, y usa Reintentar. |
+| Interbloqueo en SQL Server (1205) | Otra sesión bloqueó las mismas filas. | Reintentar; si se repite, revisa quién escribe a la vez. |
+| El log de transacciones del destino está lleno (9002) | No queda espacio en el log. | Amplía el log o el disco, o haz copia del log, y usa Reintentar. |
+| Id duplicado en la tabla de destino (2627/2601) | La tabla ya tiene una fila con ese Id. | Re-sincroniza la tabla desde Tablas (Reload). |
+| Un valor no cabe en la columna de destino (8152/2628) | Se cambió a mano el tipo de una columna. | Restaura el tipo (o borra la tabla) y ejecuta Forzar. |
+| El MERGE recibió el mismo Id dos veces (8672) | El Parquet consolidado tiene Ids duplicados. | Restablece el pipeline y ejecútalo. |
+| Sin permiso en el almacenamiento ADLS (403) | A la identidad le falta un rol sobre un contenedor. | Asígnale **Storage Blob Data Contributor** sobre los contenedores de Synapse Link y de Parquet. |
+| No se encuentra el contenedor o la ruta en ADLS (404) | Nombre de cuenta o de contenedor incorrecto. | Revísalos en Orígenes. |
+| Las credenciales de Azure no son válidas (`AADSTS…`) | Secreto caducado o incorrecto, o tenant/client id erróneos. | Genera un secreto nuevo y actualízalo en Orígenes. |
+| No se encuentra la cuenta de almacenamiento | El nombre de la cuenta no se resuelve. | Revisa el nombre y la salida hacia `*.dfs.core.windows.net`. |

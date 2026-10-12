@@ -606,6 +606,7 @@
   <data name="Page.JobDetail.InSqlRows" xml:space="preserve"><value>In SQL</value></data>
   <data name="Page.JobDetail.IngestState" xml:space="preserve"><value>Ingest</value></data>
   <data name="Page.JobDetail.SqlState" xml:space="preserve"><value>SQL</value></data>
+  <data name="Page.JobDetail.EntityError" xml:space="preserve"><value>Error</value></data>
   <data name="Page.JobDetail.EntitiesNote" xml:space="preserve"><value>Read = all versions; In SQL = rows in the target table.</value></data>
   <data name="Page.JobDetail.TimelineFilter" xml:space="preserve"><value>Filter events</value></data>
   <data name="Page.JobDetail.TimelineAll" xml:space="preserve"><value>All</value></data>
@@ -636,4 +637,48 @@
   <data name="Page.Dashboard.ChangelogStalledShort" xml:space="preserve"><value>Changelog stalled</value></data>
   <data name="Common.Status.Idle" xml:space="preserve"><value>Idle</value></data>
   <data name="Page.Dashboard.MoreActiveJobs" xml:space="preserve"><value>and {0} more</value></data>
+  <data name="Error.sql.login.Title" xml:space="preserve"><value>Could not sign in to SQL Server</value></data>
+  <data name="Error.sql.login.Cause" xml:space="preserve"><value>The destination user or password is wrong, or the login is disabled.</value></data>
+  <data name="Error.sql.login.Fix" xml:space="preserve"><value>Check the user and password in Destinations and press Test connection. With SQL authentication, make sure the server allows it.</value></data>
+  <data name="Error.sql.database.Title" xml:space="preserve"><value>The destination database does not exist</value></data>
+  <data name="Error.sql.database.Cause" xml:space="preserve"><value>The database does not exist or the user has no access to it.</value></data>
+  <data name="Error.sql.database.Fix" xml:space="preserve"><value>Create the database (Sluice does not create it) or fix its name in Destinations, and grant the user access.</value></data>
+  <data name="Error.sql.network.Title" xml:space="preserve"><value>SQL Server cannot be reached</value></data>
+  <data name="Error.sql.network.Cause" xml:space="preserve"><value>The server name does not resolve, the port is closed or a firewall blocks the connection.</value></data>
+  <data name="Error.sql.network.Fix" xml:space="preserve"><value>Check the host and port in Destinations, that the server accepts TCP connections and that no firewall blocks the port (1433 by default).</value></data>
+  <data name="Error.sql.timeout.Title" xml:space="preserve"><value>SQL Server took too long to respond</value></data>
+  <data name="Error.sql.timeout.Cause" xml:space="preserve"><value>The connection or a query timed out, usually because of a slow network or a busy or blocked server.</value></data>
+  <data name="Error.sql.timeout.Fix" xml:space="preserve"><value>Check the server load and any blocking, then use Retry.</value></data>
+  <data name="Error.sql.deadlock.Title" xml:space="preserve"><value>Deadlock in SQL Server</value></data>
+  <data name="Error.sql.deadlock.Cause" xml:space="preserve"><value>Another session was locking the same rows and SQL Server cancelled this operation to resolve it.</value></data>
+  <data name="Error.sql.deadlock.Fix" xml:space="preserve"><value>It is usually transient: use Retry. If it repeats, check which other processes write to those tables at the same time.</value></data>
+  <data name="Error.sql.logFull.Title" xml:space="preserve"><value>The destination transaction log is full</value></data>
+  <data name="Error.sql.logFull.Cause" xml:space="preserve"><value>The database has no room left in its log to record the load.</value></data>
+  <data name="Error.sql.logFull.Fix" xml:space="preserve"><value>Grow the log or the disk, or back up the log if the database uses the full recovery model, then use Retry.</value></data>
+  <data name="Error.sql.duplicateKey.Title" xml:space="preserve"><value>Duplicate Id in the destination table</value></data>
+  <data name="Error.sql.duplicateKey.Cause" xml:space="preserve"><value>The table already has a row with that Id.</value></data>
+  <data name="Error.sql.duplicateKey.Fix" xml:space="preserve"><value>Re-sync the table from Tables (Reload mode) so it matches the Parquet.</value></data>
+  <data name="Error.sql.truncated.Title" xml:space="preserve"><value>A value does not fit in the destination column</value></data>
+  <data name="Error.sql.truncated.Cause" xml:space="preserve"><value>A value is longer than its SQL column, usually because the column type was changed by hand.</value></data>
+  <data name="Error.sql.truncated.Fix" xml:space="preserve"><value>Restore the column type (or drop the table so Sluice creates it again) and run Force.</value></data>
+  <data name="Error.sql.mergeDuplicateSource.Title" xml:space="preserve"><value>The MERGE received the same Id twice</value></data>
+  <data name="Error.sql.mergeDuplicateSource.Cause" xml:space="preserve"><value>The table's consolidated Parquet has more than one row with the same Id (error 8672).</value></data>
+  <data name="Error.sql.mergeDuplicateSource.Fix" xml:space="preserve"><value>Reset the pipeline (Pipelines → Reset) and run it to rebuild the Parquet.</value></data>
+  <data name="Error.adls.forbidden.Title" xml:space="preserve"><value>No permission on the ADLS storage</value></data>
+  <data name="Error.adls.forbidden.Cause" xml:space="preserve"><value>The connection identity has no permission on the container.</value></data>
+  <data name="Error.adls.forbidden.Fix" xml:space="preserve"><value>Give the connection identity the Storage Blob Data Contributor role on the Synapse Link and Parquet containers (Reader is not enough: Sluice writes the Parquet and purges processed CSVs). Role changes can take a few minutes.</value></data>
+  <data name="Error.adls.notFound.Title" xml:space="preserve"><value>ADLS container or path not found</value></data>
+  <data name="Error.adls.notFound.Cause" xml:space="preserve"><value>The container or folder does not exist in the storage account.</value></data>
+  <data name="Error.adls.notFound.Fix" xml:space="preserve"><value>Check the account name and the Synapse Link and Parquet container names in Sources.</value></data>
+  <data name="Error.adls.auth.Title" xml:space="preserve"><value>The Azure credentials are not valid</value></data>
+  <data name="Error.adls.auth.Cause" xml:space="preserve"><value>Entra ID rejected the connection: the secret expired or is wrong, or the tenant or client id do not match.</value></data>
+  <data name="Error.adls.auth.Fix" xml:space="preserve"><value>Create a new secret in the app registration and update it in Sources; also check the tenant and client id.</value></data>
+  <data name="Error.adls.host.Title" xml:space="preserve"><value>The storage account cannot be found</value></data>
+  <data name="Error.adls.host.Cause" xml:space="preserve"><value>The ADLS account name does not resolve on the network.</value></data>
+  <data name="Error.adls.host.Fix" xml:space="preserve"><value>Check the account name in Sources and that the machine can reach *.dfs.core.windows.net (or its private endpoint).</value></data>
+  <data name="Error.Diagnosis.Fix" xml:space="preserve"><value>What to do</value></data>
+  <data name="Error.Diagnosis.OpenDestinations" xml:space="preserve"><value>Open Destinations</value></data>
+  <data name="Error.Diagnosis.OpenSources" xml:space="preserve"><value>Open Sources</value></data>
+  <data name="Error.Diagnosis.Raw" xml:space="preserve"><value>Original message</value></data>
+  <data name="Error.Diagnosis.Help" xml:space="preserve"><value>Common errors</value></data>
 </root>
