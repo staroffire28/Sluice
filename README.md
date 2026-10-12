@@ -43,24 +43,23 @@ The full user guide (English) lives in [`docs/guia-usuario/`](docs/guia-usuario/
 ├── docker-compose.linux.yml    # distribuido, Linux / WSL2
 ├── docker-compose.monolith.yml # un solo contenedor (smoke local)
 ├── docs/                       # guía de usuario (servida en /ayuda)
-├── Sluice.Portal/
-│   ├── Program.cs
-│   ├── Configuration/          # AppOptions + binding de env vars
-│   ├── Models/
-│   ├── Services/               # Dominio: jobs, pipelines, connections, orchestration
-│   │   ├── Adls/               # Cliente ADLS, CSV, watermarks, enum labels
-│   │   ├── Pipeline/           # Parquet, SQL MERGE, reconcile, SqlConnectionFactory
-│   │   └── Stores/             # JSON file stores (jobs, pipelines, paused_tables, ...)
-│   ├── Endpoints/              # Health (/health, /internal/health) y Management API (/api/*)
-│   ├── Middleware/             # DualAuthMiddleware
-│   ├── Workers/                # Ingest/Sql/Reconcile executors + WorkerHostService
-│   ├── Scheduler/              # PipelineSchedulerService
-│   ├── Components/
-│   │   ├── Layout/             # MainLayout, ThemeToggle, NavMenu
-│   │   ├── Pages/              # Dashboard, Jobs, Pipelines, Sources, Tables, ...
-│   │   └── Shared/             # StatusBadge, PanelState, StageFlow, HealthPill
-│   └── Resources/              # SharedResource.resx (ES) / .en.resx (EN)
-└── Sluice.Portal.Tests/        # xUnit: unit + integración (WebApplicationFactory)
+└── Sluice.Portal/
+    ├── Program.cs
+    ├── Configuration/          # AppOptions + binding de env vars
+    ├── Models/
+    ├── Services/               # Dominio: jobs, pipelines, connections, orchestration
+    │   ├── Adls/               # Cliente ADLS, CSV, watermarks, enum labels
+    │   ├── Pipeline/           # Parquet, SQL MERGE, reconcile, SqlConnectionFactory
+    │   └── Stores/             # JSON file stores (jobs, pipelines, paused_tables, ...)
+    ├── Endpoints/              # Health (/health, /internal/health) y Management API (/api/*)
+    ├── Middleware/             # DualAuthMiddleware
+    ├── Workers/                # Ingest/Sql/Reconcile executors + WorkerHostService
+    ├── Scheduler/              # PipelineSchedulerService
+    ├── Components/
+    │   ├── Layout/             # MainLayout, ThemeToggle, NavMenu
+    │   ├── Pages/              # Dashboard, Jobs, Pipelines, Sources, Tables, ...
+    │   └── Shared/             # StatusBadge, PanelState, StageFlow, HealthPill
+    └── Resources/              # SharedResource.resx (ES) / .en.resx (EN)
 ```
 
 ## Arquitectura
@@ -174,18 +173,6 @@ dotnet run --project Sluice.Portal/Sluice.Portal.csproj
 - Health: `GET http://localhost:58472/health`
 - Portal: `http://localhost:58472/login` (clave = `UI_API_KEY`)
 
-## Tests
-
-```powershell
-dotnet test Sluice.Portal.sln
-dotnet test --filter "Api"
-dotnet test --filter "Adls|Cdm|Ingest"
-dotnet test --filter "Auth"
-dotnet test --filter "MonolithPipelineFlow"
-```
-
-El test `MonolithPipelineFlowTests` verifica el flujo ingest → sql → reconcile en modo `local` con ejecutores fake (sin ADLS/SQL reales).
-
 ## Instalación con Docker
 
 Despliegue distribuido (API orquestador + 3 workers por etapa, volumen compartido para la cola). Elige la variante según tu host. En ambos casos:
@@ -239,7 +226,4 @@ Para un smoke local rápido en un solo contenedor existe `docker-compose.monolit
 | `/snapshots` | Carpetas ADLS, settled, pendientes, stall |
 | `/reports` | Último reconcile y diff por pipeline |
 
-## Contrato ADLS
-
-Ver `docs/adls-synapse-link-contract.md`.
 

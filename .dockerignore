@@ -6,6 +6,5 @@
 **/data
 **/*.user
 **/*.suo
-**/Sluice.Portal.Tests/TestResults
 **/.env
 **/appsettings.Development.json
