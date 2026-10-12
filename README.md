@@ -1,7 +1,10 @@
 # Sluice
 
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-support%20Sluice-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/staroffire28)
+
+<p align="center">
+  <a href="https://ko-fi.com/staroffire28"><img src="https://storage.ko-fi.com/cdn/kofi5.png?v=3" alt="Buy me a coffee at ko-fi.com" height="40"></a>
+</p>
 
 <p align="center">
   <img src="assets/sluice-overview.svg" alt="Sluice as a hydraulic sluice: water released from a header tank (ADLS Gen2) through a sluice gate runs down a flume past a paddle-wheel meter, settles clean in a clarifier (ingest), is pumped through a turbine meter into a cistern (SQL merge), while the portal's centre-zero gauge compares both meters until they match (reconcile)." width="100%">
