@@ -4,12 +4,7 @@
 #
 # Azure (ADLS) y SQL Server se configuran DESDE EL PORTAL (Sources/Destinations).
 # Los parámetros operativos se editan en /settings. Aquí solo van la clave entre
-# servicios, el modo/volumen y la ruta al SQL del host.
-#
-# SQL Server del HOST: en la conexión del portal usa host como `host.docker.internal`.
-# extra_hosts mapea ese nombre al gateway del host — necesario en Docker Linux nativo
-# (en Docker Desktop Windows/WSL2 ya resuelve solo, ahí el mapeo es inofensivo).
-# Requiere SQL escuchando por TCP y el puerto 1433 abierto en el firewall del host.
+# servicios y el modo/volumen.
 #
 # TRANSLATE_ENUMS (opt-in): traduce los optionsets de Dataverse/F&O añadiendo al final
 # de cada tabla una columna [<col>_$label] con el ExternalValue (idioma 1033). Solo lo
@@ -31,8 +26,6 @@ services:
       DATA_DIR: /data
       UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - pipeline-data:/data
     healthcheck:
@@ -56,8 +49,6 @@ services:
       UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
       WORKER_STAGE: ingest
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - pipeline-data:/data
     depends_on:
@@ -82,8 +73,6 @@ services:
       AUTH_MODE: ${AUTH_MODE:-key}
       WORKER_STAGE: sql
       TRANSLATE_ENUMS: "true"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - pipeline-data:/data
     depends_on:
@@ -104,8 +93,6 @@ services:
       UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
       WORKER_STAGE: reconcile
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - pipeline-data:/data
     depends_on:

@@ -69,7 +69,7 @@ The full user guide (English) lives in [`docs/guia-usuario/`](docs/guia-usuario/
 ```mermaid
 flowchart LR
     ADLS[("ADLS Gen2<br/>Synapse Link")]
-    SQL[("SQL Server destino<br/>host.docker.internal:1433")]
+    SQL[("SQL Server destino")]
 
     subgraph Portal["Sluice Portal (modo distribuido)"]
         API["API / Orquestador<br/>UI Blazor + Scheduler"]
@@ -189,7 +189,6 @@ cp .env.example .env          # edita UI_API_KEY
 docker compose -f docker-compose.linux.yml up -d --build
 ```
 
-- **SQL Server en el host**: en la conexión del portal usa `host.docker.internal` como host. El compose ya mapea ese nombre al host (`extra_hosts: host-gateway`) — necesario en Docker Linux nativo; en Docker Desktop/WSL2 ya resuelve solo. El SQL del host debe escuchar por **TCP** y tener el **puerto 1433 abierto** en el firewall.
 - `TRANSLATE_ENUMS` viene activado en `worker-sql`.
 
 ### Instalación Docker — Windows containers
@@ -202,7 +201,6 @@ docker compose -f docker-compose.yml up -d --build
 ```
 
 - Imagen base `windowsservercore-ltsc2022`; la primera construcción descarga varios GB.
-- Mismo criterio de `host.docker.internal` + TCP + firewall 1433 para el SQL del host.
 
 ### Verificación y escalado
 
