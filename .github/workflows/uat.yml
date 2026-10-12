@@ -1,6 +1,6 @@
 name: UAT
 
-# Suite UAT por interfaz (docs/uat/escenarios.md). Solo bajo demanda: Actions → UAT → Run workflow.
+# Suite UAT por interfaz (Playwright). Solo bajo demanda: Actions → UAT → Run workflow.
 # No bloquea PRs. El origen es la carpeta local simulada que genera la propia suite; nunca se
 # conecta a un storage account.
 on:

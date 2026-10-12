@@ -71,7 +71,7 @@ Set `KNOWN_PROXIES` / `KNOWN_NETWORKS` to restrict which proxies may supply `X-F
 
 ## Alternatives considered
 
-The design doc ([parquet-adls-deploy-login-i18n](../design-2026-06-15-parquet-adls-deploy-login-i18n.md)) evaluated full user accounts (Entra ID, per-user RBAC). That was deferred: operators are a small trusted group, and the portal has no user database. A shared UI key plus session cookies restores protection without a identity migration.
+Full user accounts (Entra ID, per-user RBAC) were evaluated. That was deferred: operators are a small trusted group, and the portal has no user database. A shared UI key plus session cookies restores protection without a identity migration.
 
 ## Related
 

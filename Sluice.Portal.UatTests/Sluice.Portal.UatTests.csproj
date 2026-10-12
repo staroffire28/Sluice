@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Suite UAT por interfaz (docs/uat/escenarios.md). Se ejecuta bajo demanda con
+  <!-- Suite UAT por interfaz (Playwright). Se ejecuta bajo demanda con
        scripts/uat.ps1 o el workflow "UAT"; la CI de los PRs solo la compila. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>

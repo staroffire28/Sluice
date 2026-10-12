@@ -42,7 +42,7 @@ The full user guide (English) lives in [`docs/guia-usuario/`](docs/guia-usuario/
 ├── docker-compose.yml          # distribuido, Windows containers
 ├── docker-compose.linux.yml    # distribuido, Linux / WSL2
 ├── docker-compose.monolith.yml # un solo contenedor (smoke local)
-├── docs/                       # guía de usuario (servida en /ayuda) + design docs
+├── docs/                       # guía de usuario (servida en /ayuda)
 ├── Sluice.Portal/
 │   ├── Program.cs
 │   ├── Configuration/          # AppOptions + binding de env vars

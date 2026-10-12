@@ -1,4 +1,4 @@
-# Suite UAT por interfaz (docs/uat/escenarios.md), bajo demanda.
+# Suite UAT por interfaz (Playwright), bajo demanda.
 #
 #   pwsh scripts/uat.ps1                          # todo; levanta un SQL Server efímero en Docker
 #   pwsh scripts/uat.ps1 -Area Pipelines          # un área (Access, Sources, Destinations, Pipelines,
