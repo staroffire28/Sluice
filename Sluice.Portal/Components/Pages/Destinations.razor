@@ -130,8 +130,8 @@
     private string _type = "sqlserver";
     private string _sqlVersion = "2022";
     private string _host = "";
-    private string _database = "SynapseLink";
-    private string _user = "sa";
+    private string _database = "";
+    private string _user = "";
     private string _password = "";
     private bool _detecting;
     private SqlVersionDetection? _detection;
@@ -210,8 +210,8 @@
         _type = "sqlserver";
         _sqlVersion = "2022";
         _host = "";
-        _database = "SynapseLink";
-        _user = "sa";
+        _database = "";
+        _user = "";
         _password = "";
         _detection = null;
         _editorKey = Guid.NewGuid();

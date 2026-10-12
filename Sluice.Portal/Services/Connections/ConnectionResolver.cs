@@ -92,8 +92,10 @@ public static class ConnectionSettingsFactory
 
         var host = Get(config, "host", "server")
             ?? throw new InvalidOperationException("SQL Server host is not configured.");
-        var database = Get(config, "database") ?? "SynapseLink";
-        var user = Get(config, "user", "username") ?? "sa";
+        var database = Get(config, "database")
+            ?? throw new InvalidOperationException("SQL Server database is not configured.");
+        var user = Get(config, "user", "username")
+            ?? throw new InvalidOperationException("SQL Server user is not configured.");
         var password = Get(config, "password")
             ?? throw new InvalidOperationException("SQL Server password is not configured.");
         var trust = Get(config, "trust_server_certificate");
