@@ -83,8 +83,9 @@ public static class SqlMergeBuilder
     }
 
     // onlyNewer (delta de un Incremental): actualiza solo si el origen es más nuevo por
-    // SinkModifiedOn ("mismo watermark" no reescribe). Misma regla que el consolidador: sin
-    // watermark pierde frente a cualquiera. Sin esa columna, MERGE incondicional.
+    // SinkModifiedOn ("mismo watermark" no reescribe salvo versionnumber mayor, si la tabla lo
+    // trae). Misma regla que el consolidador: sin watermark o sin versión pierde frente a
+    // cualquiera. Sin columna de watermark, MERGE incondicional.
     public static string BuildMerge(
         string schema,
         string table,
@@ -98,8 +99,12 @@ public static class SqlMergeBuilder
         var insertCols = string.Join(", ", entity.Attributes.Select(a => Quote(a.Name)));
         var insertVals = string.Join(", ", entity.Attributes.Select(a => $"source.{Quote(a.Name)}"));
         var wm = Quote(CdmSchemaParser.WatermarkColumn);
+        var ver = Quote(CdmSchemaParser.VersionColumn);
+        var versionTie = entity.Attributes.Any(a => string.Equals(a.Name, CdmSchemaParser.VersionColumn, StringComparison.OrdinalIgnoreCase))
+            ? $" OR (source.{wm} = target.{wm} AND source.{ver} IS NOT NULL AND (target.{ver} IS NULL OR source.{ver} > target.{ver}))"
+            : "";
         var matched = onlyNewer && entity.Attributes.Any(a => string.Equals(a.Name, CdmSchemaParser.WatermarkColumn, StringComparison.OrdinalIgnoreCase))
-            ? $"WHEN MATCHED AND (target.{wm} IS NULL OR source.{wm} > target.{wm}) THEN UPDATE"
+            ? $"WHEN MATCHED AND (target.{wm} IS NULL OR source.{wm} > target.{wm}{versionTie}) THEN UPDATE"
             : "WHEN MATCHED THEN UPDATE";
 
         return $"""
