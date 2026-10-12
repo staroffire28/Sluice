@@ -127,6 +127,6 @@ Las alertas se configuran en **Ajustes** (`/settings`): activa las alertas y peg
 Se crean en `/sources` y `/destinations`. Rellena los campos del `Config`; los secretos se cifran at-rest y se muestran como `***`. Si cambias el tipo de una conexión existente, no se arrastra su configuración anterior: solo se guardan los campos del tipo nuevo.
 
 - **Origen ADLS:** `account`, `container`, `parquet_container`, `tenant_id`, `client_id`, `client_secret`.
-- **Destino SQL:** `host`, `database` (default `SynapseLink`), `user` (default `sa`), `password` y `sql_version` (versión de SQL Server, default 2022). La versión no hace falta elegirla: **Probar conexión** en el formulario la detecta del servidor y la ajusta (sin guardar), y **Probar** desde la fila corrige la guardada si no coincide. Un `connection_string` completo se usa solo si la conexión ya lo trae; el formulario no tiene campo para él.
+- **Destino SQL:** `host`, `database`, `user`, `password` y `sql_version` (versión de SQL Server, default 2022). La versión no hace falta elegirla: **Probar conexión** en el formulario la detecta del servidor y la ajusta (sin guardar), y **Probar** desde la fila corrige la guardada si no coincide. Un `connection_string` completo se usa solo si la conexión ya lo trae; el formulario no tiene campo para él.
 
 Usa **Probar** para validar contra el ADLS/SQL real antes de ejecutar un pipeline. Las sentencias SQL de un pipeline no tienen límite de tiempo por defecto; un `connection_string` con su propio `Command Timeout` se respeta.

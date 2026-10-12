@@ -127,6 +127,6 @@ Alerts are configured in **Settings** (`/settings`): enable alerts and paste you
 Created in `/sources` and `/destinations`. Fill the `Config` fields; secrets are encrypted at rest and shown as `***`. Changing the type of an existing connection does not carry over its previous configuration: only the fields of the new type are saved.
 
 - **Source ADLS:** `account`, `container`, `parquet_container`, `tenant_id`, `client_id`, `client_secret`.
-- **Destination SQL:** `host`, `database` (default `SynapseLink`), `user` (default `sa`), `password`, and `sql_version` (SQL Server version, default 2022). You don't need to pick the version: **Test connection** in the form detects it from the server and sets it (without saving), and **Test** from the row fixes the saved one if it doesn't match. A full `connection_string` is used only if the connection already has one; the form has no field for it.
+- **Destination SQL:** `host`, `database`, `user`, `password`, and `sql_version` (SQL Server version, default 2022). You don't need to pick the version: **Test connection** in the form detects it from the server and sets it (without saving), and **Test** from the row fixes the saved one if it doesn't match. A full `connection_string` is used only if the connection already has one; the form has no field for it.
 
 Use **Test** to validate against the real ADLS/SQL before running a pipeline. SQL statements of a pipeline have no time limit by default; a `connection_string` with its own `Command Timeout` is respected.
