@@ -10,8 +10,10 @@
   </picture>
 </p>
 
-Control and observability portal for data integration pipelines:
+Control and observability portal for **Dynamics 365 Finance and Operations** data pipelines:
 **ADLS Gen2 (Azure Synapse Link) → Parquet → SQL Server MERGE**.
+
+> **Scope:** Sluice works only with Dynamics 365 Finance and Operations data exported to ADLS Gen2 by Azure Synapse Link. Other sources are not supported.
 
 ## Features
 

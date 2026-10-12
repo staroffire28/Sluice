@@ -1,6 +1,6 @@
 # Introduction
 
-Sluice Portal operates and observes a data pipeline that copies data from **Azure Synapse Link (ADLS Gen2)** into **SQL Server**, keeping a durable **Parquet** copy in between:
+Sluice Portal operates and observes a data pipeline that copies **Dynamics 365 Finance and Operations** data from **Azure Synapse Link (ADLS Gen2)** into **SQL Server**, keeping a durable **Parquet** copy in between:
 
 ```
 ADLS Gen2 (Synapse Link)
@@ -13,6 +13,8 @@ Reconciliation
 ```
 
 From the portal you create connections, define pipelines, launch runs (manual or scheduled), follow their progress live, and verify that SQL ended up matching the source. The portal itself has no database: all of its state lives as JSON files on a volume (`DATA_DIR`).
+
+> **Scope:** Sluice works only with Dynamics 365 Finance and Operations data exported to ADLS Gen2 by Azure Synapse Link. Other sources are not supported.
 
 ## Who it's for
 
