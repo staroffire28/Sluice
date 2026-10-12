@@ -16,7 +16,7 @@
 # Los workers NO fijan WORKER_ID a propósito: cada réplica usa su hostname
 # (Environment.MachineName) como id único, así el claim atómico de la cola
 # (TaskStore.TryClaimAsync) no colisiona entre réplicas del mismo stage.
-# Mide dónde satura antes de escalar (ver design doc): el cuello puede ser
+# Mide dónde satura antes de escalar: el cuello puede ser
 # SQL/ADLS, no el worker — y eso no se arregla con más réplicas.
 services:
   api:
