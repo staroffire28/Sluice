@@ -12,6 +12,9 @@ on:
       - .github/workflows/docker-windows.yml
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-and-smoke:
     # windows-2022 = Windows Server 2022, la misma versión que las bases ltsc2022: los runners
