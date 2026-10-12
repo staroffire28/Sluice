@@ -4,10 +4,7 @@
 [![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-support%20Sluice-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/staroffire28)
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/sluice-flow-dark.svg">
-    <img src="assets/sluice-flow-light.svg" alt="Sluice as a workshop line: a batch of CSV rides a belt from ADLS Gen2 to the ingest press, is stamped into the SQL ledger and checked on the reconcile balance, while queue boards and the portal dial track every step." width="100%">
-  </picture>
+  <img src="assets/sluice-overview.svg" alt="Sluice as a hydraulic sluice: water released from a header tank (ADLS Gen2) through a sluice gate runs down a flume past a paddle-wheel meter, settles clean in a clarifier (ingest), is pumped through a turbine meter into a cistern (SQL merge), while the portal's centre-zero gauge compares both meters until they match (reconcile)." width="100%">
 </p>
 
 Control and observability portal for data integration pipelines:
