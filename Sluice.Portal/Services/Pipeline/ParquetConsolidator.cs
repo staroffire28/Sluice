@@ -23,10 +23,14 @@ public static class ParquetConsolidator
     // DeleteRows: de las Rows escritas, cuántas son filas de borrado de F&O (IsDelete = True).
     public sealed record ConsolidationResult(int Rows, DateTimeOffset? MaxWatermark, int RowsWithoutId = 0, int DeleteRows = 0);
 
+    // keyOnlySources: fuentes que solo compiten en la pasada 1 y nunca se emiten (el delta usa así el
+    // consolidado completo: una fila del snapshot que pierde frente a una versión ya cargada,
+    // p. ej. una versión anterior de un Id ya borrado en F&O, no llega a SQL).
     public static async Task<ConsolidationResult> ConsolidateAsync(
         IReadOnlyList<Func<CancellationToken, Task<Stream>>> sourcesNewestFirst,
         CdmEntitySchema schema,
         Stream destination,
+        IReadOnlyList<Func<CancellationToken, Task<Stream>>>? keyOnlySources = null,
         int batchSize = 5000,
         CancellationToken cancellationToken = default)
     {
@@ -37,7 +41,7 @@ public static class ParquetConsolidator
         // Pasada 1: máximo (watermark, versión) por Id.
         var maxWatermark = new KeyWatermarks();
         var rowsWithoutId = 0;
-        foreach (var open in sourcesNewestFirst)
+        foreach (var open in sourcesNewestFirst.Concat(keyOnlySources ?? []))
         {
             await using var stream = await open(cancellationToken);
             await foreach (var (id, wm, version) in ParquetMaterializer.ReadKeyWatermarksAsync(stream, idCol, wmCol, versionCol, cancellationToken))

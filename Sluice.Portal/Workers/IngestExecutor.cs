@@ -341,6 +341,8 @@ public sealed class IngestExecutor : IIngestExecutor
             // Delta: solo las filas de los snapshots de esta corrida (deduplicadas), para que la
             // etapa SQL no remergee la tabla entera. Solo con consolidado previo: sin él la tabla
             // destino está vacía y SQL carga el consolidado (el delta sería una copia completa).
+            // El consolidado recién generado compite solo por claves: una fila de esta corrida que
+            // pierde frente a él (versión anterior de un Id ya cargado o ya borrado) no entra al delta.
             var hasDelta = false;
             if (hasPreviousConsolidated)
             {
@@ -348,7 +350,10 @@ public sealed class IngestExecutor : IIngestExecutor
                 Directory.CreateDirectory(Path.GetDirectoryName(deltaPath)!);
                 await using (var delta = File.Create(deltaPath))
                 {
-                    await ParquetConsolidator.ConsolidateAsync(transientSources, schema, delta, cancellationToken: cancellationToken);
+                    await ParquetConsolidator.ConsolidateAsync(
+                        transientSources, schema, delta,
+                        keyOnlySources: [_ => Task.FromResult<Stream>(File.OpenRead(stagingConsolidated))],
+                        cancellationToken: cancellationToken);
                 }
 
                 hasDelta = true;
