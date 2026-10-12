@@ -1,0 +1,339 @@
+@page "/pipelines"
+@rendermode InteractiveServer
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Models
+@using Sluice.Portal.Services
+@using Sluice.Portal.Services.Stores
+@using Sluice.Portal.Services.Logging
+@using Sluice.Portal.Services.Pipeline
+@inject IPipelineService PipelineService
+@inject IPipelineResetService PipelineResetService
+@inject IConnectionService Connections
+@inject ReportStore Reports
+@inject INotificationService NotificationService
+@inject IDialogService DialogService
+@inject IActivityLog ActivityLog
+
+@inject IStringLocalizer<SharedResource> L
+
+<PageTitle>@L["Nav.Pipelines"]</PageTitle>
+
+<FluentStack Class="page-stack" Orientation="Orientation.Vertical" VerticalGap="12">
+    <PageHeader Title="@L["Page.Pipelines.Title"]" Subtitle="@L["Page.Pipelines.Subtitle"]">
+        <Actions>
+            <FluentButton Appearance="ButtonAppearance.Primary" data-testid="add-pipeline" OnClick="OpenCreate">@L["Common.Add"]</FluentButton>
+        </Actions>
+    </PageHeader>
+
+    <PageSection>
+    <ListWithEmptyCta HasItems="@(_allItems.Count > 0)" EmptyText="@L["Page.Pipelines.EmptyText"]">
+        <EmptyAction>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OpenCreate">@L["Common.Add"]</FluentButton>
+        </EmptyAction>
+        <ListContent>
+            <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true" Items="@_items.AsQueryable()" TGridItem="Pipeline">
+                <PropertyColumn Property="@(p => p.Name)" Title="@L["Common.Name"]" />
+                <PropertyColumn Property="@(p => p.SourceId)" Title="@L["Page.Pipelines.Source"]" />
+                <PropertyColumn Property="@(p => p.DestinationId)" Title="@L["Page.Pipelines.Destination"]" />
+                <TemplateColumn Title="@L["Page.Pipelines.Scheduler"]">
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                        <FluentBadge data-testid="@($"sched-{context.Id}-{(context.Enabled ? "on" : "off")}")" Appearance="@(context.Enabled ? BadgeAppearance.Filled : BadgeAppearance.Tint)" Color="@(context.Enabled ? BadgeColor.Brand : BadgeColor.Informative)">
+                            @(context.Enabled ? L["Page.Pipelines.SchedulerActive"] : L["Page.Pipelines.SchedulerInactive"])
+                        </FluentBadge>
+                        <FluentButton Appearance="ButtonAppearance.Subtle" data-testid="@($"toggle-{context.Id}")" OnClick="@(() => Toggle(context))">
+                            @(context.Enabled ? L["Page.Pipelines.SchedulerOff"] : L["Page.Pipelines.SchedulerOn"])
+                        </FluentButton>
+                    </FluentStack>
+                </TemplateColumn>
+                <TemplateColumn Title="@L["Common.Actions"]">
+                    <FluentMenu>
+                        <FluentMenuButton Appearance="ButtonAppearance.Primary" data-testid="@($"actions-{context.Id}")" Label="@L["Common.Actions"]" />
+                        <FluentMenuList>
+                            <PipelineRunActions PipelineId="@context.Id" OnCompleted="@OnRunCompleted" />
+                            <FluentMenuItem data-testid="@($"edit-{context.Id}")" OnClick="@(() => Edit(context))">@L["Common.Edit"]</FluentMenuItem>
+                            <FluentMenuItem data-testid="@($"reset-{context.Id}")" OnClick="@(() => ConfirmReset(context))">@L["Page.Pipelines.Reset"]</FluentMenuItem>
+                            <FluentMenuItem data-testid="@($"delete-{context.Id}")" OnClick="@(() => ConfirmDelete(context))">@L["Common.Delete"]</FluentMenuItem>
+                        </FluentMenuList>
+                    </FluentMenu>
+                </TemplateColumn>
+            </FluentDataGrid>
+        </ListContent>
+    </ListWithEmptyCta>
+
+    <PaginationControl Page="_page" TotalPages="_totalPages" TotalCount="_totalCount" PageChanged="OnPageChanged" />
+
+    @if (_latestReconcile is not null)
+    {
+        <FluentMessageBar Intent="@(_latestReconcile.IsPartial ? MessageBarIntent.Warning : MessageBarIntent.Success)" Style="margin-top:0.75rem;">
+            @L["Page.Pipelines.LatestReconcile"] @_latestReconcile.MaxDivergencePct.ToString("F2")% (@_latestReconcile.Entities.Count @L["Page.Pipelines.Entities"])
+        </FluentMessageBar>
+    }
+
+    </PageSection>
+</FluentStack>
+
+<InlineDialog @bind-Visible="_showEditor" Title="@_editorTitle" Class="dialog-wide">
+    <ChildContent>
+    @* Con FluentOption escritas a mano, el desplegable no reflejaba el Value asignado por código
+       al reutilizar el diálogo: mostraba vacío o la última opción pulsada en otro pipeline, y
+       guardar podía reasignar este pipeline al origen/destino de aquel. Con Items el componente
+       marca la opción a partir del Value, y el @key por apertura descarta cualquier estado previo. *@
+    <div class="dialog-form" @key="_editorKey">
+        <FluentTextInput @bind-Value="_editName" data-testid="pipe-name" Label="@L["Common.Name"]" Style="width:100%;" />
+        <FluentSelect TOption="Connection" TValue="string" @bind-Value="_sourceId" data-testid="pipe-source" Label="@L["Page.Pipelines.Source"]" Style="width:100%;"
+                      Items="@Connections.List(ConnectionRole.Source)" OptionValue="@(c => c.Id)" OptionText="@(c => c.Name)" />
+        <FluentSelect TOption="Connection" TValue="string" @bind-Value="_destId" data-testid="pipe-dest" Label="@L["Page.Pipelines.Destination"]" Style="width:100%;"
+                      Items="@Connections.List(ConnectionRole.Destination)" OptionValue="@(c => c.Id)" OptionText="@(c => c.Name)" />
+    </div>
+    </ChildContent>
+    <Actions>
+        <FluentButton data-testid="pipe-cancel" OnClick="() => _showEditor = false">@L["Common.Cancel"]</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="pipe-save" OnClick="SaveEditor">@L["Common.Save"]</FluentButton>
+    </Actions>
+</InlineDialog>
+
+<InlineDialog @bind-Visible="_showDelete" Title="@L["Page.Pipelines.DeleteTitle"]">
+    <ChildContent>
+    <FluentLabel>@L["Page.Pipelines.DeletePrefix"] <strong>@_deleteName</strong>?</FluentLabel>
+    <FluentCheckbox @bind-Value="_wipeState" Label="@L["Page.Pipelines.WipeState"]" />
+    </ChildContent>
+    <Actions>
+        <FluentButton OnClick="() => _showDelete = false">@L["Common.Cancel"]</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="pipe-delete-confirm" OnClick="DeleteConfirmed">@L["Common.Delete"]</FluentButton>
+    </Actions>
+</InlineDialog>
+
+<InlineDialog @bind-Visible="_showReset" Title="@L["Page.Pipelines.ResetTitle"]">
+    <ChildContent>
+    @* El espacio va dentro de la expresión: Blazor elimina el espacio suelto antes de <strong>. *@
+    <FluentLabel>@($"{L["Page.Pipelines.ResetPrefix"]} ")<strong>@_resetName</strong>?</FluentLabel>
+    <FluentLabel Class="field-hint">@L["Page.Pipelines.ResetWarning"]</FluentLabel>
+    <FluentLabel Class="field-hint">@L["Page.Pipelines.ResetKeeps"]</FluentLabel>
+    <FluentCheckbox @bind-Value="_truncateSql" Label="@L["Page.Pipelines.ResetTruncateSql"]" />
+    <FluentLabel Class="field-hint">@L["Page.Pipelines.ResetTruncateSqlHint"]</FluentLabel>
+    </ChildContent>
+    <Actions>
+        <FluentButton OnClick="() => _showReset = false">@L["Common.Cancel"]</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="pipe-reset-confirm" Disabled="@_resetting" Loading="@_resetting" OnClick="ResetConfirmed">@L["Page.Pipelines.Reset"]</FluentButton>
+    </Actions>
+</InlineDialog>
+
+@code {
+    private List<Pipeline> _allItems = [];
+    private List<Pipeline> _items = [];
+    private int _page = 1;
+    private const int PageSize = 20;
+    private int _totalCount;
+    private int _totalPages = 1;
+    private bool _showEditor;
+    private bool _showDelete;
+    private string _editorTitle = "";
+    private string? _editingId;
+    private string _editName = "";
+    private string _sourceId = "";
+    private string _destId = "";
+    private Guid _editorKey = Guid.NewGuid();
+    private string? _deleteId;
+    private string? _deleteName;
+    private bool _wipeState;
+    private bool _showReset;
+    private bool _resetting;
+    private string? _resetId;
+    private string? _resetName;
+    private bool _truncateSql;
+    private ReconcileReport? _latestReconcile;
+
+    protected override void OnInitialized() => Load();
+
+    private Task OnRunCompleted()
+    {
+        Load();
+        return Task.CompletedTask;
+    }
+
+    private void Load()
+    {
+        _allItems = PipelineService.List().OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        // Sobre TODOS los pipelines, no solo la página actual: es un resumen global.
+        _latestReconcile = _allItems
+            .Select(p => Reports.GetLatestReconcile(p.Id))
+            .Where(r => r is not null)
+            .OrderByDescending(r => r!.CreatedAt)
+            .FirstOrDefault();
+        ApplyPaging();
+    }
+
+    // La lista ya se carga entera en memoria (PipelineStore.ListAll); paginar aquí es
+    // solo de presentación, sin tocar IPipelineService (mismo patrón que Tables.razor).
+    private void ApplyPaging()
+    {
+        _totalCount = _allItems.Count;
+        _totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+        if (_page > _totalPages)
+        {
+            _page = _totalPages;
+        }
+
+        _items = _allItems.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
+    }
+
+    private void OnPageChanged(int page)
+    {
+        _page = page;
+        ApplyPaging();
+    }
+
+    private void OpenCreate()
+    {
+        _editingId = null;
+        _editorTitle = L["Page.Pipelines.NewTitle"].Value;
+        _editName = "";
+        _sourceId = Connections.List(ConnectionRole.Source).FirstOrDefault()?.Id ?? "";
+        _destId = Connections.List(ConnectionRole.Destination).FirstOrDefault()?.Id ?? "";
+        _editorKey = Guid.NewGuid();
+        _showEditor = true;
+    }
+
+    private void Edit(Pipeline pipeline)
+    {
+        _editingId = pipeline.Id;
+        _editorTitle = L["Page.Pipelines.EditTitle"].Value;
+        _editName = pipeline.Name;
+        _sourceId = pipeline.SourceId;
+        _destId = pipeline.DestinationId;
+        _editorKey = Guid.NewGuid();
+        _showEditor = true;
+    }
+
+    private void SaveEditor()
+    {
+        try
+        {
+            if (_editingId is null)
+            {
+                var slug = Sluice.Portal.Services.Stores.EntityIds.Slugify(_editName);
+                if (slug.Length == 0)
+                {
+                    _ = NotificationService.ShowErrorToastAsync(L["Common.NameRequired"].Value);
+                    return;
+                }
+
+                PipelineService.Create(new Pipeline
+                {
+                    Id = $"pipe-{slug}",
+                    Name = _editName,
+                    SourceId = _sourceId,
+                    DestinationId = _destId,
+                    Enabled = false, // scheduler apagado al crear: primero se corre a mano, luego se activa
+                });
+            }
+            else
+            {
+                var existing = PipelineService.Get(_editingId)!;
+                PipelineService.Update(_editingId, existing with
+                {
+                    Name = _editName,
+                    SourceId = _sourceId,
+                    DestinationId = _destId,
+                });
+            }
+
+            _showEditor = false;
+            var saved = _editingId is null ? "creado" : "actualizado";
+            _ = NotificationService.ShowSuccessToastAsync(L["Common.Saved"].Value);
+            ActivityLog.LogUser("pipeline.save", $"Pipeline {_editName} {saved}.");
+            Load();
+        }
+        catch (Exception ex)
+        {
+            _ = NotificationService.ShowErrorToastAsync(ex.Message);
+            ActivityLog.LogUser("pipeline.save", $"No se pudo guardar el pipeline {_editName}: {ex.Message}", level: "error");
+        }
+    }
+
+    private void Toggle(Pipeline pipeline)
+    {
+        var next = !pipeline.Enabled;
+        PipelineService.Update(pipeline.Id, pipeline with { Enabled = next });
+        _ = NotificationService.ShowInfoToastAsync(next ? L["Page.Pipelines.SchedulerActive"].Value : L["Page.Pipelines.SchedulerInactive"].Value);
+        ActivityLog.LogUser("pipeline.scheduler", $"Scheduler {(next ? "activado" : "desactivado")} en el pipeline {pipeline.Name}.", pipeline.Id);
+        Load();
+    }
+
+    private void ConfirmDelete(Pipeline pipeline)
+    {
+        _deleteId = pipeline.Id;
+        _deleteName = pipeline.Name;
+        _wipeState = false;
+        _showDelete = true;
+    }
+
+    private void DeleteConfirmed()
+    {
+        if (_deleteId is null)
+        {
+            return;
+        }
+
+        if (!PipelineService.Delete(_deleteId, _wipeState, out var error))
+        {
+            _ = NotificationService.ShowErrorToastAsync(error ?? L["Common.DeleteFailed"].Value);
+            return;
+        }
+
+        _ = NotificationService.ShowInfoToastAsync(string.Format(L["Common.Deleted"].Value, _deleteName ?? _deleteId));
+        ActivityLog.LogUser("pipeline.delete", $"Pipeline {_deleteName ?? _deleteId} eliminado{(_wipeState ? " (con borrado de estado)" : "")}.", _deleteId);
+        _showDelete = false;
+        Load();
+    }
+
+    private void ConfirmReset(Pipeline pipeline)
+    {
+        _resetId = pipeline.Id;
+        _resetName = pipeline.Name;
+        _truncateSql = false;
+        _showReset = true;
+    }
+
+    private async Task ResetConfirmed()
+    {
+        // El reset es largo (trunca SQL, borra parquets): un segundo clic lanzaría otro en paralelo.
+        if (_resetId is null || _resetting)
+        {
+            return;
+        }
+
+        _resetting = true;
+        try
+        {
+            var result = await PipelineResetService.ResetAsync(_resetId, _truncateSql);
+            if (!result.Completed)
+            {
+                await NotificationService.ShowErrorToastAsync(string.Format(L["Page.Pipelines.ResetFailed"].Value, result.TableTruncateFailures.Count));
+                ActivityLog.LogUser(
+                    "pipeline.reset",
+                    $"Reset de {_resetName ?? _resetId} detenido: fallo al truncar {string.Join(", ", result.TableTruncateFailures.Select(f => f.Entity))}.",
+                    _resetId,
+                    level: "error");
+                return;
+            }
+
+            await NotificationService.ShowInfoToastAsync(string.Format(L["Page.Pipelines.ResetSuccess"].Value, result.TablesTruncated.Count, result.ParquetArtifactsDeleted));
+            ActivityLog.LogUser(
+                "pipeline.reset",
+                $"Pipeline {_resetName ?? _resetId} reseteado ({result.TablesTruncated.Count} tabla(s) truncada(s), {result.ParquetArtifactsDeleted} parquet(s) borrado(s)).",
+                _resetId);
+            _showReset = false;
+            Load();
+        }
+        catch (Exception ex)
+        {
+            await NotificationService.ShowErrorToastAsync(ex.Message);
+            ActivityLog.LogUser("pipeline.reset", $"No se pudo resetear {_resetName ?? _resetId}: {ex.Message}", _resetId, level: "error");
+        }
+        finally
+        {
+            _resetting = false;
+        }
+    }
+}

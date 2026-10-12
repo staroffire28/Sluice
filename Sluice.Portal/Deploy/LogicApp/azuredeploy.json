@@ -1,0 +1,240 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Sluice Portal: Logic App (Consumption) que recibe el webhook de alertas del portal y las envía por correo (Office 365 Outlook) con plantilla HTML."
+  },
+  "parameters": {
+    "logicAppName": {
+      "type": "string",
+      "defaultValue": "sluice-alertas",
+      "minLength": 1,
+      "maxLength": 80,
+      "metadata": {
+        "description": "Nombre de la Logic App."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Región de la Logic App y de la conexión."
+      }
+    },
+    "recipients": {
+      "type": "string",
+      "minLength": 3,
+      "metadata": {
+        "description": "Destinatarios del correo, separados por punto y coma (p. ej. operaciones@contoso.com;dba@contoso.com)."
+      }
+    },
+    "portalBaseUrl": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "URL pública del portal Sluice (p. ej. https://sluice.contoso.com). Opcional: con ella el correo usa el logo del portal (sin ella, uno dibujado en HTML) y trae el botón \"Abrir en Sluice\"."
+      }
+    },
+    "office365ConnectionName": {
+      "type": "string",
+      "defaultValue": "sluice-office365",
+      "metadata": {
+        "description": "Nombre del recurso de conexión de Office 365 Outlook."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "[parameters('office365ConnectionName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "displayName": "Sluice - Office 365 Outlook",
+        "api": {
+          "id": "[concat(subscription().id, '/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/office365')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('logicAppName')]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "aplicacion": "sluice-portal",
+        "proposito": "alertas"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/connections', parameters('office365ConnectionName'))]"
+      ],
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections": {
+              "defaultValue": {},
+              "type": "Object"
+            },
+            "destinatarios": {
+              "defaultValue": "",
+              "type": "String"
+            },
+            "urlPortal": {
+              "defaultValue": "",
+              "type": "String"
+            }
+          },
+          "triggers": {
+            "manual": {
+              "type": "Request",
+              "kind": "Http",
+              "inputs": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "eventType": {
+                      "type": "string"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "pipelineId": {
+                      "type": "string"
+                    },
+                    "pipelineName": {
+                      "type": "string"
+                    },
+                    "jobId": {
+                      "type": "string"
+                    },
+                    "jobType": {
+                      "type": "string"
+                    },
+                    "stage": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "maxDivergencePct": {
+                      "type": "number"
+                    },
+                    "entities": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "autoRemediation": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "actions": {
+            "Presentacion": {
+              "type": "Compose",
+              "runAfter": {},
+              "inputs": {
+                "etiqueta": "@{if(equals(coalesce(triggerBody()?['eventType'],''),'pipeline.failure'),'FALLO',if(equals(coalesce(triggerBody()?['eventType'],''),'reconcile.divergence'),'DIVERGENCIA',if(equals(coalesce(triggerBody()?['eventType'],''),'reconcile.values'),'VALORES',if(equals(coalesce(triggerBody()?['eventType'],''),'test.ping'),'PRUEBA','ALERTA'))))}",
+                "titulo": "@{if(equals(coalesce(triggerBody()?['eventType'],''),'pipeline.failure'),'Un pipeline ha fallado',if(equals(coalesce(triggerBody()?['eventType'],''),'reconcile.divergence'),'Divergencia en la conciliación',if(equals(coalesce(triggerBody()?['eventType'],''),'reconcile.values'),'Diferencias de valores entre Parquet y SQL',if(equals(coalesce(triggerBody()?['eventType'],''),'test.ping'),'La Logic App recibe las alertas de Sluice','Alerta del sistema'))))}",
+                "color": "@{if(equals(coalesce(triggerBody()?['eventType'],''),'pipeline.failure'),'#c4314b',if(equals(coalesce(triggerBody()?['eventType'],''),'reconcile.divergence'),'#c27c0e',if(equals(coalesce(triggerBody()?['eventType'],''),'reconcile.values'),'#7a4fd1',if(equals(coalesce(triggerBody()?['eventType'],''),'test.ping'),'#0f6cbd','#4a5d72'))))}",
+                "importancia": "@{if(equals(coalesce(triggerBody()?['eventType'],''),'pipeline.failure'),'High','Normal')}",
+                "asunto": "@{concat('[Sluice] ',if(equals(coalesce(triggerBody()?['eventType'],''),'pipeline.failure'),'Un pipeline ha fallado',if(equals(coalesce(triggerBody()?['eventType'],''),'reconcile.divergence'),'Divergencia en la conciliación',if(equals(coalesce(triggerBody()?['eventType'],''),'reconcile.values'),'Diferencias de valores entre Parquet y SQL',if(equals(coalesce(triggerBody()?['eventType'],''),'test.ping'),'La Logic App recibe las alertas de Sluice','Alerta del sistema')))),if(empty(coalesce(triggerBody()?['pipelineName'],triggerBody()?['pipelineId'])),'',concat(' · ',coalesce(triggerBody()?['pipelineName'],triggerBody()?['pipelineId']))))}",
+                "autofix": "@{if(equals(coalesce(triggerBody()?['autoRemediation'],''),'scheduled'),'Programada: se re-sincronizan las tablas una vez',if(equals(coalesce(triggerBody()?['autoRemediation'],''),'off'),'Desactivada: corrige desde Conciliación',if(equals(coalesce(triggerBody()?['autoRemediation'],''),'unresolved'),'No resolvió la diferencia: revisa Conciliación','')))}",
+                "portal": "@{if(endsWith(trim(coalesce(parameters('urlPortal'),'')),'/'),substring(trim(coalesce(parameters('urlPortal'),'')),0,sub(length(trim(coalesce(parameters('urlPortal'),''))),1)),trim(coalesce(parameters('urlPortal'),'')))}",
+                "enlace": "@{if(empty(if(endsWith(trim(coalesce(parameters('urlPortal'),'')),'/'),substring(trim(coalesce(parameters('urlPortal'),'')),0,sub(length(trim(coalesce(parameters('urlPortal'),''))),1)),trim(coalesce(parameters('urlPortal'),'')))),'',concat(if(endsWith(trim(coalesce(parameters('urlPortal'),'')),'/'),substring(trim(coalesce(parameters('urlPortal'),'')),0,sub(length(trim(coalesce(parameters('urlPortal'),''))),1)),trim(coalesce(parameters('urlPortal'),''))),if(startsWith(coalesce(triggerBody()?['eventType'],''),'reconcile.'),'/reconcile',if(empty(triggerBody()?['jobId']),'',concat('/jobs/',triggerBody()?['jobId'])))))}"
+              }
+            },
+            "Filas_de_tablas": {
+              "type": "Select",
+              "runAfter": {},
+              "inputs": {
+                "from": "@coalesce(triggerBody()?['entities'],json('[]'))",
+                "select": "@concat('<tr><td style=\"padding:8px 12px;border-bottom:1px solid #eef2f6;font-family:Consolas,''Courier New'',monospace;font-size:13px;color:#0b1f33;\">',replace(replace(coalesce(item(),''),'&','&amp;'),'<','&lt;'),'</td></tr>')"
+              }
+            },
+            "Html": {
+              "type": "Compose",
+              "runAfter": {
+                "Presentacion": [
+                  "Succeeded"
+                ],
+                "Filas_de_tablas": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": "<!DOCTYPE html>\n<html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Sluice</title></head>\n<body style=\"margin:0;padding:0;background:#eef2f6;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#eef2f6;padding:32px 12px;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;\">\n<tr><td align=\"center\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"width:100%;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(11,31,51,0.10);font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;\">\n<tr><td style=\"background:#0b1f33;padding:18px 28px;\">\n<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\"><tr>@{if(empty(outputs('Presentacion')?['portal']),'<td style=\"padding-right:10px;vertical-align:middle;\"><table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" width=\"30\" style=\"width:30px;background:#13304d;border:1px solid #2a4a6b;border-radius:7px;\"><tr><td align=\"center\" style=\"padding:7px 0 1px;font-size:0;line-height:0;\"><table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" width=\"16\"><tr><td style=\"width:16px;height:3px;background:#4ca3f0;border-radius:2px;font-size:0;line-height:3px;\">&nbsp;</td></tr></table></td></tr><tr><td align=\"center\" style=\"padding:0 0 4px;color:#ffffff;font-family:''Segoe UI'',Arial,sans-serif;font-size:20px;line-height:16px;font-weight:700;\">&#8776;</td></tr></table></td>',concat('<td style=\"padding-right:10px;vertical-align:middle;\"><img src=\"',outputs('Presentacion')?['portal'],'/favicon.png','\" width=\"28\" height=\"28\" alt=\"\" style=\"display:block;border:0;border-radius:6px;\"></td>'))}<td style=\"color:#ffffff;font-size:17px;font-weight:600;letter-spacing:0.2px;vertical-align:middle;\">Sluice Portal</td></tr></table>\n</td></tr>\n<tr><td style=\"height:4px;line-height:4px;font-size:0;background:@{outputs('Presentacion')?['color']};\">&nbsp;</td></tr>\n<tr><td style=\"padding:28px 28px 6px;\">\n<span style=\"display:inline-block;padding:3px 10px;border-radius:999px;background:@{outputs('Presentacion')?['color']};color:#ffffff;font-size:11px;font-weight:700;letter-spacing:0.8px;\">@{outputs('Presentacion')?['etiqueta']}</span>\n<h1 style=\"margin:14px 0 8px;font-size:22px;line-height:1.3;color:#0b1f33;font-weight:600;\">@{outputs('Presentacion')?['titulo']}</h1>\n<p style=\"margin:0;font-size:14px;line-height:1.6;color:#4a5d72;\">@{replace(replace(coalesce(coalesce(triggerBody()?['message'],triggerBody()?['text']),''),'&','&amp;'),'<','&lt;')}</p>\n</td></tr>\n<tr><td style=\"padding:14px 28px 4px;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-top:1px solid #e3e9ef;\">@{concat(if(empty(replace(replace(coalesce(coalesce(triggerBody()?['pipelineName'],triggerBody()?['pipelineId']),''),'&','&amp;'),'<','&lt;')),'',concat('<tr><td style=\"padding:9px 0;border-bottom:1px solid #e3e9ef;font-size:13px;color:#4a5d72;width:170px;vertical-align:top;\">Pipeline</td><td style=\"padding:9px 0;border-bottom:1px solid #e3e9ef;font-size:13px;color:#0b1f33;font-weight:600;word-break:break-all;\">',replace(replace(coalesce(coalesce(triggerBody()?['pipelineName'],triggerBody()?['pipelineId']),''),'&','&amp;'),'<','&lt;'),'</td></tr>')),if(empty(replace(replace(coalesce(triggerBody()?['jobId'],''),'&','&amp;'),'<','&lt;')),'',concat('<tr><td style=\"padding:9px 0;border-bottom:1px solid #e3e9ef;font-size:13px;color:#4a5d72;width:170px;vertical-align:top;\">Job</td><td style=\"padding:9px 0;border-bottom:1px solid #e3e9ef;font-size:13px;color:#0b1f33;font-weight:600;word-break:break-all;\">',replace(replace(coalesce(triggerBody()?['jobId'],''),'&','&amp;'),'<','&lt;'),'</td></tr>')),if(empty(replace(replace(coalesce(triggerBody()?['jobType'],''),'&','&amp;'),'<','&lt;')),'',concat('<tr><td style=\"padding:9px 0;border-bottom:1px solid #e3e9ef;font-size:13px;color:#4a5d72;width:170px;vertical-align:top;\">Tipo de job</td><td style=\"padding:9px 0;border-bottom:1px solid #e3e9ef;font-size:13px;color:#0b1f33;font-weight:600;word-break:break-all;\">',replace(replace(coalesce(triggerBody()?['jobType'],''),'&','&amp;'),'<','&lt;'),'</td></tr>')),if(empty(replace(replace(coalesce(triggerBody()?['stage'],''),'&','&amp;'),'<','&lt;')),'',concat('<tr><td style=\"padding:9px 0;border-bottom:1px solid #e3e9ef;font-size:13px;color:#4a5d72;width:170px;vertical-align:top;\">Etapa</td><td style=\"padding:9px 0;border-bottom:1px solid #e3e9ef;font-size:13px;color:#0b1f33;font-weight:600;word-break:break-all;\">',replace(replace(coalesce(triggerBody()?['stage'],''),'&','&amp;'),'<','&lt;'),'</td></tr>')),if(equals(triggerBody()?['maxDivergencePct'],null),'',concat('<tr><td style=\"padding:9px 0;border-bottom:1px solid #e3e9ef;font-size:13px;color:#4a5d72;width:170px;vertical-align:top;\">Divergencia máxima</td><td style=\"padding:9px 0;border-bottom:1px solid #e3e9ef;font-size:13px;color:#0b1f33;font-weight:600;word-break:break-all;\">',formatNumber(float(triggerBody()?['maxDivergencePct']),'0.##','es-ES'),' %','</td></tr>')),if(empty(outputs('Presentacion')?['autofix']),'',concat('<tr><td style=\"padding:9px 0;border-bottom:1px solid #e3e9ef;font-size:13px;color:#4a5d72;width:170px;vertical-align:top;\">Corrección automática</td><td style=\"padding:9px 0;border-bottom:1px solid #e3e9ef;font-size:13px;color:#0b1f33;font-weight:600;word-break:break-all;\">',outputs('Presentacion')?['autofix'],'</td></tr>')),if(empty(concat(formatDateTime(coalesce(triggerBody()?['timestamp'],utcNow()),'dd/MM/yyyy HH:mm'),' UTC')),'',concat('<tr><td style=\"padding:9px 0;border-bottom:1px solid #e3e9ef;font-size:13px;color:#4a5d72;width:170px;vertical-align:top;\">Fecha</td><td style=\"padding:9px 0;border-bottom:1px solid #e3e9ef;font-size:13px;color:#0b1f33;font-weight:600;word-break:break-all;\">',concat(formatDateTime(coalesce(triggerBody()?['timestamp'],utcNow()),'dd/MM/yyyy HH:mm'),' UTC'),'</td></tr>')))}</table>\n</td></tr>\n@{if(empty(body('Filas_de_tablas')),'',concat('<tr><td style=\"padding:14px 28px 4px;\"><p style=\"margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:0.8px;color:#4a5d72;\">TABLAS AFECTADAS</p><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border:1px solid #e3e9ef;border-radius:8px;border-collapse:separate;\">',join(body('Filas_de_tablas'),''),'</table></td></tr>'))}\n@{if(empty(outputs('Presentacion')?['enlace']),'',concat('<tr><td style=\"padding:22px 28px 4px;\"><a href=\"',outputs('Presentacion')?['enlace'],'\" style=\"display:inline-block;padding:11px 22px;border-radius:6px;background:#0f6cbd;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;\">Abrir en Sluice</a></td></tr>'))}\n<tr><td style=\"padding:22px 28px 26px;\">\n<p style=\"margin:0;font-size:12px;line-height:1.6;color:#7d93ab;\">Enviado por Sluice Portal · @{concat(formatDateTime(coalesce(triggerBody()?['timestamp'],utcNow()),'dd/MM/yyyy HH:mm'),' UTC')}<br>Recibes este correo porque tu dirección está en la lista de avisos de la Logic App de alertas de Sluice.</p>\n</td></tr>\n</table>\n</td></tr></table>\n</body></html>"
+            },
+            "Enviar_correo": {
+              "type": "ApiConnection",
+              "runAfter": {
+                "Html": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['office365']['connectionId']"
+                  }
+                },
+                "method": "post",
+                "path": "/v2/Mail",
+                "body": {
+                  "To": "@parameters('destinatarios')",
+                  "Subject": "@{outputs('Presentacion')?['asunto']}",
+                  "Body": "@{outputs('Html')}",
+                  "Importance": "@{outputs('Presentacion')?['importancia']}"
+                }
+              }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "office365": {
+                "id": "[concat(subscription().id, '/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/office365')]",
+                "connectionId": "[resourceId('Microsoft.Web/connections', parameters('office365ConnectionName'))]",
+                "connectionName": "[parameters('office365ConnectionName')]"
+              }
+            }
+          },
+          "destinatarios": {
+            "value": "[parameters('recipients')]"
+          },
+          "urlPortal": {
+            "value": "[parameters('portalBaseUrl')]"
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "logicAppName": {
+      "type": "string",
+      "value": "[parameters('logicAppName')]"
+    },
+    "connectionName": {
+      "type": "string",
+      "value": "[parameters('office365ConnectionName')]"
+    },
+    "triggerUrl": {
+      "type": "string",
+      "value": "[listCallbackUrl(resourceId('Microsoft.Logic/workflows/triggers', parameters('logicAppName'), 'manual'), '2019-05-01').value]"
+    }
+  }
+}

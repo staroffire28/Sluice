@@ -1,0 +1,635 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="App.Title" xml:space="preserve"><value>Sluice Portal</value></data>
+  <data name="Common.SkipToContent" xml:space="preserve"><value>Skip to content</value></data>
+  <data name="Login.PageTitle" xml:space="preserve"><value>Sign in — Sluice Portal</value></data>
+  <data name="Login.Subtitle" xml:space="preserve"><value>Enter your access key to continue.</value></data>
+  <data name="Login.ApiKeyLabel" xml:space="preserve"><value>Access key</value></data>
+  <data name="Login.SignIn" xml:space="preserve"><value>Sign in</value></data>
+  <data name="Login.Heading" xml:space="preserve"><value>Sign in</value></data>
+  <data name="Login.Help" xml:space="preserve"><value>Don't have the key? Ask whoever administers the portal.</value></data>
+  <data name="Login.ShowKey" xml:space="preserve"><value>Show key</value></data>
+  <data name="Login.HideKey" xml:space="preserve"><value>Hide key</value></data>
+  <data name="Login.Hero.Title" xml:space="preserve"><value>From the data lake to SQL Server, verified table by table.</value></data>
+  <data name="Login.Hero.Text" xml:space="preserve"><value>Syncs Azure Synapse Link into SQL Server, keeps a durable Parquet copy and reconciles every table when it finishes.</value></data>
+  <data name="Login.Mode.Distributed" xml:space="preserve"><value>Distributed mode</value></data>
+  <data name="Login.Mode.Local" xml:space="preserve"><value>Local mode</value></data>
+  <data name="Login.Open.Heading" xml:space="preserve"><value>Welcome</value></data>
+  <data name="Login.Open.Text" xml:space="preserve"><value>Enter the portal to manage your pipelines.</value></data>
+  <data name="Login.Open.Enter" xml:space="preserve"><value>Enter</value></data>
+  <data name="Login.Open.Warning" xml:space="preserve"><value>Open access: this portal asks for no key. Use it only on an internal network or behind an authenticating proxy.</value></data>
+  <data name="Auth.OpenAccess" xml:space="preserve"><value>Open access</value></data>
+  <data name="Auth.OpenAccessTitle" xml:space="preserve"><value>This portal asks for no key: anyone who reaches this address can use it.</value></data>
+
+  <data name="Login.Error.Invalid" xml:space="preserve"><value>Invalid access key.</value></data>
+  <data name="Login.Error.Required" xml:space="preserve"><value>Access key is required.</value></data>
+  <data name="Login.Error.Csrf" xml:space="preserve"><value>Your sign-in session expired. Please try again.</value></data>
+  <data name="Login.Error.Throttled" xml:space="preserve"><value>Too many failed attempts. Wait a few minutes before trying again.</value></data>
+  <data name="Auth.Logout" xml:space="preserve"><value>Sign out</value></data>
+  <data name="Nav.Group.Operation" xml:space="preserve"><value>Operation</value></data>
+  <data name="Nav.Group.Data" xml:space="preserve"><value>Data</value></data>
+  <data name="Nav.Group.Quality" xml:space="preserve"><value>Quality</value></data>
+  <data name="Nav.Group.System" xml:space="preserve"><value>System</value></data>
+  <data name="Nav.Dashboard" xml:space="preserve"><value>Dashboard</value></data>
+  <data name="Nav.Jobs" xml:space="preserve"><value>Jobs</value></data>
+  <data name="Nav.Tables" xml:space="preserve"><value>Tables</value></data>
+  <data name="Nav.Sources" xml:space="preserve"><value>Sources</value></data>
+  <data name="Nav.Destinations" xml:space="preserve"><value>Destinations</value></data>
+  <data name="Nav.Pipelines" xml:space="preserve"><value>Pipelines</value></data>
+  <data name="Nav.Snapshots" xml:space="preserve"><value>Snapshots</value></data>
+  <data name="Nav.Parquet" xml:space="preserve"><value>Parquet</value></data>
+  <data name="Nav.Analytics" xml:space="preserve"><value>Analytics</value></data>
+  <data name="Nav.Logs" xml:space="preserve"><value>Logs</value></data>
+  <data name="Page.Dashboard.RunConfirmTitle" xml:space="preserve"><value>Run pipeline</value></data>
+  <data name="Page.Dashboard.RunConfirm" xml:space="preserve"><value>Run {0} on this pipeline?</value></data>
+  <data name="Page.Dashboard.ForceConfirm" xml:space="preserve"><value>Force reloads SQL from consolidated parquet in ADLS (all tables). This does NOT re-read the source CSVs — if you need to reprocess from ADLS (e.g. a previous ingest failure), use "Reset" and then "Run". Duration depends on volume. Continue?</value></data>
+  <data name="Common.Back" xml:space="preserve"><value>Back</value></data>
+  <data name="Common.Saved" xml:space="preserve"><value>Saved</value></data>
+  <data name="Common.NameRequired" xml:space="preserve"><value>Name is required and must contain at least one letter or number.</value></data>
+  <data name="Common.Deleted" xml:space="preserve"><value>{0} deleted</value></data>
+  <data name="Common.DeleteFailed" xml:space="preserve"><value>Could not delete.</value></data>
+  <data name="Common.CancelJobConfirm" xml:space="preserve"><value>Cancel job {0}? This stops its execution.</value></data>
+  <data name="Common.CancelJobTitle" xml:space="preserve"><value>Cancel job</value></data>
+  <data name="Common.JobCancelled" xml:space="preserve"><value>Job {0} cancelled</value></data>
+  <data name="Page.Jobs.Report" xml:space="preserve"><value>Report</value></data>
+  <data name="Page.Jobs.ReportGenerating" xml:space="preserve"><value>Generating PDF report…</value></data>
+  <data name="Page.Jobs.ReportReady" xml:space="preserve"><value>Report downloaded</value></data>
+  <data name="Theme.SwitchToLight" xml:space="preserve"><value>Switch to light mode</value></data>
+  <data name="Theme.SwitchToDark" xml:space="preserve"><value>Switch to dark mode</value></data>
+  <data name="Lang.Change" xml:space="preserve"><value>Change language</value></data>
+  <data name="Page.Dashboard.Title" xml:space="preserve"><value>Dashboard</value></data>
+  <data name="Page.Jobs.Title" xml:space="preserve"><value>Job history</value></data>
+  <data name="Page.Jobs.Subtitle" xml:space="preserve"><value>Filter and download past pipeline runs.</value></data>
+  <data name="Page.JobDetail.Tab" xml:space="preserve"><value>Job</value></data>
+  <data name="Page.Tables.Title" xml:space="preserve"><value>Tables</value></data>
+  <data name="Page.Tables.Subtitle" xml:space="preserve"><value>Entity row counts, watermarks, and load status per pipeline.</value></data>
+  <data name="Page.Sources.Title" xml:space="preserve"><value>Sources</value></data>
+  <data name="Page.Sources.Subtitle" xml:space="preserve"><value>ADLS connections for Synapse Link exports.</value></data>
+  <data name="Page.Destinations.Title" xml:space="preserve"><value>Destinations</value></data>
+  <data name="Page.Destinations.Subtitle" xml:space="preserve"><value>SQL Server targets for MERGE loads.</value></data>
+  <data name="Page.Pipelines.Title" xml:space="preserve"><value>Pipelines</value></data>
+  <data name="Page.Pipelines.Subtitle" xml:space="preserve"><value>Link sources to destinations and control scheduled runs.</value></data>
+  <data name="Page.Snapshots.Title" xml:space="preserve"><value>Snapshots</value></data>
+  <data name="Page.Snapshots.Subtitle" xml:space="preserve"><value>ADLS snapshot folders, settled marker, and incremental backlog.</value></data>
+  <data name="Page.Parquet.Title" xml:space="preserve"><value>Parquet</value></data>
+  <data name="Page.Parquet.Subtitle" xml:space="preserve"><value>Parquet files materialized in the destination ADLS container (durable, separate from the Synapse Link source).</value></data>
+  <data name="Page.Reports.Title" xml:space="preserve"><value>Reports</value></data>
+  <data name="Page.Reports.Subtitle" xml:space="preserve"><value>Latest reconcile and diff results per pipeline.</value></data>
+  <data name="Page.Error.Title" xml:space="preserve"><value>Error</value></data>
+  <data name="Common.Status.Running" xml:space="preserve"><value>Running</value></data>
+  <data name="Common.Status.OK" xml:space="preserve"><value>OK</value></data>
+  <data name="Common.Status.Error" xml:space="preserve"><value>Error</value></data>
+  <data name="Common.Status.Partial" xml:space="preserve"><value>Partial</value></data>
+  <data name="Common.Status.Stalled" xml:space="preserve"><value>Stalled</value></data>
+  <data name="Common.Status.Cancelled" xml:space="preserve"><value>Cancelled</value></data>
+  <data name="Common.Status.Pending" xml:space="preserve"><value>Pending</value></data>
+  <data name="Common.Status.RetentionRetained" xml:space="preserve"><value>Retained</value></data>
+  <data name="Common.Status.RetentionEligible" xml:space="preserve"><value>Eligible purge</value></data>
+  <data name="Common.Status.RetentionProtected" xml:space="preserve"><value>Protected</value></data>
+  <data name="Common.JobType.Incremental" xml:space="preserve"><value>Incremental</value></data>
+  <data name="Common.JobType.Force" xml:space="preserve"><value>Force</value></data>
+  <data name="Common.JobType.Reconcile" xml:space="preserve"><value>Reconcile</value></data>
+  <data name="Common.JobType.Diff" xml:space="preserve"><value>Diff</value></data>
+  <data name="Common.JobType.ResyncTable" xml:space="preserve"><value>Table resync</value></data>
+  <data name="Common.JobType.ReloadFromParquet" xml:space="preserve"><value>Reload from parquet</value></data>
+  <data name="Common.JobType.CompareValues" xml:space="preserve"><value>Compare values</value></data>
+  <data name="Common.JobStatus.Running" xml:space="preserve"><value>Running</value></data>
+  <data name="Common.JobStatus.Ok" xml:space="preserve"><value>OK</value></data>
+  <data name="Common.JobStatus.Partial" xml:space="preserve"><value>Partial</value></data>
+  <data name="Common.JobStatus.Error" xml:space="preserve"><value>Error</value></data>
+  <data name="Common.JobStatus.Blocked" xml:space="preserve"><value>Stalled</value></data>
+  <data name="Common.JobStatus.Cancelled" xml:space="preserve"><value>Cancelled</value></data>
+  <data name="Common.Stage.Ingest" xml:space="preserve"><value>Ingest</value></data>
+  <data name="Common.Stage.Sql" xml:space="preserve"><value>SQL</value></data>
+  <data name="Common.Stage.Reconcile" xml:space="preserve"><value>Reconcile</value></data>
+  <data name="Common.EventLevel.Info" xml:space="preserve"><value>Info</value></data>
+  <data name="Common.EventLevel.Warning" xml:space="preserve"><value>Warning</value></data>
+  <data name="Common.EventLevel.Error" xml:space="preserve"><value>Error</value></data>
+  <data name="Common.Status.Claimed" xml:space="preserve"><value>Claimed</value></data>
+  <data name="Common.Health.Checking" xml:space="preserve"><value>Checking…</value></data>
+  <data name="Common.Health.Online" xml:space="preserve"><value>Online</value></data>
+  <data name="Common.Health.Degraded" xml:space="preserve"><value>Degraded</value></data>
+  <data name="Common.Health.Offline" xml:space="preserve"><value>Offline</value></data>
+  <data name="Common.Loading" xml:space="preserve"><value>Loading…</value></data>
+  <data name="Common.NoData" xml:space="preserve"><value>No data.</value></data>
+  <data name="Common.Add" xml:space="preserve"><value>Add</value></data>
+  <data name="Common.Edit" xml:space="preserve"><value>Edit</value></data>
+  <data name="Common.Delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="Common.Save" xml:space="preserve"><value>Save</value></data>
+  <data name="Common.Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Common.Close" xml:space="preserve"><value>Close</value></data>
+  <data name="Common.Run" xml:space="preserve"><value>Run</value></data>
+  <data name="Common.Refresh" xml:space="preserve"><value>Refresh</value></data>
+  <data name="Common.Previous" xml:space="preserve"><value>Previous</value></data>
+  <data name="Common.Next" xml:space="preserve"><value>Next</value></data>
+  <data name="Common.Pagination" xml:space="preserve"><value>Page {0} / {1} ({2} total)</value></data>
+  <data name="Common.Download" xml:space="preserve"><value>Download</value></data>
+  <data name="Common.Search" xml:space="preserve"><value>Search</value></data>
+  <data name="Common.Test" xml:space="preserve"><value>Test</value></data>
+  <data name="Common.Testing" xml:space="preserve"><value>Testing…</value></data>
+  <data name="Common.Retry" xml:space="preserve"><value>Retry</value></data>
+  <data name="Common.UnexpectedError" xml:space="preserve"><value>An unexpected error occurred on this page. You can retry or navigate to another section.</value></data>
+  <data name="Common.RetryTitle" xml:space="preserve"><value>Retry job</value></data>
+  <data name="Common.RetryConfirm" xml:space="preserve"><value>Retry job {0}? A new pipeline run is created; the current job is kept as history.</value></data>
+  <data name="Common.RetryStarted" xml:space="preserve"><value>Retry started (new job {0}).</value></data>
+  <data name="Common.Name" xml:space="preserve"><value>Name</value></data>
+  <data name="Common.Type" xml:space="preserve"><value>Type</value></data>
+  <data name="Common.Status" xml:space="preserve"><value>Status</value></data>
+  <data name="Common.Actions" xml:space="preserve"><value>Actions</value></data>
+  <data name="Common.Pipeline" xml:space="preserve"><value>Pipeline</value></data>
+  <data name="Common.Entity" xml:space="preserve"><value>Entity</value></data>
+  <data name="Common.ExportCsv" xml:space="preserve"><value>Export CSV</value></data>
+  <data name="Common.DateFrom" xml:space="preserve"><value>From</value></data>
+  <data name="Common.DateTo" xml:space="preserve"><value>To</value></data>
+  <data name="Common.ClearDates" xml:space="preserve"><value>Clear dates</value></data>
+  <data name="Common.Rows" xml:space="preserve"><value>Rows</value></data>
+  <data name="Common.Enabled" xml:space="preserve"><value>Enabled</value></data>
+  <data name="Common.Details" xml:space="preserve"><value>Details</value></data>
+  <data name="Page.Sources.AddSource" xml:space="preserve"><value>Add source</value></data>
+  <data name="Page.Sources.EmptyText" xml:space="preserve"><value>No sources configured yet.</value></data>
+  <data name="Page.Sources.Created" xml:space="preserve"><value>Created</value></data>
+  <data name="Page.Sources.StorageSection" xml:space="preserve"><value>Storage</value></data>
+  <data name="Page.Sources.AuthSection" xml:space="preserve"><value>Azure AD authentication</value></data>
+  <data name="Page.Sources.StorageAccount" xml:space="preserve"><value>Storage account</value></data>
+  <data name="Page.Sources.Container" xml:space="preserve"><value>Container</value></data>
+  <data name="Page.Sources.TenantId" xml:space="preserve"><value>Tenant ID</value></data>
+  <data name="Page.Sources.ClientId" xml:space="preserve"><value>Client ID</value></data>
+  <data name="Page.Sources.ClientSecret" xml:space="preserve"><value>Client secret</value></data>
+  <data name="Page.Sources.DeleteSource" xml:space="preserve"><value>Delete source</value></data>
+  <data name="Page.Sources.DeleteConfirm" xml:space="preserve"><value>Delete</value></data>
+  <data name="Page.Sources.NewSource" xml:space="preserve"><value>New source</value></data>
+  <data name="Page.Sources.EditSource" xml:space="preserve"><value>Edit source</value></data>
+  <data name="Page.Destinations.AddDestination" xml:space="preserve"><value>Add destination</value></data>
+  <data name="Page.Destinations.EmptyText" xml:space="preserve"><value>No destinations configured yet.</value></data>
+  <data name="Page.Destinations.Created" xml:space="preserve"><value>Created</value></data>
+  <data name="Page.Destinations.ConnectionSection" xml:space="preserve"><value>Connection</value></data>
+  <data name="Page.Destinations.CredentialsSection" xml:space="preserve"><value>Credentials</value></data>
+  <data name="Page.Destinations.Host" xml:space="preserve"><value>Host</value></data>
+  <data name="Page.Destinations.Database" xml:space="preserve"><value>Database</value></data>
+  <data name="Page.Destinations.User" xml:space="preserve"><value>User</value></data>
+  <data name="Page.Destinations.Password" xml:space="preserve"><value>Password</value></data>
+  <data name="Page.Destinations.DeleteDestination" xml:space="preserve"><value>Delete destination</value></data>
+  <data name="Page.Destinations.DeleteConfirm" xml:space="preserve"><value>Delete</value></data>
+  <data name="Page.Destinations.NewDestination" xml:space="preserve"><value>New destination</value></data>
+  <data name="Page.Destinations.EditDestination" xml:space="preserve"><value>Edit destination</value></data>
+  <data name="Page.Destinations.SqlVersion" xml:space="preserve"><value>SQL Server version</value></data>
+  <data name="Page.Destinations.PermissionsHint" xml:space="preserve"><value>The user needs the db_ddladmin, db_datareader and db_datawriter roles on this database (or db_owner): Sluice creates and alters tables and indexes and loads, updates and deletes rows. The database must already exist; no server roles are needed.</value></data>
+  <data name="Page.Destinations.SqlVersionHint" xml:space="preserve"><value>Press “Test connection” and it is set to the server’s version automatically.</value></data>
+  <data name="Page.Destinations.TestConnection" xml:space="preserve"><value>Test connection</value></data>
+  <data name="Page.Destinations.Detected" xml:space="preserve"><value>Connection OK: {0} detected (version {1}). The version was set; save to keep it.</value></data>
+  <data name="Page.Destinations.SqlVersion.2016" xml:space="preserve"><value>SQL Server 2016</value></data>
+  <data name="Page.Destinations.SqlVersion.2017" xml:space="preserve"><value>SQL Server 2017</value></data>
+  <data name="Page.Destinations.SqlVersion.2019" xml:space="preserve"><value>SQL Server 2019</value></data>
+  <data name="Page.Destinations.SqlVersion.2022" xml:space="preserve"><value>SQL Server 2022</value></data>
+  <data name="Page.Pipelines.EmptyText" xml:space="preserve"><value>No pipelines configured yet.</value></data>
+  <data name="Page.Pipelines.Source" xml:space="preserve"><value>Source</value></data>
+  <data name="Page.Pipelines.Destination" xml:space="preserve"><value>Destination</value></data>
+  <data name="Page.Pipelines.Toggle" xml:space="preserve"><value>Toggle</value></data>
+  <data name="Page.Pipelines.Scheduler" xml:space="preserve"><value>Scheduler</value></data>
+  <data name="Page.Pipelines.SchedulerActive" xml:space="preserve"><value>Active</value></data>
+  <data name="Page.Pipelines.SchedulerInactive" xml:space="preserve"><value>Inactive</value></data>
+  <data name="Page.Pipelines.SchedulerOn" xml:space="preserve"><value>Enable scheduler</value></data>
+  <data name="Page.Pipelines.SchedulerOff" xml:space="preserve"><value>Disable scheduler</value></data>
+
+  <data name="Page.Pipelines.Force" xml:space="preserve"><value>Force</value></data>
+  <data name="Page.Pipelines.Reconcile" xml:space="preserve"><value>Reconcile</value></data>
+  <data name="Page.Pipelines.Diff" xml:space="preserve"><value>Diff</value></data>
+  <data name="Page.Pipelines.LatestReconcile" xml:space="preserve"><value>Latest reconcile: max divergence</value></data>
+  <data name="Page.Pipelines.Entities" xml:space="preserve"><value>entities</value></data>
+  <data name="Page.Pipelines.DeleteTitle" xml:space="preserve"><value>Delete pipeline</value></data>
+  <data name="Page.Pipelines.DeletePrefix" xml:space="preserve"><value>Delete pipeline</value></data>
+  <data name="Page.Pipelines.WipeState" xml:space="preserve"><value>Also wipe pipeline state</value></data>
+  <data name="Page.Pipelines.Reset" xml:space="preserve"><value>Reset</value></data>
+  <data name="Page.Pipelines.ResetTitle" xml:space="preserve"><value>Reset pipeline</value></data>
+  <data name="Page.Pipelines.ResetPrefix" xml:space="preserve"><value>Reset pipeline</value></data>
+  <data name="Page.Pipelines.ResetWarning" xml:space="preserve"><value>This deletes the record of processed snapshots, each table's state and this pipeline's consolidated Parquet files in ADLS. Deleting from ADLS can't be undone.</value></data>
+  <data name="Page.Pipelines.ResetTruncateSql" xml:space="preserve"><value>Also empty the destination tables in SQL</value></data>
+  <data name="Page.Pipelines.ResetSuccess" xml:space="preserve"><value>Pipeline reset: {1} file(s) deleted in ADLS, {0} table(s) emptied in SQL.</value></data>
+  <data name="Page.Pipelines.ResetKeeps" xml:space="preserve"><value>The pipeline's configuration (source and destination), paused tables and the original Synapse Link CSVs are kept. The next run will reprocess every snapshot from scratch and may take a while.</value></data>
+  <data name="Page.Pipelines.ResetTruncateSqlHint" xml:space="preserve"><value>If unchecked, the next run updates the rows already in SQL with MERGE.</value></data>
+  <data name="Page.Pipelines.ResetFailed" xml:space="preserve"><value>Couldn't empty {0} table(s) in SQL. The reset stopped without deleting anything in ADLS or the state, so no stale data is left in SQL.</value></data>
+  <data name="Page.Pipelines.NewTitle" xml:space="preserve"><value>New pipeline</value></data>
+  <data name="Page.Pipelines.EditTitle" xml:space="preserve"><value>Edit pipeline</value></data>
+  <data name="Page.Pipelines.JobStarted" xml:space="preserve"><value>Job {0} started ({1}).</value></data>
+  <data name="Page.Jobs.AllPipelines" xml:space="preserve"><value>All pipelines</value></data>
+  <data name="Page.Jobs.AllStatuses" xml:space="preserve"><value>All statuses</value></data>
+  <data name="Page.Jobs.Empty" xml:space="preserve"><value>No jobs found. Run a pipeline from Dashboard or Pipelines to populate history.</value></data>
+  <data name="Page.Jobs.ColumnJob" xml:space="preserve"><value>Job</value></data>
+  <data name="Page.Jobs.ColumnType" xml:space="preserve"><value>Type</value></data>
+  <data name="Page.Jobs.ColumnStarted" xml:space="preserve"><value>Started</value></data>
+  <data name="Page.Jobs.ColumnFinished" xml:space="preserve"><value>Finished</value></data>
+  <data name="Page.Jobs.Json" xml:space="preserve"><value>JSON</value></data>
+  <data name="Page.JobDetail.Empty" xml:space="preserve"><value>Job not found. Check the Jobs list or refresh.</value></data>
+  <data name="Page.JobDetail.StageFlow" xml:space="preserve"><value>Stage flow</value></data>
+  <data name="Page.JobDetail.Entities" xml:space="preserve"><value>Entities</value></data>
+  <data name="Page.JobDetail.EntitiesEmpty" xml:space="preserve"><value>No entity results yet. Processing may still be in progress.</value></data>
+  <data name="Page.JobDetail.EntitiesEmptyFinished" xml:space="preserve"><value>This job produced no per-entity results.</value></data>
+  <data name="Page.JobDetail.Compare.Parquet" xml:space="preserve"><value>Parquet rows</value></data>
+  <data name="Page.JobDetail.Compare.Sql" xml:space="preserve"><value>SQL rows</value></data>
+  <data name="Page.JobDetail.Compare.Divergence" xml:space="preserve"><value>Divergence</value></data>
+  <data name="Page.JobDetail.Compare.Source" xml:space="preserve"><value>Source</value></data>
+  <data name="Page.JobDetail.Compare.Destination" xml:space="preserve"><value>Destination</value></data>
+  <data name="Page.JobDetail.Compare.Delta" xml:space="preserve"><value>Delta</value></data>
+  <data name="Page.JobDetail.Compare.NoteReconcile" xml:space="preserve"><value>Parquet = rows in the consolidated Parquet; SQL = rows in the target table; divergence = |Parquet − SQL| / the larger of both.</value></data>
+  <data name="Page.JobDetail.Compare.NoteDiff" xml:space="preserve"><value>Source = consolidated Parquet; destination = SQL table; delta = source − destination (positive: rows missing in SQL). Informational: it does not mark the job Partial.</value></data>
+  <data name="Page.JobDetail.Timeline" xml:space="preserve"><value>Timeline</value></data>
+  <data name="Page.Tables.FilterPlaceholder" xml:space="preserve"><value>Filter entity...</value></data>
+  <data name="Page.Tables.SelectPipeline" xml:space="preserve"><value>Select a pipeline to see its tables and watermarks.</value></data>
+  <data name="Page.Tables.NoTables" xml:space="preserve"><value>No tables loaded yet for this pipeline. Run an incremental job first.</value></data>
+  <data name="Page.Tables.Watermark" xml:space="preserve"><value>Watermark</value></data>
+  <data name="Page.Tables.Sync" xml:space="preserve"><value>Sync</value></data>
+  <data name="Page.Tables.Paused" xml:space="preserve"><value>Paused</value></data>
+  <data name="Page.Tables.Analytics" xml:space="preserve"><value>View growth</value></data>
+  <data name="Page.TableGrowth.Tab" xml:space="preserve"><value>Growth —</value></data>
+  <data name="Page.TableGrowth.Subtitle" xml:space="preserve"><value>Pipeline: {0}</value></data>
+  <data name="Page.TableGrowth.Window" xml:space="preserve"><value>Window</value></data>
+  <data name="Page.TableGrowth.WindowDays" xml:space="preserve"><value>Last {0} days</value></data>
+  <data name="Page.TableGrowth.Kpi.CurrentRows" xml:space="preserve"><value>Current rows</value></data>
+  <data name="Page.TableGrowth.Kpi.LoadedInWindow" xml:space="preserve"><value>Rows ingested in window</value></data>
+  <data name="Page.TableGrowth.Chart.Growth" xml:space="preserve"><value>Table growth</value></data>
+  <data name="Page.TableGrowth.Chart.Load" xml:space="preserve"><value>Daily load (rows ingested)</value></data>
+  <data name="Page.TableGrowth.Series.RowCount" xml:space="preserve"><value>Rows</value></data>
+  <data name="Page.TableGrowth.Series.CsvRows" xml:space="preserve"><value>Rows ingested</value></data>
+  <data name="Page.TableGrowth.Empty.Growth" xml:space="preserve"><value>No growth data in this window (no job recorded SqlRows for this table).</value></data>
+  <data name="Page.TableGrowth.Empty.Load" xml:space="preserve"><value>No load recorded in this window.</value></data>
+  <data name="Page.TableGrowth.SpikeDays" xml:space="preserve"><value>Highest-load days</value></data>
+  <data name="Page.TableGrowth.Empty.Spikes" xml:space="preserve"><value>No load spikes to show in this window.</value></data>
+  <data name="Page.TableGrowth.Date" xml:space="preserve"><value>Date</value></data>
+  <data name="Page.Tables.PausedToast" xml:space="preserve"><value>Sync of '{0}' paused.</value></data>
+  <data name="Page.Tables.ResumedToast" xml:space="preserve"><value>Sync of '{0}' resumed.</value></data>
+  <data name="Page.Snapshots.SelectPipeline" xml:space="preserve"><value>Select a pipeline to inspect its ADLS snapshots and backlog.</value></data>
+  <data name="Page.Snapshots.Settled" xml:space="preserve"><value>Settled</value></data>
+  <data name="Page.Snapshots.LastProcessed" xml:space="preserve"><value>Last processed</value></data>
+  <data name="Page.Snapshots.Pending" xml:space="preserve"><value>Pending</value></data>
+  <data name="Page.Snapshots.Changelog" xml:space="preserve"><value>Changelog</value></data>
+  <data name="Page.Snapshots.ChangelogStall" xml:space="preserve"><value>Changelog stall detected — no updates beyond the configured threshold.</value></data>
+  <data name="Page.Snapshots.NoSnapshots" xml:space="preserve"><value>No snapshot folders found in ADLS. Check source connection and changelog.</value></data>
+  <data name="Page.Snapshots.Snapshot" xml:space="preserve"><value>Snapshot</value></data>
+  <data name="Page.Parquet.SelectPipeline" xml:space="preserve"><value>Select a pipeline to view its parquet files in ADLS.</value></data>
+  <data name="Page.Parquet.EmptyRows" xml:space="preserve"><value>No parquet files in ADLS for this pipeline yet. Run a job first.</value></data>
+  <data name="Page.Parquet.NoMatches" xml:space="preserve"><value>No parquet file matches the search.</value></data>
+  <data name="Page.Parquet.File" xml:space="preserve"><value>File</value></data>
+  <data name="Page.Parquet.Size" xml:space="preserve"><value>Size</value></data>
+  <data name="Page.Parquet.Modified" xml:space="preserve"><value>Modified</value></data>
+  <data name="Page.Parquet.ConfirmDelete" xml:space="preserve"><value>Delete the parquet '{0}' from ADLS? This action is irreversible.</value></data>
+  <data name="Page.Parquet.ConfirmDeleteTitle" xml:space="preserve"><value>Confirm delete</value></data>
+  <data name="Page.Reports.SelectPipeline" xml:space="preserve"><value>Select a pipeline to view its latest reconcile and diff reports.</value></data>
+  <data name="Page.Reports.Reconcile" xml:space="preserve"><value>Reconcile</value></data>
+  <data name="Page.Reports.NoReconcile" xml:space="preserve"><value>No reconcile report yet. Run a Reconcile job from Pipelines.</value></data>
+  <data name="Page.Reports.Diff" xml:space="preserve"><value>Diff</value></data>
+  <data name="Page.Reports.NoDiff" xml:space="preserve"><value>No diff report yet. Run a Diff job to generate one.</value></data>
+  <data name="Page.Reports.Job" xml:space="preserve"><value>Job</value></data>
+  <data name="Page.Reports.MaxDivergence" xml:space="preserve"><value>Max divergence</value></data>
+  <data name="Page.Reports.Entity" xml:space="preserve"><value>Entity</value></data>
+  <data name="Page.Reports.SourceRows" xml:space="preserve"><value>Source rows</value></data>
+  <data name="Page.Reports.SqlRows" xml:space="preserve"><value>SQL rows</value></data>
+  <data name="Page.Reports.DivergencePct" xml:space="preserve"><value>Divergence %</value></data>
+  <data name="Page.Reports.Delta" xml:space="preserve"><value>Delta</value></data>
+  <data name="Page.Dashboard.ChangelogStalled" xml:space="preserve"><value>Changelog stall detected for the selected pipeline source — ADLS export may be stuck.</value></data>
+  <data name="Page.Dashboard.Overview" xml:space="preserve"><value>Overview</value></data>
+  <data name="Page.Dashboard.Tables" xml:space="preserve"><value>Tables</value></data>
+  <data name="Page.Dashboard.Ok" xml:space="preserve"><value>OK</value></data>
+  <data name="Page.Dashboard.LastSnapshot" xml:space="preserve"><value>Last snapshot</value></data>
+  <data name="Page.Dashboard.LastRun" xml:space="preserve"><value>Last run</value></data>
+  <data name="Page.Dashboard.Incremental" xml:space="preserve"><value>Incremental</value></data>
+  <data name="Page.Dashboard.Force" xml:space="preserve"><value>Force</value></data>
+  <data name="Page.Dashboard.Reconcile" xml:space="preserve"><value>Reconcile</value></data>
+  <data name="Page.Dashboard.Diff" xml:space="preserve"><value>Diff</value></data>
+  <data name="Page.Dashboard.TestConnections" xml:space="preserve"><value>Test connections</value></data>
+  <data name="Page.Dashboard.TaskQueue" xml:space="preserve"><value>Task queue</value></data>
+  <data name="Page.Dashboard.Stage" xml:space="preserve"><value>Stage</value></data>
+  <data name="Page.Dashboard.Pending" xml:space="preserve"><value>Pending</value></data>
+  <data name="Page.Dashboard.Claimed" xml:space="preserve"><value>In progress</value></data>
+  <data name="Page.Dashboard.Done" xml:space="preserve"><value>Done</value></data>
+  <data name="Page.Dashboard.Error" xml:space="preserve"><value>Failed</value></data>
+  <data name="Page.Dashboard.Workers" xml:space="preserve"><value>Workers</value></data>
+  <data name="Page.Dashboard.NoWorkers" xml:space="preserve"><value>No worker has reported in the last few minutes.</value></data>
+  <data name="Page.Dashboard.Flow" xml:space="preserve"><value>Flow</value></data>
+  <data name="Page.Dashboard.JobStarted" xml:space="preserve"><value>Job {0} started ({1}).</value></data>
+  <data name="Page.Dashboard.JobCancelled" xml:space="preserve"><value>Job {0} cancelled.</value></data>
+  <data name="Page.Dashboard.Source" xml:space="preserve"><value>Source</value></data>
+  <data name="Page.Dashboard.Destination" xml:space="preserve"><value>Destination</value></data>
+  <data name="Nav.Settings" xml:space="preserve"><value>Settings</value></data>
+  <data name="Nav.Help" xml:space="preserve"><value>Help</value></data>
+  <data name="Nav.Menu" xml:space="preserve"><value>Main menu</value></data>
+  <data name="Nav.Collapse" xml:space="preserve"><value>Collapse menu</value></data>
+  <data name="Nav.Expand" xml:space="preserve"><value>Expand menu</value></data>
+  <data name="Page.Help.Title" xml:space="preserve"><value>Help and documentation</value></data>
+  <data name="Page.Help.Subtitle" xml:space="preserve"><value>Portal user guide: how it works, how to use it, and what each thing means.</value></data>
+  <data name="Page.Help.NotFound" xml:space="preserve"><value>Document not found.</value></data>
+  <data name="Page.Help.Doc.Introduction" xml:space="preserve"><value>Introduction</value></data>
+  <data name="Page.Help.Doc.Functionality" xml:space="preserve"><value>Functionality</value></data>
+  <data name="Page.Help.Doc.Installation" xml:space="preserve"><value>Installation</value></data>
+  <data name="Page.Help.Doc.Reference" xml:space="preserve"><value>Reference</value></data>
+  <data name="Page.Analytics.Title" xml:space="preserve"><value>Analytics</value></data>
+  <data name="Page.Analytics.Subtitle" xml:space="preserve"><value>Server and data performance</value></data>
+  <data name="Page.Analytics.SharedNote" xml:space="preserve"><value>Job indicators and charts are for this pipeline; the queue and workers are shared by all pipelines.</value></data>
+  <data name="Page.Analytics.Kpi.TotalJobs" xml:space="preserve"><value>Total jobs</value></data>
+  <data name="Page.Analytics.Kpi.SuccessRate" xml:space="preserve"><value>Success rate</value></data>
+  <data name="Page.Analytics.Kpi.CurrentMaxDivergence" xml:space="preserve"><value>Current max divergence</value></data>
+  <data name="Page.Analytics.Kpi.ActiveWorkers" xml:space="preserve"><value>Active workers</value></data>
+  <data name="Page.Analytics.Kpi.QueueDepth" xml:space="preserve"><value>Queue depth</value></data>
+  <data name="Page.Analytics.Section.Health" xml:space="preserve"><value>Pipeline health</value></data>
+  <data name="Page.Analytics.Section.DataQuality" xml:space="preserve"><value>Data quality</value></data>
+  <data name="Page.Analytics.Section.Volume" xml:space="preserve"><value>Volume</value></data>
+  <data name="Page.Analytics.Chart.StatusDistribution" xml:space="preserve"><value>Status distribution</value></data>
+  <data name="Page.Analytics.Chart.MergedRows" xml:space="preserve"><value>Merged rows by pipeline</value></data>
+  <data name="Page.Analytics.Chart.JobsPerDay" xml:space="preserve"><value>Jobs per day (14 days)</value></data>
+  <data name="Page.Analytics.Chart.DivergenceOverTime" xml:space="preserve"><value>Max divergence over time</value></data>
+  <data name="Page.Analytics.Chart.AvgDuration" xml:space="preserve"><value>Average duration by type (min)</value></data>
+  <data name="Page.Analytics.Chart.QueueByStage" xml:space="preserve"><value>Queue by stage</value></data>
+  <data name="Page.Analytics.Series.Jobs" xml:space="preserve"><value>Jobs</value></data>
+  <data name="Page.Analytics.Series.Rows" xml:space="preserve"><value>Rows</value></data>
+  <data name="Page.Analytics.Series.Success" xml:space="preserve"><value>Success</value></data>
+  <data name="Page.Analytics.Series.Error" xml:space="preserve"><value>Error</value></data>
+  <data name="Page.Analytics.Series.Divergence" xml:space="preserve"><value>Divergence %</value></data>
+  <data name="Page.Analytics.Series.Minutes" xml:space="preserve"><value>Minutes</value></data>
+  <data name="Page.Analytics.Series.Pending" xml:space="preserve"><value>Pending</value></data>
+  <data name="Page.Analytics.Series.Claimed" xml:space="preserve"><value>Claimed</value></data>
+  <data name="Page.Analytics.Series.Errors" xml:space="preserve"><value>Errors</value></data>
+  <data name="Page.Analytics.Empty.Status" xml:space="preserve"><value>No status data.</value></data>
+  <data name="Page.Analytics.Empty.MergedRows" xml:space="preserve"><value>No merged rows recorded.</value></data>
+  <data name="Page.Analytics.Empty.Divergence" xml:space="preserve"><value>No divergence data.</value></data>
+  <data name="Page.Analytics.Empty.FinishedJobs" xml:space="preserve"><value>No finished jobs.</value></data>
+  <data name="Page.Analytics.Empty.Queue" xml:space="preserve"><value>No queue data.</value></data>
+  <data name="Page.Logs.Title" xml:space="preserve"><value>Logs</value></data>
+  <data name="Page.Logs.Subtitle" xml:space="preserve"><value>Portal and user activity</value></data>
+  <data name="Page.Logs.Filter.Source" xml:space="preserve"><value>Source</value></data>
+  <data name="Page.Logs.Filter.Level" xml:space="preserve"><value>Level</value></data>
+  <data name="Page.Logs.All" xml:space="preserve"><value>All</value></data>
+  <data name="Page.Logs.Source.User" xml:space="preserve"><value>User</value></data>
+  <data name="Page.Logs.Source.System" xml:space="preserve"><value>System</value></data>
+  <data name="Page.Logs.Search" xml:space="preserve"><value>Search</value></data>
+  <data name="Page.Logs.SearchPlaceholder" xml:space="preserve"><value>Message, action, pipeline or job</value></data>
+  <data name="Page.Logs.Empty" xml:space="preserve"><value>No activity recorded.</value></data>
+  <data name="Page.Logs.Col.Date" xml:space="preserve"><value>Date</value></data>
+  <data name="Page.Logs.Col.Source" xml:space="preserve"><value>Source</value></data>
+  <data name="Page.Logs.Col.Level" xml:space="preserve"><value>Level</value></data>
+  <data name="Page.Logs.Col.Action" xml:space="preserve"><value>Action</value></data>
+  <data name="Page.Logs.Col.Message" xml:space="preserve"><value>Message</value></data>
+  <data name="Page.Logs.Col.Pipeline" xml:space="preserve"><value>Pipeline</value></data>
+  <data name="Page.Logs.Col.Job" xml:space="preserve"><value>Job</value></data>
+  <data name="Page.Settings.Title" xml:space="preserve"><value>Settings</value></data>
+  <data name="Page.Settings.Subtitle" xml:space="preserve"><value>Global operational parameters for the scheduler and reconciliation.</value></data>
+  <data name="Page.Settings.Scheduler.Title" xml:space="preserve"><value>Scheduler and queue</value></data>
+  <data name="Page.Settings.Retention.Title" xml:space="preserve"><value>Retention</value></data>
+  <data name="Page.Settings.PollMinutes" xml:space="preserve"><value>Scheduler poll interval (minutes)</value></data>
+  <data name="Page.Settings.LeaseSeconds" xml:space="preserve"><value>Task lease (seconds)</value></data>
+  <data name="Page.Settings.DivergencePct" xml:space="preserve"><value>Reconcile divergence threshold (%)</value></data>
+  <data name="Page.Settings.AutoRemediate" xml:space="preserve"><value>Automatic correction</value></data>
+  <data name="Page.Settings.LogicApp.Title" xml:space="preserve"><value>Email alerts (Logic App)</value></data>
+  <data name="Page.Settings.LogicApp.Headline" xml:space="preserve"><value>Get Sluice alerts in your inbox</value></data>
+  <data name="Page.Settings.LogicApp.Pitch" xml:space="preserve"><value>A ready-to-deploy Azure package: a Logic App that receives the alert webhook and sends an Office 365 email with the Sluice design.</value></data>
+  <data name="Page.Settings.LogicApp.Step1" xml:space="preserve"><value>Download the package and unzip it.</value></data>
+  <data name="Page.Settings.LogicApp.Step2" xml:space="preserve"><value>Deploy it with deploy.ps1 (Azure CLI) or from the Azure Portal with azuredeploy.json.</value></data>
+  <data name="Page.Settings.LogicApp.Step3" xml:space="preserve"><value>Authorize the Office 365 connection in the Azure Portal.</value></data>
+  <data name="Page.Settings.LogicApp.Step4" xml:space="preserve"><value>Paste the trigger URL in Alerts, save and press “Test alert”.</value></data>
+  <data name="Page.Settings.LogicApp.Events" xml:space="preserve"><value>Notifies</value></data>
+  <data name="Page.Settings.LogicApp.Event.Failure" xml:space="preserve"><value>Pipeline failures</value></data>
+  <data name="Page.Settings.LogicApp.Event.Divergence" xml:space="preserve"><value>Divergences</value></data>
+  <data name="Page.Settings.LogicApp.Event.Values" xml:space="preserve"><value>Value differences</value></data>
+  <data name="Page.Settings.LogicApp.Event.Test" xml:space="preserve"><value>Tests</value></data>
+  <data name="Page.Settings.LogicApp.Download" xml:space="preserve"><value>Download package</value></data>
+  <data name="Page.Settings.LogicApp.Contents" xml:space="preserve"><value>.zip with the ARM template, the deployment script, the guide and the email preview.</value></data>
+  <data name="Page.Settings.AutoRemediate.Hint" xml:space="preserve"><value>When a run ends with tables above the divergence threshold (or with differences in “Compare values”), a re-sync (reload) of those tables is started. One attempt only: if the difference persists, an alert is sent. Accepted tables are not corrected.</value></data>
+  <data name="Page.Settings.RetentionDays" xml:space="preserve"><value>History retention (days)</value></data>
+  <data name="Page.Settings.RetentionDays.Hint" xml:space="preserve"><value>Purges jobs and their reports/runs older than this threshold. Always keeps the last 50 per pipeline. 0 or negative disables purging.</value></data>
+  <data name="Page.Settings.SourceSnapshotRetentionDays" xml:space="preserve"><value>Source snapshot retention (days)</value></data>
+  <data name="Page.Settings.SourceSnapshotRetentionDays.Hint" xml:space="preserve"><value>Purges processed Synapse Link CSV folders older than this threshold. Always keeps the last 14 processed. 0 or negative disables purging.</value></data>
+  <data name="Page.Settings.SourceSnapshotRetentionDryRun" xml:space="preserve"><value>Purge simulation (dry-run)</value></data>
+  <data name="Page.Settings.SourceSnapshotRetentionDryRun.Hint" xml:space="preserve"><value>On by default: logs eligible snapshots without deleting (snapshot-retention.dry-run). Disable only after reviewing the preview.</value></data>
+  <data name="Page.Settings.SourceSnapshotRetentionRequireParquet" xml:space="preserve"><value>Require parquet before purge</value></data>
+  <data name="Page.Settings.SourceSnapshotRetentionRequireParquet.Hint" xml:space="preserve"><value>Skips source snapshot purge if any consolidated parquet is missing. Enable blob soft-delete on the storage account for recovery.</value></data>
+  <data name="Page.Snapshots.RetentionEligible" xml:space="preserve"><value>Eligible purge</value></data>
+  <data name="Page.Snapshots.RetentionDryRun" xml:space="preserve"><value>Simulation mode active — nothing is deleted until dry-run is disabled.</value></data>
+  <data name="Page.Snapshots.Retention" xml:space="preserve"><value>Retention</value></data>
+  <data name="Page.Dashboard.Storage" xml:space="preserve"><value>ADLS storage</value></data>
+  <data name="Page.Dashboard.ReloadFromParquet" xml:space="preserve"><value>Reload parquet</value></data>
+  <data name="Page.Dashboard.ReloadFromParquetConfirm" xml:space="preserve"><value>Reload SQL from consolidated parquet in ADLS (no CSV re-read). Continue?</value></data>
+  <data name="Page.Settings.Saved" xml:space="preserve"><value>Settings saved. They apply without restart.</value></data>
+  <data name="Page.Settings.Alerts.Title" xml:space="preserve"><value>Alerts</value></data>
+  <data name="Page.Settings.Alerts.Hint" xml:space="preserve"><value>Sluice posts a JSON notice to this URL when a job fails, when a reconciliation exceeds the threshold, when “Compare values” finds differences, and on system problems (scheduler, possible SQL block, retention). It is usually the HTTP trigger URL of an Azure Logic App that turns each notice into an email: you can download a ready-to-deploy one below.</value></data>
+  <data name="Page.Settings.Alerts.UrlRequired" xml:space="preserve"><value>Enter a webhook URL before enabling alerts.</value></data>
+  <data name="Page.Settings.Validation.PollMinutes" xml:space="preserve"><value>The scheduler interval must be at least 1 minute.</value></data>
+  <data name="Page.Settings.Validation.LeaseSeconds" xml:space="preserve"><value>The task lease must be at least 30 seconds; with less, running tasks would be treated as expired.</value></data>
+  <data name="Page.Settings.Validation.Divergence" xml:space="preserve"><value>The divergence threshold must be between 0 and 100%.</value></data>
+  <data name="Page.Settings.Validation.WebhookHttps" xml:space="preserve"><value>The webhook URL must be a full https:// address.</value></data>
+  <data name="Page.Settings.Alerts.Enabled" xml:space="preserve"><value>Enable alerts</value></data>
+  <data name="Page.Settings.Alerts.WebhookUrl" xml:space="preserve"><value>Webhook URL</value></data>
+  <data name="Page.Settings.Alerts.WebhookStored" xml:space="preserve"><value>Configured (hidden). Type another one to replace it.</value></data>
+  <data name="Page.Settings.Alerts.Test" xml:space="preserve"><value>Send test</value></data>
+  <data name="Page.Settings.Alerts.Testing" xml:space="preserve"><value>Sending…</value></data>
+  <data name="Page.Sources.ParquetContainer" xml:space="preserve"><value>Parquet container (destination)</value></data>
+  <data name="Nav.Reconcile" xml:space="preserve"><value>Reconciliation</value></data>
+  <data name="Page.Reconcile.Title" xml:space="preserve"><value>Reconciliation</value></data>
+  <data name="Page.Reconcile.Subtitle" xml:space="preserve"><value>Tables diverging between the source (consolidated parquet) and SQL, and per-table remediation.</value></data>
+  <data name="Page.Reconcile.SelectPipeline" xml:space="preserve"><value>Select a pipeline to view its reconciliation.</value></data>
+  <data name="Page.Reconcile.NoReport" xml:space="preserve"><value>No reconciliation report yet for this pipeline. Run a job first.</value></data>
+  <data name="Page.Reconcile.NoDivergence" xml:space="preserve"><value>No divergence: source and destination match.</value></data>
+  <data name="Page.Reconcile.LastReconcile" xml:space="preserve"><value>Last reconcile</value></data>
+  <data name="Page.Reconcile.Source" xml:space="preserve"><value>Source rows</value></data>
+  <data name="Page.Reconcile.Destination" xml:space="preserve"><value>Destination rows</value></data>
+  <data name="Page.Reconcile.Divergence" xml:space="preserve"><value>Divergence</value></data>
+  <data name="Page.Reconcile.Direction" xml:space="preserve"><value>Direction</value></data>
+  <data name="Page.Reconcile.DirSourceGtDest" xml:space="preserve"><value>Rows missing in SQL</value></data>
+  <data name="Page.Reconcile.DirDestGtSource" xml:space="preserve"><value>Extra rows in SQL</value></data>
+  <data name="Page.Reconcile.DirMatch" xml:space="preserve"><value>Match</value></data>
+  <data name="Page.Reconcile.Resync" xml:space="preserve"><value>Re-sync</value></data>
+  <data name="Page.Reconcile.Remerge" xml:space="preserve"><value>Re-merge</value></data>
+  <data name="Page.Reconcile.Accept" xml:space="preserve"><value>Accept</value></data>
+  <data name="Page.Reconcile.Unaccept" xml:space="preserve"><value>Remove acceptance</value></data>
+  <data name="Page.Reconcile.Accepted" xml:space="preserve"><value>Accepted</value></data>
+  <data name="Page.Reconcile.ResyncConfirm" xml:space="preserve"><value>This will reload table {0} in SQL from the consolidated parquet: it updates every row and deletes the ones no longer in the parquet. Fixes divergence in both directions. Continue?</value></data>
+  <data name="Page.Reconcile.RemergeConfirm" xml:space="preserve"><value>This will re-merge table {0} from the consolidated parquet (without truncating). Only fixes when SQL is missing rows. Continue?</value></data>
+  <data name="Page.Reconcile.ConfirmTitle" xml:space="preserve"><value>Confirm remediation</value></data>
+  <data name="Page.Reconcile.ResyncStarted" xml:space="preserve"><value>Re-sync of {0} started (job {1}).</value></data>
+  <data name="Page.Reconcile.AcceptedToast" xml:space="preserve"><value>Divergence of {0} accepted.</value></data>
+  <data name="Page.Reconcile.UnacceptedToast" xml:space="preserve"><value>Acceptance removed for {0}.</value></data>
+  <data name="Page.Reconcile.Mode" xml:space="preserve"><value>Mode</value></data>
+  <data name="Page.Reconcile.History" xml:space="preserve"><value>Remediation history</value></data>
+  <data name="Page.Reconcile.CompareValues" xml:space="preserve"><value>Compare values</value></data>
+  <data name="Page.Reconcile.CompareAgain" xml:space="preserve"><value>Compare again</value></data>
+  <data name="Page.Reconcile.AutoFixOn" xml:space="preserve"><value>Automatic correction is on: tables above the threshold (or with value differences) are re-synced automatically, once.</value></data>
+  <data name="Page.Reconcile.Values.Title" xml:space="preserve"><value>Value comparison</value></data>
+  <data name="Page.Reconcile.Values.Hint" xml:space="preserve"><value>Compares the consolidated Parquet with the SQL table row by row, by Id. It reads whole tables: large tables take time and memory.</value></data>
+  <data name="Page.Reconcile.Values.None" xml:space="preserve"><value>No values have been compared for this pipeline yet.</value></data>
+  <data name="Page.Reconcile.Values.Last" xml:space="preserve"><value>Last comparison</value></data>
+  <data name="Page.Reconcile.Values.Summary" xml:space="preserve"><value>{0} table(s) compared, {1} with differences</value></data>
+  <data name="Page.Reconcile.Values.Different" xml:space="preserve"><value>Different</value></data>
+  <data name="Page.Reconcile.Values.Missing" xml:space="preserve"><value>Missing in SQL</value></data>
+  <data name="Page.Reconcile.Values.Extra" xml:space="preserve"><value>Extra in SQL</value></data>
+  <data name="Page.Reconcile.Values.Error" xml:space="preserve"><value>Not compared</value></data>
+  <data name="Page.Reconcile.Values.Started" xml:space="preserve"><value>Value comparison started (job {0}). The result shows up here when it finishes.</value></data>
+  <data name="Page.Reconcile.Origin" xml:space="preserve"><value>Origin</value></data>
+  <data name="Page.Reconcile.Origin.Auto" xml:space="preserve"><value>Automatic</value></data>
+  <data name="Page.Reconcile.Origin.User" xml:space="preserve"><value>Manual</value></data>
+  <data name="Page.Reconcile.HistoryEmpty" xml:space="preserve"><value>No remediations recorded.</value></data>
+  <data name="Page.Tables.Divergence" xml:space="preserve"><value>Divergence</value></data>
+  <data name="Page.Tables.DivergenceAboveThreshold" xml:space="preserve"><value>This pipeline's max divergence exceeds the threshold configured in Settings.</value></data>
+  <data name="Fluent.LayoutHamburger_Title" xml:space="preserve"><value>Menu</value></data>
+  <data name="Fluent.LayoutHamburger_Close" xml:space="preserve"><value>Close</value></data>
+  <data name="Fluent.MessageBar_Dismiss" xml:space="preserve"><value>Hide this message</value></data>
+  <data name="Fluent.DataGrid_EmptyContent" xml:space="preserve"><value>No data to show.</value></data>
+  <data name="Fluent.DataGrid_LoadingContent" xml:space="preserve"><value>Loading...</value></data>
+  <data name="Fluent.DataGrid_ErrorContent" xml:space="preserve"><value>An error occurred while retrieving data.</value></data>
+  <data name="Fluent.DataGrid_SortAscending" xml:space="preserve"><value>Sort ascending</value></data>
+  <data name="Fluent.DataGrid_SortDescending" xml:space="preserve"><value>Sort descending</value></data>
+  <data name="Fluent.DataGrid_SortColumnAscending" xml:space="preserve"><value>{0} ascending</value></data>
+  <data name="Fluent.DataGrid_SortColumnDescending" xml:space="preserve"><value>{0} descending</value></data>
+  <data name="Fluent.DataGrid_SortDirectionAscending" xml:space="preserve"><value>ascending</value></data>
+  <data name="Fluent.DataGrid_SortDirectionDescending" xml:space="preserve"><value>descending</value></data>
+  <data name="Fluent.DataGrid_SortAnnouncement" xml:space="preserve"><value>Sorted by {0}</value></data>
+  <data name="Fluent.DataGrid_SortAnnouncementCleared" xml:space="preserve"><value>Sorting cleared</value></data>
+  <data name="Fluent.DataGrid_SortAnnouncementSeparator" xml:space="preserve"><value>, then by </value></data>
+  <data name="Fluent.DataGrid_SortLevel" xml:space="preserve"><value>Sorted {0}, sort level {1} of {2}</value></data>
+  <data name="Fluent.MessageBox_ButtonOk" xml:space="preserve"><value>OK</value></data>
+  <data name="Fluent.MessageBox_ButtonCancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Fluent.MessageBox_ButtonYes" xml:space="preserve"><value>Yes</value></data>
+  <data name="Fluent.MessageBox_ButtonNo" xml:space="preserve"><value>No</value></data>
+  <data name="Fluent.MessageBox_Confirmation" xml:space="preserve"><value>Confirmation</value></data>
+  <data name="Fluent.MessageBox_Error" xml:space="preserve"><value>Error</value></data>
+  <data name="Fluent.MessageBox_Information" xml:space="preserve"><value>Information</value></data>
+  <data name="Fluent.MessageBox_Success" xml:space="preserve"><value>Success</value></data>
+  <data name="Fluent.MessageBox_Warning" xml:space="preserve"><value>Warning</value></data>
+  <data name="Fluent.FluentInputBase_Required" xml:space="preserve"><value>Required</value></data>
+  <data name="Fluent.TextInput_RequiredMessage" xml:space="preserve"><value>This field is required</value></data>
+  <data name="JobFlow.AriaLabel" xml:space="preserve"><value>Job stages</value></data>
+  <data name="JobFlow.StepOf" xml:space="preserve"><value>Step {0} of {1}</value></data>
+  <data name="JobFlow.StepCount" xml:space="preserve"><value>{0} steps</value></data>
+  <data name="JobFlow.SkippedSteps" xml:space="preserve"><value>{0} steps skipped</value></data>
+  <data name="JobFlow.StageSkipped" xml:space="preserve"><value>{0} skipped</value></data>
+  <data name="JobFlow.ScopeEntity" xml:space="preserve"><value>Entity: {0}</value></data>
+  <data name="JobFlow.Announce" xml:space="preserve"><value>{0}: {1}</value></data>
+  <data name="JobFlow.Step.discover" xml:space="preserve"><value>Discover snapshots</value></data>
+  <data name="JobFlow.Step.discover.Hint" xml:space="preserve"><value>Reads the changelog, lists the snapshots and selects the pending ones.</value></data>
+  <data name="JobFlow.Step.snapshots" xml:space="preserve"><value>Validate and read CSV</value></data>
+  <data name="JobFlow.Step.snapshots.Hint" xml:space="preserve"><value>Validates each snapshot and transcodes its CSV files to transient Parquet.</value></data>
+  <data name="JobFlow.Step.consolidate" xml:space="preserve"><value>Consolidate and publish to ADLS</value></data>
+  <data name="JobFlow.Step.consolidate.Hint" xml:space="preserve"><value>Merges and deduplicates the versions of each entity and publishes its consolidated Parquet ({pipeline}/{entity}.parquet) and schema to ADLS. It is the Parquet that reconciliation compares later.</value></data>
+  <data name="JobFlow.Step.register" xml:space="preserve"><value>Record watermark</value></data>
+  <data name="JobFlow.Step.register.Hint" xml:space="preserve"><value>Marks the processed snapshots and writes the manifest.</value></data>
+  <data name="JobFlow.Step.prepare" xml:space="preserve"><value>Prepare target</value></data>
+  <data name="JobFlow.Step.prepare.Hint" xml:space="preserve"><value>Opens the SQL connection and loads the enum translation.</value></data>
+  <data name="JobFlow.Step.merge" xml:space="preserve"><value>MERGE per entity</value></data>
+  <data name="JobFlow.Step.merge.Hint" xml:space="preserve"><value>For each entity: creates or evolves the table, loads in batches, deletes orphans (on reload) and counts the rows.</value></data>
+  <data name="JobFlow.Step.compare" xml:space="preserve"><value>Compare Parquet and SQL</value></data>
+  <data name="JobFlow.Step.compare.Hint" xml:space="preserve"><value>Compares, entity by entity, the rows of the Parquet published to ADLS (step “Consolidate and publish to ADLS”) with SQL.</value></data>
+  <data name="JobFlow.Step.report" xml:space="preserve"><value>Report and alerts</value></data>
+  <data name="JobFlow.Step.report.Hint" xml:space="preserve"><value>Builds the job report and sends any alerts that apply.</value></data>
+  <data name="JobFlow.Status.Pending" xml:space="preserve"><value>Pending</value></data>
+  <data name="JobFlow.Status.Running" xml:space="preserve"><value>Running</value></data>
+  <data name="JobFlow.Status.Done" xml:space="preserve"><value>Completed</value></data>
+  <data name="JobFlow.Status.NoNewData" xml:space="preserve"><value>No new data</value></data>
+  <data name="JobFlow.Status.Warning" xml:space="preserve"><value>With warnings</value></data>
+  <data name="JobFlow.Status.Error" xml:space="preserve"><value>Error</value></data>
+  <data name="JobFlow.Status.Blocked" xml:space="preserve"><value>Stalled</value></data>
+  <data name="JobFlow.Status.Cancelled" xml:space="preserve"><value>Cancelled</value></data>
+  <data name="JobFlow.Status.Skipped" xml:space="preserve"><value>Skipped</value></data>
+  <data name="JobFlow.Status.NotReached" xml:space="preserve"><value>Not reached</value></data>
+  <data name="JobFlow.Status.Interrupted" xml:space="preserve"><value>Interrupted</value></data>
+  <data name="JobFlow.Phase.ensureTable" xml:space="preserve"><value>Preparing the table</value></data>
+  <data name="JobFlow.Phase.merge" xml:space="preserve"><value>Loading (MERGE)</value></data>
+  <data name="JobFlow.Phase.orphans" xml:space="preserve"><value>Deleting orphans</value></data>
+  <data name="JobFlow.Phase.count" xml:space="preserve"><value>Counting rows</value></data>
+  <data name="JobFlow.Unit.Snapshots" xml:space="preserve"><value>snapshots</value></data>
+  <data name="JobFlow.Unit.Entities" xml:space="preserve"><value>entities</value></data>
+  <data name="JobFlow.Counter.Failed" xml:space="preserve"><value>{0} failed</value></data>
+  <data name="JobFlow.Detail.Start" xml:space="preserve"><value>Start</value></data>
+  <data name="JobFlow.Detail.End" xml:space="preserve"><value>End</value></data>
+  <data name="JobFlow.Detail.InProgress" xml:space="preserve"><value>In progress</value></data>
+  <data name="JobFlow.Detail.Duration" xml:space="preserve"><value>Duration</value></data>
+  <data name="JobFlow.Detail.Phase" xml:space="preserve"><value>Current phase</value></data>
+  <data name="JobFlow.Detail.CurrentSnapshot" xml:space="preserve"><value>Current snapshot</value></data>
+  <data name="JobFlow.Detail.CurrentEntity" xml:space="preserve"><value>Current entity</value></data>
+  <data name="JobFlow.Detail.Failed" xml:space="preserve"><value>Failed entities</value></data>
+  <data name="JobFlow.Detail.LastMessage" xml:space="preserve"><value>Last message</value></data>
+  <data name="JobFlow.Detail.NoMessage" xml:space="preserve"><value>No messages.</value></data>
+  <data name="JobFlow.Fact.Snapshots" xml:space="preserve"><value>Processed snapshots</value></data>
+  <data name="JobFlow.Fact.CsvRows" xml:space="preserve"><value>CSV rows</value></data>
+  <data name="JobFlow.Fact.SqlRows" xml:space="preserve"><value>Rows in SQL</value></data>
+  <data name="JobFlow.Fact.PublishedParquet" xml:space="preserve"><value>Parquet files published</value></data>
+  <data name="JobFlow.Detail.PublishedTo" xml:space="preserve"><value>Published to ADLS</value></data>
+  <data name="JobFlow.Detail.ComparedParquet" xml:space="preserve"><value>Compared Parquet (ADLS)</value></data>
+  <data name="JobFlow.Detail.OpenParquet" xml:space="preserve"><value>Open in Parquet</value></data>
+  <data name="JobFlow.Fact.Divergence" xml:space="preserve"><value>Divergence</value></data>
+  <data name="JobFlow.Fact.FailedEntities" xml:space="preserve"><value>Failed entities</value></data>
+  <data name="JobFlow.Fact.DiffEntities" xml:space="preserve"><value>Entities with differences</value></data>
+  <data name="JobFlow.Fact.DiffDelta" xml:space="preserve"><value>Total row difference</value></data>
+  <data name="JobFlow.Skip.Force" xml:space="preserve"><value>Force starts from the consolidated Parquet in ADLS: no snapshots are read.</value></data>
+  <data name="JobFlow.Skip.Resync" xml:space="preserve"><value>Resync reloads one or more entities from the consolidated Parquet.</value></data>
+  <data name="JobFlow.Skip.Diff" xml:space="preserve"><value>Diff only compares counts between the consolidated Parquet and SQL to report the delta: no snapshots are read and SQL is not loaded.</value></data>
+  <data name="JobFlow.Skip.Reconcile" xml:space="preserve"><value>Reconcile only compares counts between the consolidated Parquet and SQL: no snapshots are read and SQL is not loaded.</value></data>
+  <data name="JobFlow.Skip.CompareValues" xml:space="preserve"><value>Compare values reads the consolidated Parquet and the SQL table row by row: no snapshots are read and SQL is not loaded.</value></data>
+  <data name="JobFlow.Duration.Seconds" xml:space="preserve"><value>{0} s</value></data>
+  <data name="JobFlow.Duration.MinutesSeconds" xml:space="preserve"><value>{0} min {1} s</value></data>
+  <data name="JobFlow.Duration.HoursMinutes" xml:space="preserve"><value>{0} h {1} min</value></data>
+  <data name="Page.JobDetail.Breadcrumb" xml:space="preserve"><value>Breadcrumb</value></data>
+  <data name="Page.JobDetail.Started" xml:space="preserve"><value>Started</value></data>
+  <data name="Page.JobDetail.CopyId" xml:space="preserve"><value>Copy the job ID</value></data>
+  <data name="Page.JobDetail.IdCopied" xml:space="preserve"><value>ID copied</value></data>
+  <data name="Page.JobDetail.CopyFailed" xml:space="preserve"><value>Could not copy the ID</value></data>
+  <data name="Page.JobDetail.Alert.Error" xml:space="preserve"><value>The job finished with errors</value></data>
+  <data name="Page.JobDetail.Alert.Partial" xml:space="preserve"><value>The job finished partially</value></data>
+  <data name="Page.JobDetail.Alert.Blocked" xml:space="preserve"><value>The job is stalled</value></data>
+  <data name="Page.JobDetail.Alert.Incomplete" xml:space="preserve"><value>Stopped at an incomplete snapshot: {0}</value></data>
+  <data name="Page.JobDetail.Alert.Entities" xml:space="preserve"><value>Affected entities ({0}):</value></data>
+  <data name="Page.JobDetail.Alert.More" xml:space="preserve"><value>and {0} more</value></data>
+  <data name="Page.JobDetail.Metric.Snapshots" xml:space="preserve"><value>Snapshots</value></data>
+  <data name="Page.JobDetail.Metric.SnapshotsHint" xml:space="preserve"><value>Processed / selected</value></data>
+  <data name="Page.JobDetail.Metric.SnapshotsStopped" xml:space="preserve"><value>Stopped at an incomplete snapshot</value></data>
+  <data name="Page.JobDetail.Metric.CsvRows" xml:space="preserve"><value>Rows read</value></data>
+  <data name="Page.JobDetail.Metric.CsvRowsHint" xml:space="preserve"><value>All versions in the CSV files</value></data>
+  <data name="Page.JobDetail.Metric.SqlRows" xml:space="preserve"><value>Rows in SQL</value></data>
+  <data name="Page.JobDetail.Metric.SqlRowsHint" xml:space="preserve"><value>Rows in the target tables</value></data>
+  <data name="Page.JobDetail.Metric.Divergence" xml:space="preserve"><value>Divergence</value></data>
+  <data name="Page.JobDetail.Metric.DivergenceHint" xml:space="preserve"><value>Maximum between Parquet and SQL</value></data>
+  <data name="Page.JobDetail.Metric.DivergencePartial" xml:space="preserve"><value>Partial reconcile</value></data>
+  <data name="Page.JobDetail.EntitySearch" xml:space="preserve"><value>Filter entity…</value></data>
+  <data name="Page.JobDetail.EntityCount" xml:space="preserve"><value>{0} of {1} entities</value></data>
+  <data name="Page.JobDetail.ReadRows" xml:space="preserve"><value>Read (CSV)</value></data>
+  <data name="Page.JobDetail.InSqlRows" xml:space="preserve"><value>In SQL</value></data>
+  <data name="Page.JobDetail.IngestState" xml:space="preserve"><value>Ingest</value></data>
+  <data name="Page.JobDetail.SqlState" xml:space="preserve"><value>SQL</value></data>
+  <data name="Page.JobDetail.EntitiesNote" xml:space="preserve"><value>Read = all versions; In SQL = rows in the target table.</value></data>
+  <data name="Page.JobDetail.TimelineFilter" xml:space="preserve"><value>Filter events</value></data>
+  <data name="Page.JobDetail.TimelineAll" xml:space="preserve"><value>All</value></data>
+  <data name="Page.JobDetail.TimelineIssues" xml:space="preserve"><value>Warnings and errors</value></data>
+  <data name="Page.JobDetail.TimelineLocalTime" xml:space="preserve"><value>Times in your time zone</value></data>
+  <data name="Page.JobDetail.TimelineEmpty" xml:space="preserve"><value>No events yet.</value></data>
+  <data name="Page.JobDetail.TimelineNoIssues" xml:space="preserve"><value>No warnings or errors.</value></data>
+  <data name="Page.JobDetail.TimelineJob" xml:space="preserve"><value>Job</value></data>
+  <data name="Page.JobDetail.TimelineSnapshots" xml:space="preserve"><value>{0} snapshots processed</value></data>
+  <data name="Page.JobDetail.TimelineMerged" xml:space="preserve"><value>{0} entities loaded</value></data>
+  <data name="Page.JobDetail.TimelineCompared" xml:space="preserve"><value>{0} entities reconciled</value></data>
+  <data name="Page.JobDetail.EventCount" xml:space="preserve"><value>{0} events</value></data>
+  <data name="Page.JobDetail.EventCountOne" xml:space="preserve"><value>1 event</value></data>
+  <data name="Page.JobDetail.WarningCount" xml:space="preserve"><value>{0} warnings</value></data>
+  <data name="Page.JobDetail.WarningCountOne" xml:space="preserve"><value>1 warning</value></data>
+  <data name="Page.JobDetail.ErrorCount" xml:space="preserve"><value>{0} errors</value></data>
+  <data name="Page.JobDetail.ErrorCountOne" xml:space="preserve"><value>1 error</value></data>
+  <data name="Page.Dashboard.TablesOk" xml:space="preserve"><value>{0} OK</value></data>
+  <data name="Page.Dashboard.TablesError" xml:space="preserve"><value>{0} with errors</value></data>
+  <data name="Page.Dashboard.PendingSnapshots" xml:space="preserve"><value>{0} pending</value></data>
+  <data name="Page.Dashboard.StorageUnavailable" xml:space="preserve"><value>ADLS data unavailable</value></data>
+  <data name="Page.Dashboard.StorageParquet" xml:space="preserve"><value>{0} MB of Parquet</value></data>
+  <data name="Page.Dashboard.StorageFolders" xml:space="preserve"><value>{0} snapshot folders · {1} purgeable</value></data>
+  <data name="Page.Dashboard.ActiveJob" xml:space="preserve"><value>Running job</value></data>
+  <data name="Page.Dashboard.ViewDetail" xml:space="preserve"><value>View details</value></data>
+  <data name="Page.Dashboard.SinceTime" xml:space="preserve"><value>since {0}</value></data>
+  <data name="Page.Dashboard.MoreWorkers" xml:space="preserve"><value>and {0} more</value></data>
+  <data name="Page.Dashboard.ChangelogStalledShort" xml:space="preserve"><value>Changelog stalled</value></data>
+  <data name="Common.Status.Idle" xml:space="preserve"><value>Idle</value></data>
+  <data name="Page.Dashboard.MoreActiveJobs" xml:space="preserve"><value>and {0} more</value></data>
+</root>

@@ -1,0 +1,74 @@
+# Funcionalidad
+
+## Cómo funciona el pipeline
+
+Un **job** (una ejecución de un pipeline) corre en tres etapas:
+
+```
+ADLS Gen2
+↓ [Ingest]
+Parquet consolidado
+↓ [SQL]
+SQL Server
+↓ [Reconcile]
+Reporte
+```
+
+- **Ingest** — lee lo nuevo del origen y lo escribe en un Parquet limpio. Solo procesa snapshots que son seguros (más antiguos que el que se está escribiendo en ese momento), los consolida con el Parquet anterior (conservando la última versión de cada fila) y sube el resultado a ADLS como copia duradera.
+- **SQL** — lee ese Parquet desde ADLS y lo hace MERGE (upsert) en SQL Server, creando la tabla si hace falta. Un **Incremental** mergea solo las filas de su propia corrida (el delta) y actualiza una fila solo si su watermark es más nuevo. Mergea el Parquet consolidado completo cuando la tabla destino está vacía o cuando el último job que cargó SQL no terminó esa etapa.
+- **Reconcile** — cuenta las filas en el Parquet vs SQL por tabla. Si una tabla diverge más allá del umbral, el job se marca como **Partial** y se dispara una alerta.
+
+> **Por qué una tabla nueva puede no aparecer todavía (Synapse Link).** El portal solo procesa carpetas de snapshot *anteriores* a la que Synapse marca como escrita en `Changelog/changelog.info`, así que nunca lee exportaciones a medio escribir. Una tabla recién habilitada en Power Platform aparece solo cuando su carpeta se cierra y una corrida la ha procesado. Cada cuánto se cierra una carpeta lo define el intervalo configurado en Synapse Link (por ejemplo, una vez al día).
+
+Un job se dispara **manualmente** (**Ejecutar**, **Forzar**, **Reconciliar** o **Diff** en el menú de ejecución del Dashboard o de Pipelines) o **automáticamente** por el scheduler cuando detecta nuevos snapshots. En cualquier caso, si ya hay un job corriendo para ese pipeline, no arranca un segundo.
+
+El trabajo fluye por una **cola basada en archivos**: cada tarea es un archivo JSON cuya carpeta (`pending` → `claimed` → `done`/`error`) es su estado. Un worker reclama una tarea con un lease temporal y envía heartbeats; si muere, el lease expira y la tarea vuelve a `pending`, así nada se queda atascado.
+
+## Páginas
+
+| Página | Ruta | Qué haces ahí |
+|---|---|---|
+| Panel | `/` | Salud, cola, workers; lanzar y cancelar corridas. |
+| Jobs | `/jobs` | Historial de corridas (filtros de pipeline, estado y fechas Desde/Hasta); abrir detalle; descargar reporte PDF/JSON; **Exportar CSV** con los filtros aplicados. La columna *Trabajo* muestra el id corto (el sufijo final); el id completo aparece al pasar el ratón, en el detalle y en el CSV. |
+| Detalle del job | `/jobs/{id}` | Progreso en vivo: etapas, resultados por tabla, línea de tiempo. |
+| Tablas | `/tables` | Conteos de filas, watermarks y estado de carga por tabla; **Re-sincronizar** cualquier tabla desde su Parquet. |
+| Orígenes | `/sources` | Conexiones de origen ADLS (crear, probar, editar, eliminar). |
+| Destinos | `/destinations` | Conexiones de destino SQL Server. |
+| Pipelines | `/pipelines` | Crear/editar pipelines, programarlos, ejecutarlos. |
+| Snapshots | `/snapshots` | Carpetas de snapshot en ADLS, estado del changelog, backlog. |
+| Conciliación | `/reconcile` | Tablas divergentes y su remediación. |
+| Parquet | `/parquet` | Archivos Parquet materializados en ADLS (descargar, eliminar). |
+| Analítica | `/analytics` | Indicadores y gráficas de rendimiento, de todos los pipelines o de uno (selector *Pipeline*). La cola y los workers son compartidos y no se filtran. |
+| Logs | `/logs` | Registro de actividad (eventos de usuario y de sistema), filtrable por origen, nivel, texto y fechas Desde/Hasta; **Exportar CSV** con todos los registros que cumplen los filtros. |
+| Ajustes | `/settings` | Parámetros operativos globales: scheduler, umbral de divergencia, corrección automática, retención, alertas (webhook) y descarga del paquete de la Logic App de correo. |
+| Ayuda | `/ayuda` | Esta guía de usuario. |
+
+El menú lateral se puede contraer a un riel de iconos con su botón de contraer; la elección se recuerda en el navegador.
+
+El estado se muestra en todas partes como una insignia de color: **Running/Claimed** (acento), **OK** (verde), **Error** (rojo), **Partial/Stalled** (naranja), **Cancelled** (gris), **Pending** (neutro).
+
+## Tareas comunes
+
+**Crear una conexión.** Orígenes/Destinos → Agregar → completar los campos → Guardar → Probar. Los secretos se guardan cifrados y se muestran como `***`.
+
+**Crear un pipeline.** Pipelines → Agregar → elegir un origen y un destino → Guardar. Arranca con el scheduler apagado; ejecútalo manualmente primero.
+
+**Ejecutar un pipeline.** Desde el menú de ejecución del Dashboard o de Pipelines: **Ejecutar** (Incremental: solo datos nuevos, el habitual), **Forzar** (recarga SQL desde el Parquet consolidado — todas las tablas), **Reconciliar** (solo verifica conteos), **Diff** (solo reporta diferencias). Confirma en el diálogo.
+
+**Seguir / cancelar una corrida.** Abre el detalle del job para ver etapas, tablas y línea de tiempo en vivo; su lienzo muestra también el paso en que el Parquet consolidado se publica en ADLS (*Consolidar y publicar en ADLS*). **Cancelar** solo está disponible mientras el job está corriendo.
+
+**Reintentar un job.** Desde el menú del job en Jobs, o **Reintentar** en el detalle del job, para jobs en Error, Partial o Stalled. Crea un job nuevo; el original queda en el historial.
+
+**Programar un pipeline.** Pipelines → Activar scheduler. A partir de ahí, el portal lanza una corrida Incremental por su cuenta cuando llegan nuevos snapshots.
+
+**Restablecer un pipeline.** Pipelines → menú de la fila → **Restablecer**. Borra el registro de snapshots procesados, el estado de cada tabla y los Parquet consolidados del pipeline en ADLS; no se puede deshacer. Se conservan la configuración, las tablas pausadas y los CSV originales de Synapse Link, y la siguiente corrida reprocesa todos los snapshots desde cero. El diálogo ofrece *Vaciar también las tablas de destino en SQL*: si se desmarca, la siguiente corrida actualiza con MERGE las filas que ya están en SQL.
+
+**Conciliar y remediar.** Conciliación → elegir el pipeline. Para una tabla divergente: **Re-sincronizar** la recarga desde el Parquet consolidado: actualiza todas sus filas y borra las que ya no están en él, sin vaciarla (corrige filas faltantes o sobrantes en SQL); **Re-mergear** solo agrega/actualiza filas (aparece cuando a SQL le faltan filas). **Aceptar** declara legítima una divergencia, para que deje de alertar (no lanza ningún job). Re-sincronizar y Re-mergear lanzan un job de tipo *Re-sync tabla*, y cualquier tabla también se puede re-sincronizar desde **Tablas**.
+
+**Comparar valores.** La conciliación cuenta filas; no ve un valor cambiado si el número de filas coincide. **Comparar valores** (barra de Conciliación para todo el pipeline, o **Comparar de nuevo** en una tabla) lanza un job que empareja por Id cada fila del Parquet consolidado con la de SQL y lista las filas **distintas**, las que **faltan** en SQL y las que **sobran** (el tooltip de cada contador muestra hasta 20 Id). Lee las tablas enteras: en tablas grandes tarda y ocupa memoria, por eso se lanza a mano. Las columnas de etiqueta de enum no se comparan (se derivan al cargar).
+
+**Corrección automática.** Con **Ajustes → Corrección automática** activada, al terminar una corrida (o una comparación de valores) con tablas que superan el umbral de divergencia o con diferencias de valores, Sluice lanza solo un re-sync (recarga) de esas tablas, en un único job. Un solo intento: si la diferencia persiste, alerta y no reintenta. Las tablas aceptadas no se corrigen. El historial de Conciliación marca estos re-sync como *Automática*.
+
+**Obtener un reporte.** Jobs → **Acciones** → **Reporte** (PDF) o **JSON**, por job. No hay una pantalla de Reportes aparte.
+
+Para saber qué significa cada estado y término, ver [Referencia](04-reference.md).

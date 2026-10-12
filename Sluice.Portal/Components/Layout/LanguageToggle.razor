@@ -1,0 +1,30 @@
+@rendermode InteractiveServer
+@inject NavigationManager Nav
+@inject IStringLocalizer<SharedResource> L
+
+@* Selector de idioma ES/EN. Navega (recarga completa) a /culture/set para fijar
+   la cookie de cultura; Blazor Server no cambia la cultura del circuito en caliente. *@
+<FluentButton Appearance="ButtonAppearance.Subtle"
+              IconStart="@(new Icons.Regular.Size20.Translate())"
+              Title="@($"{L["Lang.Change"]} ({_label})")"
+              aria-label="@L["Lang.Change"]"
+              data-testid="lang-toggle"
+              OnClick="ToggleLanguage" />
+
+@code {
+    private string _current = "es";
+    private string _label = "ES";
+
+    protected override void OnInitialized()
+    {
+        _current = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "en" ? "en" : "es";
+        _label = _current.ToUpperInvariant();
+    }
+
+    private void ToggleLanguage()
+    {
+        var next = _current == "es" ? "en" : "es";
+        var redirect = "/" + Nav.ToBaseRelativePath(Nav.Uri);
+        Nav.NavigateTo($"/culture/set?culture={next}&redirectUri={Uri.EscapeDataString(redirect)}", forceLoad: true);
+    }
+}

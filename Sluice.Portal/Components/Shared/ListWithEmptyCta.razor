@@ -1,0 +1,20 @@
+@* Reusable component to encapsulate the common "show empty state with CTA or the list content" pattern.
+This centralizes the logic flagged in code-review for the three list pages, reducing duplication and making future lists easier.
+*@
+@if (!HasItems)
+{
+    <EmptyState Text="@EmptyText">
+        <Action>@EmptyAction</Action>
+    </EmptyState>
+}
+else
+{
+    @ListContent
+}
+
+@code {
+    [Parameter] public bool HasItems { get; set; }
+    [Parameter] public string EmptyText { get; set; } = "";
+    [Parameter, EditorRequired] public RenderFragment EmptyAction { get; set; } = default!;
+    [Parameter, EditorRequired] public RenderFragment ListContent { get; set; } = default!;
+}

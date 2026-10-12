@@ -1,0 +1,36 @@
+name: Dependency Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 2 * * 1"
+
+jobs:
+  nuget-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore Sluice.Portal.sln
+
+      - name: Production vulnerabilities (fail on any)
+        working-directory: Sluice.Portal
+        run: |
+          set -euo pipefail
+          OUTPUT=$(dotnet list package --vulnerable --include-transitive)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q "has the following vulnerable packages"; then
+            echo "Vulnerable packages found in Sluice.Portal"
+            exit 1
+          fi
+
+      - name: Full solution report (informational)
+        run: dotnet list package --vulnerable --include-transitive || true

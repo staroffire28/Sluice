@@ -1,0 +1,27 @@
+@inject IStringLocalizer<SharedResource> L
+
+@* Filtro Desde/Hasta (días completos, ambos opcionales) de Logs y Jobs. *@
+<FluentDatePicker TValue="DateOnly?" Value="@Value.From" ValueChanged="@(d => SetAsync(d, Value.To))"
+                  MaxDate="@Value.To" Label="@L["Common.DateFrom"]" Width="150px" data-testid="date-from" />
+<FluentDatePicker TValue="DateOnly?" Value="@Value.To" ValueChanged="@(d => SetAsync(Value.From, d))"
+                  MinDate="@Value.From" Label="@L["Common.DateTo"]" Width="150px" data-testid="date-to" />
+@if (!Value.IsEmpty)
+{
+    <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@(() => SetAsync(null, null))" data-testid="date-clear">@L["Common.ClearDates"]</FluentButton>
+}
+
+@code {
+    [Parameter] public DateRange Value { get; set; } = new(null, null);
+    [Parameter] public EventCallback<DateRange> ValueChanged { get; set; }
+
+    private Task SetAsync(DateOnly? from, DateOnly? to)
+    {
+        // Escrita a mano, la fecha puede saltarse Min/MaxDate: un rango invertido se reduce a un día.
+        if (from is not null && to is not null && to < from)
+        {
+            to = from;
+        }
+
+        return ValueChanged.InvokeAsync(new DateRange(from, to));
+    }
+}

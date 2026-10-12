@@ -1,0 +1,1028 @@
+/* Lienzo del flujo del job. Solo tokens de Fluent (cambian solos con el tema claro/oscuro).
+   Los iconos (FluentIcon) los pinta otro componente: sus <svg> se alcanzan con ::deep y su
+   color sale de --jfc-icon (Color.Custom + CustomColor="var(--jfc-icon)"), que hereda el
+   color del texto de cada tile/chip. */
+.jfc {
+    container: jfc / inline-size;
+    --jfc-icon: currentColor;
+}
+
+.jfc-vh {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.jfc ::deep svg {
+    flex: none;
+    display: block;
+}
+
+.jfc__shape {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    align-items: center;
+    margin: 0 0 12px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--colorNeutralForeground3);
+}
+
+.jfc__shape strong {
+    color: var(--colorNeutralForeground1);
+    font-weight: 600;
+}
+
+.jfc__shape-sep {
+    color: var(--colorNeutralStroke1);
+}
+
+.jfc__body {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+/* El "lienzo": fondo punteado sutil. */
+.jfc__canvas {
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusXLarge);
+    background-color: var(--colorNeutralBackground2);
+    background-image: radial-gradient(var(--colorNeutralStroke2) 1px, transparent 1.2px);
+    background-size: 16px 16px;
+    background-position: 8px 8px;
+}
+
+/* ---- Carriles (etapas) ---- */
+.jfc__lanes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.jfc-lane {
+    position: relative;
+    min-width: 0;
+    padding: 12px;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusXLarge);
+    box-shadow: var(--shadow2);
+}
+
+.jfc-lane__head {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+}
+
+.jfc-lane__tile {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--borderRadiusLarge);
+    display: grid;
+    place-items: center;
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground2);
+}
+
+.jfc-lane__title {
+    margin: 0;
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 600;
+}
+
+.jfc-lane__meta {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 8px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--colorNeutralForeground3);
+    font-variant-numeric: tabular-nums;
+}
+
+.jfc-lane__bar {
+    height: 4px;
+    margin: 12px 0;
+    border-radius: 2px;
+    background: var(--colorNeutralStroke3);
+    overflow: hidden;
+}
+
+.jfc-lane__bar > span,
+.jfc-node__bar > span {
+    display: block;
+    height: 100%;
+    width: 100%;
+    transform-origin: left center;
+    transform: scaleX(calc(var(--p, 0) / 100));
+    transition: transform .6s ease;
+}
+
+.jfc-lane__bar > span {
+    background: var(--colorNeutralStrokeAccessible);
+}
+
+.jfc-lane--done .jfc-lane__tile,
+.jfc-lane--nonewdata .jfc-lane__tile {
+    background: var(--colorStatusSuccessBackground1);
+    color: var(--colorStatusSuccessForeground1);
+}
+
+.jfc-lane--done .jfc-lane__bar > span,
+.jfc-lane--nonewdata .jfc-lane__bar > span {
+    background: var(--colorStatusSuccessForeground1);
+}
+
+.jfc-lane--running {
+    border-color: var(--colorBrandStroke2);
+}
+
+.jfc-lane--running .jfc-lane__tile {
+    background: var(--colorBrandBackground);
+    color: var(--colorNeutralForegroundOnBrand);
+}
+
+.jfc-lane--running .jfc-lane__bar > span {
+    background: var(--colorBrandBackground);
+}
+
+.jfc-lane--error {
+    border-color: var(--colorStatusDangerBorder1);
+}
+
+.jfc-lane--error .jfc-lane__tile {
+    background: var(--colorStatusDangerBackground3);
+    color: var(--colorNeutralForegroundOnBrand);
+}
+
+.jfc-lane--error .jfc-lane__bar > span {
+    background: var(--colorStatusDangerForeground1);
+}
+
+.jfc-lane--warning,
+.jfc-lane--blocked,
+.jfc-lane--interrupted {
+    border-color: var(--colorStatusWarningBorder1);
+}
+
+.jfc-lane--warning .jfc-lane__tile,
+.jfc-lane--blocked .jfc-lane__tile,
+.jfc-lane--interrupted .jfc-lane__tile {
+    background: var(--colorStatusWarningBackground1);
+    color: var(--colorStatusWarningForeground1);
+}
+
+.jfc-lane--warning .jfc-lane__bar > span,
+.jfc-lane--blocked .jfc-lane__bar > span,
+.jfc-lane--interrupted .jfc-lane__bar > span {
+    background: var(--colorStatusWarningForeground1);
+}
+
+.jfc-lane--skipped,
+.jfc-lane--notreached,
+.jfc-lane--cancelled {
+    background: transparent;
+    box-shadow: none;
+    border-style: dashed;
+    border-color: var(--colorNeutralStroke1);
+}
+
+.jfc-lane--skipped .jfc-lane__tile,
+.jfc-lane--notreached .jfc-lane__tile,
+.jfc-lane--cancelled .jfc-lane__tile {
+    background: transparent;
+    border: 1px dashed var(--colorNeutralStroke1);
+    color: var(--colorNeutralForeground3);
+}
+
+.jfc-lane__skip {
+    margin: 12px 0 0;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--colorNeutralForeground3);
+}
+
+.jfc-lane__skip b {
+    display: block;
+    color: var(--colorNeutralForeground2);
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+/* Chip de estado: icono + texto (nunca solo color). */
+.jfc-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+    color: var(--colorNeutralForeground3);
+}
+
+.jfc-chip--done,
+.jfc-chip--nonewdata {
+    color: var(--colorStatusSuccessForeground1);
+}
+
+.jfc-chip--running {
+    color: var(--colorBrandForeground1);
+}
+
+.jfc-chip--error {
+    color: var(--colorStatusDangerForeground1);
+}
+
+.jfc-chip--warning,
+.jfc-chip--blocked,
+.jfc-chip--interrupted {
+    color: var(--colorStatusWarningForeground1);
+}
+
+/* ---- Conector entre carriles (aria-hidden). Móvil: vertical; escritorio: horizontal. ---- */
+.jfc-link {
+    position: absolute;
+    left: 29px;
+    top: -32px;
+    width: 2px;
+    height: 32px;
+}
+
+.jfc-link::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 1px 0;
+    background: var(--jfc-link, var(--colorNeutralStroke1));
+}
+
+.jfc-link::after {
+    content: "";
+    position: absolute;
+    left: -3px;
+    bottom: 1px;
+    width: 8px;
+    height: 8px;
+    box-sizing: border-box;
+    border-right: 2px solid var(--jfc-link, var(--colorNeutralStroke1));
+    border-bottom: 2px solid var(--jfc-link, var(--colorNeutralStroke1));
+    transform: rotate(45deg);
+}
+
+.jfc-link[data-state="done"] {
+    --jfc-link: var(--colorStatusSuccessBorder1);
+}
+
+.jfc-link[data-state="active"] {
+    --jfc-link: var(--colorBrandStroke1);
+}
+
+.jfc-link[data-state="idle"]::before {
+    background: repeating-linear-gradient(to bottom, var(--colorNeutralStroke1) 0 4px, transparent 4px 8px);
+}
+
+.jfc-link[data-state="active"]::before {
+    background: repeating-linear-gradient(to bottom, var(--colorBrandStroke1) 0 6px, transparent 6px 10px);
+    background-size: 100% 20px;
+    animation: jfc-flow-y .9s linear infinite;
+}
+
+/* ---- Pasos ---- */
+.jfc-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.jfc-step {
+    position: relative;
+}
+
+/* Conector entre pasos, centrado con el tile (12px de padding + 16px de medio tile). */
+.jfc-step + .jfc-step::before {
+    content: "";
+    position: absolute;
+    left: 27px;
+    top: -12px;
+    width: 2px;
+    height: 12px;
+    background: var(--colorNeutralStroke1);
+}
+
+.jfc-step + .jfc-step[data-link="done"]::before {
+    background: var(--colorStatusSuccessBorder1);
+}
+
+.jfc-step + .jfc-step[data-link="idle"]::before {
+    background: repeating-linear-gradient(to bottom, var(--colorNeutralStroke1) 0 3px, transparent 3px 6px);
+}
+
+.jfc-step + .jfc-step[data-link="active"]::before {
+    background: repeating-linear-gradient(to bottom, var(--colorBrandStroke1) 0 4px, transparent 4px 8px);
+    background-size: 100% 16px;
+    animation: jfc-flow-y .8s linear infinite;
+}
+
+.jfc-node {
+    position: relative;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    padding: 10px 12px;
+    margin: 0;
+    font: inherit;
+    text-align: left;
+    color: var(--colorNeutralForeground1);
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusLarge);
+    cursor: pointer;
+    transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.jfc-node:hover {
+    border-color: var(--colorNeutralStroke1Hover);
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.jfc-node:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+}
+
+.jfc-node[aria-pressed="true"] {
+    border-color: var(--colorNeutralStrokeAccessible);
+    box-shadow: inset 0 0 0 1px var(--colorNeutralStrokeAccessible);
+}
+
+.jfc-node[aria-pressed="true"]::before {
+    content: "";
+    position: absolute;
+    left: -1px;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
+    background: var(--colorNeutralForeground1);
+}
+
+.jfc-node__tile {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--borderRadiusLarge);
+    display: grid;
+    place-items: center;
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground2);
+}
+
+.jfc-node__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.jfc-node__label {
+    font-weight: 600;
+    line-height: 20px;
+    overflow-wrap: anywhere;
+}
+
+.jfc-node__status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 4px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--colorNeutralForeground3);
+    font-variant-numeric: tabular-nums;
+}
+
+.jfc-node__state {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+}
+
+.jfc-node__counter,
+.jfc-node__activity {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--colorNeutralForeground2);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.jfc-node__activity {
+    color: var(--colorNeutralForeground3);
+}
+
+.jfc-node__failed {
+    color: var(--colorStatusDangerForeground1);
+    font-weight: 600;
+}
+
+.jfc-node__bar {
+    display: block;
+    height: 4px;
+    margin-top: 4px;
+    border-radius: 2px;
+    background: var(--colorNeutralStroke3);
+    overflow: hidden;
+}
+
+.jfc-node__bar > span {
+    background: var(--colorBrandBackground);
+}
+
+/* Estados del paso */
+.jfc-node--done .jfc-node__tile {
+    background: var(--colorStatusSuccessBackground1);
+    color: var(--colorStatusSuccessForeground1);
+}
+
+.jfc-node--done .jfc-node__state,
+.jfc-node--nonewdata .jfc-node__state {
+    color: var(--colorStatusSuccessForeground1);
+}
+
+.jfc-node--nonewdata .jfc-node__state {
+    font-weight: 400;
+}
+
+.jfc-node--running,
+.jfc-node--running:hover {
+    border-color: var(--colorBrandStroke1);
+    background: var(--colorBrandBackground2);
+}
+
+.jfc-node--running {
+    box-shadow: inset 0 0 0 1px var(--colorBrandStroke1);
+}
+
+.jfc-node--running .jfc-node__tile {
+    background: var(--colorBrandBackground);
+    color: var(--colorNeutralForegroundOnBrand);
+}
+
+.jfc-node--running .jfc-node__state {
+    color: var(--colorBrandForeground1);
+}
+
+.jfc-node--running .jfc-node__state ::deep svg {
+    animation: jfc-spin 2.4s linear infinite;
+}
+
+/* Halo del paso en curso: solo opacity/transform (no provoca layout). */
+.jfc-node--running::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    pointer-events: none;
+    border: 2px solid var(--colorBrandStroke1);
+    animation: jfc-pulse 2s ease-out infinite;
+}
+
+.jfc-node--error,
+.jfc-node--error:hover {
+    border-color: var(--colorStatusDangerBorder1);
+    background: var(--colorStatusDangerBackground1);
+}
+
+.jfc-node--error .jfc-node__tile {
+    background: var(--colorStatusDangerBackground3);
+    color: var(--colorNeutralForegroundOnBrand);
+}
+
+.jfc-node--error .jfc-node__state {
+    color: var(--colorStatusDangerForeground1);
+}
+
+.jfc-node--error .jfc-node__bar > span {
+    background: var(--colorStatusDangerForeground1);
+}
+
+.jfc-node--warning,
+.jfc-node--warning:hover,
+.jfc-node--blocked,
+.jfc-node--blocked:hover,
+.jfc-node--interrupted,
+.jfc-node--interrupted:hover {
+    border-color: var(--colorStatusWarningBorder1);
+    background: var(--colorStatusWarningBackground1);
+}
+
+.jfc-node--warning .jfc-node__tile,
+.jfc-node--blocked .jfc-node__tile,
+.jfc-node--interrupted .jfc-node__tile {
+    background: var(--colorNeutralBackground1);
+    color: var(--colorStatusWarningForeground1);
+}
+
+.jfc-node--warning .jfc-node__state,
+.jfc-node--blocked .jfc-node__state,
+.jfc-node--interrupted .jfc-node__state {
+    color: var(--colorStatusWarningForeground1);
+}
+
+.jfc-node--warning .jfc-node__bar > span,
+.jfc-node--blocked .jfc-node__bar > span,
+.jfc-node--interrupted .jfc-node__bar > span {
+    background: var(--colorStatusWarningForeground1);
+}
+
+.jfc-node--skipped,
+.jfc-node--notreached,
+.jfc-node--cancelled {
+    background: transparent;
+    border-style: dashed;
+    border-color: var(--colorNeutralStroke1);
+}
+
+.jfc-node--skipped .jfc-node__tile,
+.jfc-node--notreached .jfc-node__tile,
+.jfc-node--cancelled .jfc-node__tile {
+    background: transparent;
+    border: 1px dashed var(--colorNeutralStroke1);
+    color: var(--colorNeutralForeground3);
+}
+
+.jfc-node--skipped .jfc-node__label,
+.jfc-node--notreached .jfc-node__label,
+.jfc-node--cancelled .jfc-node__label {
+    color: var(--colorNeutralForeground3);
+    font-weight: 400;
+}
+
+/* ---- Panel de detalle ---- */
+.jfc-detail {
+    min-width: 0;
+    padding: 16px;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusXLarge);
+    align-self: start;
+}
+
+.jfc-detail__head {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+}
+
+.jfc-detail__tile {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--borderRadiusLarge);
+    display: grid;
+    place-items: center;
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground2);
+}
+
+.jfc-detail--done .jfc-detail__tile,
+.jfc-detail--nonewdata .jfc-detail__tile {
+    background: var(--colorStatusSuccessBackground1);
+    color: var(--colorStatusSuccessForeground1);
+}
+
+.jfc-detail--running .jfc-detail__tile {
+    background: var(--colorBrandBackground);
+    color: var(--colorNeutralForegroundOnBrand);
+}
+
+.jfc-detail--error .jfc-detail__tile {
+    background: var(--colorStatusDangerBackground3);
+    color: var(--colorNeutralForegroundOnBrand);
+}
+
+.jfc-detail--warning .jfc-detail__tile,
+.jfc-detail--blocked .jfc-detail__tile,
+.jfc-detail--interrupted .jfc-detail__tile {
+    background: var(--colorStatusWarningBackground1);
+    color: var(--colorStatusWarningForeground1);
+}
+
+.jfc-detail__eyebrow {
+    margin: 0;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--colorNeutralForeground3);
+}
+
+.jfc-detail__title {
+    margin: 0;
+    font-size: 16px;
+    line-height: 22px;
+    font-weight: 600;
+}
+
+.jfc-detail__hint {
+    margin: 2px 0 0;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--colorNeutralForeground3);
+}
+
+.jfc-detail__status {
+    margin: 12px 0 0;
+    font-size: 13px;
+}
+
+.jfc-detail__progress {
+    margin-top: 12px;
+}
+
+.jfc-detail__progress-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-variant-numeric: tabular-nums;
+}
+
+.jfc-detail__progress-row strong {
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 600;
+}
+
+.jfc-detail__progress-row span {
+    color: var(--colorNeutralForeground3);
+    align-self: end;
+}
+
+.jfc-detail--error .jfc-node__bar > span {
+    background: var(--colorStatusDangerForeground1);
+}
+
+.jfc-detail--done .jfc-node__bar > span {
+    background: var(--colorStatusSuccessForeground1);
+}
+
+.jfc-detail--warning .jfc-node__bar > span,
+.jfc-detail--blocked .jfc-node__bar > span,
+.jfc-detail--interrupted .jfc-node__bar > span {
+    background: var(--colorStatusWarningForeground1);
+}
+
+.jfc-detail__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+    gap: 12px 16px;
+    margin: 16px 0 0;
+}
+
+.jfc-detail__grid div {
+    min-width: 0;
+}
+
+/* Ruta del parquet en ADLS: ocupa la fila entera (es larga) y el enlace va debajo. */
+.jfc-detail__grid .jfc-detail__wide {
+    grid-column: 1 / -1;
+}
+
+.jfc-detail__wide code {
+    display: block;
+    font-weight: 400;
+    font-size: 12px;
+}
+
+.jfc-detail__wide a {
+    font-weight: 400;
+}
+
+.jfc-detail__grid dt {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--colorNeutralForeground3);
+}
+
+.jfc-detail__grid dd {
+    margin: 2px 0 0;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.jfc-detail__msg {
+    margin-top: 16px;
+}
+
+.jfc-detail__msg h4 {
+    margin: 0 0 4px;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 400;
+    color: var(--colorNeutralForeground3);
+}
+
+.jfc-detail__msg p {
+    margin: 0;
+    padding: 8px 12px;
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground2);
+    font-size: 13px;
+    line-height: 18px;
+    overflow-wrap: anywhere;
+}
+
+.jfc-detail--error .jfc-detail__msg p {
+    background: var(--colorStatusDangerBackground1);
+    color: var(--colorNeutralForeground1);
+    border-left: 3px solid var(--colorStatusDangerForeground1);
+}
+
+/* ---- Puntos de corte por ANCHO DEL COMPONENTE ---- */
+@container jfc (min-width: 720px) {
+    .jfc__lanes {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0 40px;
+        align-items: start;
+    }
+
+    .jfc__lanes:has(> .jfc-lane--skipped) {
+        grid-template-columns: minmax(0, .72fr) minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .jfc-link {
+        left: -40px;
+        top: 29px;
+        width: 40px;
+        height: 2px;
+    }
+
+    .jfc-link::before {
+        inset: 0 1px 0 0;
+    }
+
+    .jfc-link::after {
+        left: auto;
+        right: 1px;
+        bottom: auto;
+        top: -3px;
+        transform: rotate(-45deg);
+    }
+
+    .jfc-link[data-state="idle"]::before {
+        background: repeating-linear-gradient(to right, var(--colorNeutralStroke1) 0 4px, transparent 4px 8px);
+    }
+
+    .jfc-link[data-state="active"]::before {
+        background: repeating-linear-gradient(to right, var(--colorBrandStroke1) 0 6px, transparent 6px 10px);
+        background-size: 20px 100%;
+        animation-name: jfc-flow-x;
+    }
+}
+
+/* Panel debajo y con espacio: cabecera y progreso a la izquierda, datos a la derecha. */
+@container jfc (min-width: 720px) and (max-width: 1279.98px) {
+    .jfc-detail {
+        display: grid;
+        grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+        gap: 0 24px;
+    }
+
+    .jfc-detail > .jfc-detail__head,
+    .jfc-detail > .jfc-detail__status,
+    .jfc-detail > .jfc-detail__progress {
+        grid-column: 1;
+    }
+
+    .jfc-detail > .jfc-detail__grid {
+        grid-column: 2;
+        grid-row: 1 / span 3;
+        margin-top: 0;
+    }
+
+    .jfc-detail > .jfc-detail__msg {
+        grid-column: 2;
+    }
+}
+
+/* Panel lateral solo en contenedores muy anchos (con menos, los nodos quedaban de ~150px), y
+   solo si hay detalle: el modo compacto (Panel) no lo pinta y la columna de 320px quedaba vacía. */
+@container jfc (min-width: 1280px) {
+    .jfc__body:has(> .jfc-detail) {
+        grid-template-columns: minmax(0, 1fr) 320px;
+    }
+}
+
+@keyframes jfc-pulse {
+    0% {
+        opacity: .55;
+        transform: scale(1);
+    }
+
+    70%, 100% {
+        opacity: 0;
+        transform: scale(1.04, 1.12);
+    }
+}
+
+@keyframes jfc-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes jfc-flow-y {
+    from {
+        background-position: 0 0;
+    }
+
+    to {
+        background-position: 0 20px;
+    }
+}
+
+@keyframes jfc-flow-x {
+    from {
+        background-position: 0 0;
+    }
+
+    to {
+        background-position: 20px 0;
+    }
+}
+
+/* Movimiento reducido: estado estático (sin halo, giro ni flujo). */
+@media (prefers-reduced-motion: reduce) {
+    .jfc-link[data-state="active"]::before,
+    .jfc-step + .jfc-step[data-link="active"]::before,
+    .jfc-node--running .jfc-node__state ::deep svg {
+        animation: none;
+    }
+
+    .jfc-node--running::after {
+        animation: none;
+        opacity: 0;
+    }
+
+    .jfc-node,
+    .jfc-lane__bar > span,
+    .jfc-node__bar > span {
+        transition: none;
+    }
+}
+
+/* ---- Modo compacto (Panel): mismo lienzo, más denso y sin interacción ---- */
+.jfc--compact .jfc__canvas {
+    padding: 8px;
+}
+
+.jfc--compact .jfc__lanes {
+    gap: 20px;
+}
+
+.jfc--compact .jfc-lane {
+    padding: 6px 8px 8px;
+}
+
+.jfc--compact .jfc-lane__head {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 8px;
+}
+
+.jfc--compact .jfc-lane__tile {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--borderRadiusMedium);
+}
+
+.jfc--compact .jfc-lane__titles {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 8px;
+}
+
+.jfc--compact .jfc-lane__bar {
+    height: 3px;
+    margin: 6px 0;
+}
+
+.jfc--compact .jfc-steps {
+    gap: 5px;
+}
+
+/* Conector entre pasos centrado con el tile compacto (8px de padding + 12px de medio tile). */
+.jfc--compact .jfc-step + .jfc-step::before {
+    left: 19px;
+    top: -5px;
+    height: 5px;
+}
+
+.jfc--compact .jfc-node,
+.jfc--compact .jfc-node:hover {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+    padding: 4px 8px;
+    cursor: default;
+}
+
+.jfc--compact .jfc-node:hover {
+    background: var(--colorNeutralBackground1);
+    border-color: var(--colorNeutralStroke2);
+}
+
+.jfc--compact .jfc-node--running:hover {
+    background: var(--colorBrandBackground2);
+    border-color: var(--colorBrandStroke1);
+}
+
+.jfc--compact .jfc-node--error:hover {
+    background: var(--colorStatusDangerBackground1);
+    border-color: var(--colorStatusDangerBorder1);
+}
+
+.jfc--compact .jfc-node--warning:hover,
+.jfc--compact .jfc-node--blocked:hover,
+.jfc--compact .jfc-node--interrupted:hover {
+    background: var(--colorStatusWarningBackground1);
+    border-color: var(--colorStatusWarningBorder1);
+}
+
+.jfc--compact .jfc-node--skipped:hover,
+.jfc--compact .jfc-node--notreached:hover,
+.jfc--compact .jfc-node--cancelled:hover {
+    background: transparent;
+    border-color: var(--colorNeutralStroke1);
+}
+
+.jfc--compact .jfc-node__tile {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--borderRadiusMedium);
+}
+
+.jfc--compact .jfc-node__text {
+    gap: 0;
+}
+
+.jfc--compact .jfc-node__label {
+    font-size: 13px;
+    line-height: 18px;
+}
+
+.jfc--compact .jfc-node__failed {
+    font-size: 12px;
+    line-height: 16px;
+}
+
+/* La barra del paso va pegada al borde inferior: no suma altura. */
+.jfc--compact .jfc-node__bar {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 2px;
+    height: 2px;
+    margin: 0;
+}
+
+@container jfc (min-width: 720px) {
+    .jfc--compact .jfc__lanes {
+        gap: 0 28px;
+    }
+
+    .jfc--compact .jfc-link {
+        left: -28px;
+        top: 17px;
+        width: 28px;
+    }
+}
+
+@container jfc (max-width: 719.98px) {
+    .jfc--compact .jfc-link {
+        left: 19px;
+        top: -20px;
+        height: 20px;
+    }
+}

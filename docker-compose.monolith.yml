@@ -1,0 +1,35 @@
+# Monolith mode: single container runs scheduler + all pipeline stages (EXECUTION_MODE=local).
+# Recommended for local smoke tests and small deployments.
+#
+# Azure (ADLS) y SQL se configuran DESDE EL PORTAL (Sources/Destinations).
+# Los parámetros operativos (poll/lease/divergencia) se editan en /settings.
+services:
+  portal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: windows/amd64
+    ports:
+      - "${SLUICE_HTTP_PORT:-58472}:58472"
+    environment:
+      ASPNETCORE_URLS: http://+:58472
+      EXECUTION_MODE: local
+      DATA_DIR: C:/data
+      UI_API_KEY: ${UI_API_KEY:-}
+      AUTH_MODE: ${AUTH_MODE:-key}
+    volumes:
+      - pipeline-data:C:/data
+    healthcheck:
+      test: ["CMD", "powershell", "-Command", "try { (Invoke-WebRequest -Uri http://localhost:58472/health -UseBasicParsing).StatusCode -eq 200 } catch { exit 1 }"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    # Sin mem_limit fijo: este contenedor corre también las etapas de ingest/sql/reconcile, cuyo
+    # consumo de memoria no es predecible de antemano (ej. el volcado histórico inicial de una
+    # tabla puede ser un único CSV de cientos de MB) — usa la memoria real disponible del host.
+    cpus: 2
+
+volumes:
+  pipeline-data:

@@ -1,0 +1,71 @@
+@using System.IO
+@using System.Reflection
+@using System.Globalization
+<!DOCTYPE html>
+<html lang="@CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <link href="/_content/Microsoft.FluentUI.AspNetCore.Components/css/reboot.css" rel="stylesheet" />
+    <link href="/_content/Microsoft.FluentUI.AspNetCore.Components/Microsoft.FluentUI.AspNetCore.Components.bundle.scp.css" rel="stylesheet" />
+    <link rel="stylesheet" href="@Versioned("app.css")" />
+    <link rel="stylesheet" href="@Versioned("Sluice.Portal.styles.css")" />
+    @* El SVG es el logo (wwwroot/logo.svg); los PNG, para navegadores sin favicon SVG (Safari) y
+       el icono de pantalla de inicio de iOS. *@
+    <link rel="icon" type="image/svg+xml" href="logo.svg" />
+    <link rel="alternate icon" type="image/png" href="favicon.png" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    @* Menú lateral expandido/riel elegido a mano (ver app-ui.js): se aplica antes de pintar el
+       body para que el prerender no muestre primero el modo automático. *@
+    <script>
+        try {
+            var navMode = localStorage.getItem('sluice-nav-mode');
+            if (navMode === 'rail' || navMode === 'expanded') {
+                document.documentElement.setAttribute('data-nav-mode', navMode);
+            }
+        } catch (e) { }
+    </script>
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+
+<body>
+    @* Render interactivo a nivel de router: MainLayout y sus providers
+       (FluentProviders) deben ser interactivos o los toasts y los diálogos
+       de DialogService no se pintan. *@
+    <Routes @rendermode="InteractiveServer" />
+    <script src="@Versioned("app-ui.js")"></script>
+    <script src="_framework/blazor.web.js"></script>
+    <script src="/_content/Microsoft.FluentUI.AspNetCore.Components/Microsoft.FluentUI.AspNetCore.Components.lib.module.js" type="module" async></script>
+</body>
+
+</html>
+
+@code {
+    // Versión de assets propios: cambia en cada build/deploy para invalidar el
+    // caché del navegador. Los estáticos de wwwroot y el bundle scoped se
+    // referencian sin fingerprint, así que un deploy no recargaría CSS/JS nuevos
+    // hasta un hard-refresh. El timestamp del assembly cambia en cada compilación.
+    private static readonly string AssetVersion = ComputeAssetVersion();
+
+    private static string ComputeAssetVersion()
+    {
+        try
+        {
+            var location = Assembly.GetExecutingAssembly().Location;
+            if (!string.IsNullOrEmpty(location) && File.Exists(location))
+            {
+                return File.GetLastWriteTimeUtc(location).Ticks.ToString("x");
+            }
+        }
+        catch
+        {
+            // Cae al arranque del proceso: cambia en cada reinicio/deploy.
+        }
+
+        return DateTime.UtcNow.Ticks.ToString("x");
+    }
+
+    private static string Versioned(string fileName) => $"{fileName}?v={AssetVersion}";
+}

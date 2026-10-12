@@ -1,0 +1,204 @@
+@page "/tables"
+@rendermode InteractiveServer
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Models
+@using Sluice.Portal.Services
+@using Sluice.Portal.Services.Stores
+@using Sluice.Portal.Services.Logging
+@inject IPipelineService PipelineService
+@inject ReportStore Reports
+@inject TablePauseStore PauseStore
+@inject INotificationService NotificationService
+@inject IActivityLog ActivityLog
+@inject NavigationManager Nav
+
+@inject IStringLocalizer<SharedResource> L
+
+<PageTitle>@L["Nav.Tables"]</PageTitle>
+
+<FluentStack Class="page-stack" Orientation="Orientation.Vertical" VerticalGap="12">
+    <PageHeader Title="@L["Page.Tables.Title"]" Subtitle="@L["Page.Tables.Subtitle"]" />
+
+    <PageSection Class="section-panel--dropdown">
+    <div class="toolbar">
+    <FluentSelect TOption="string" TValue="string" @bind-Value="_pipelineId" @bind-Value:after="Load" data-testid="tables-pipeline" Label="@L["Common.Pipeline"]" Style="min-width:240px;">
+        @foreach (var p in PipelineService.List())
+        {
+            <FluentOption TValue="string" Value="@p.Id">@p.Name</FluentOption>
+        }
+    </FluentSelect>
+
+    <FluentTextInput @bind-Value="_search" @bind-Value:after="Load" data-testid="tables-search" Label="@L["Common.Search"]" Placeholder="@L["Page.Tables.FilterPlaceholder"]" Style="min-width:220px;" />
+    </div>
+    </PageSection>
+
+    <PageSection>
+    <PanelState IsEmpty="@(string.IsNullOrWhiteSpace(_pipelineId))" EmptyText="@L["Page.Tables.SelectPipeline"]">
+        <PanelState IsEmpty="@(_allRows.Count == 0)" EmptyText="@L["Page.Tables.NoTables"]">
+            <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true"
+                            GridTemplateColumns="minmax(160px, 1.6fr) 0.8fr 1.4fr 0.9fr 0.8fr 1fr minmax(170px, 1fr)"
+                            Items="@_rows.AsQueryable()" TGridItem="TableRow">
+                <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" />
+                <PropertyColumn Property="@(r => r.RowCount)" Title="@L["Common.Rows"]" />
+                <PropertyColumn Property="@(r => r.Watermark)" Title="@L["Page.Tables.Watermark"]" />
+                <TemplateColumn Title="@L["Page.Tables.Divergence"]">
+                    @if (context.DivergencePct is { } pct)
+                    {
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" VerticalAlignment="VerticalAlignment.Center">
+                            <FluentBadge Appearance="@(pct > 0 ? BadgeAppearance.Filled : BadgeAppearance.Tint)" Color="@(pct > 0 ? BadgeColor.Brand : BadgeColor.Informative)">@pct.ToString("F2")%</FluentBadge>
+                            @if (context.ReportIsPartial)
+                            {
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Warning())"
+                                            Color="Color.Warning"
+                                            Title="@L["Page.Tables.DivergenceAboveThreshold"]" />
+                            }
+                        </FluentStack>
+                    }
+                    else
+                    {
+                        <span>-</span>
+                    }
+                </TemplateColumn>
+                <TemplateColumn Title="@L["Common.Status"]">
+                    <StatusBadge Status="@context.Status" />
+                </TemplateColumn>
+                <TemplateColumn Title="@L["Page.Tables.Sync"]">
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                        <FluentSwitch TValue="bool" data-testid="@($"sync-{context.Entity}")" Value="@(!context.Paused)"
+                                      ValueChanged="@(active => TogglePaused(context.Entity, !active))" />
+                        @if (context.Paused)
+                        {
+                            <FluentBadge data-testid="@($"paused-{context.Entity}")" Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">@L["Page.Tables.Paused"]</FluentBadge>
+                        }
+                    </FluentStack>
+                </TemplateColumn>
+                <TemplateColumn Title="@L["Common.Actions"]">
+                    @* Menú de tres puntos: los dos botones no cabían en la columna y se apilaban.
+                       Re-sincronizar cualquier tabla, no solo las que divergen en Conciliación: una
+                       tabla con el mismo número de filas puede tener filas desactualizadas. *@
+                    <FluentMenu>
+                        <FluentButton slot="@FluentSlot.Trigger" Appearance="ButtonAppearance.Subtle" IconOnly="true"
+                                      IconStart="@(new Icons.Regular.Size20.MoreHorizontal())"
+                                      Title="@L["Common.Actions"]" data-testid="@($"table-actions-{context.Entity}")" />
+                        <FluentMenuList>
+                            <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity" TestId="@($"resync-{context.Entity}")"
+                                               ActivityAction="table.resync" AsMenuItem="true" />
+                            <FluentMenuItem data-testid="@($"analytics-{context.Entity}")" IconStart="@(new Icons.Regular.Size20.DataTrending())"
+                                            OnClick="@(() => Nav.NavigateTo($"/tables/{Uri.EscapeDataString(_pipelineId)}/{Uri.EscapeDataString(context.Entity)}/analytics"))">
+                                @L["Page.Tables.Analytics"]
+                            </FluentMenuItem>
+                        </FluentMenuList>
+                    </FluentMenu>
+                </TemplateColumn>
+            </FluentDataGrid>
+            <PaginationControl Page="_page" TotalPages="_totalPages" TotalCount="_totalCount" PageChanged="OnPageChanged" />
+        </PanelState>
+    </PanelState>
+    </PageSection>
+</FluentStack>
+
+@code {
+    private string _pipelineId = "";
+    private string _search = "";
+    private List<TableRow> _allRows = [];
+    private List<TableRow> _rows = [];
+    private int _page = 1;
+    private const int PageSize = 20;
+    private int _totalCount;
+    private int _totalPages = 1;
+
+    protected override void OnInitialized()
+    {
+        var first = PipelineService.List().FirstOrDefault();
+        if (first is not null)
+        {
+            _pipelineId = first.Id;
+            Load();
+        }
+    }
+
+    private void Load()
+    {
+        if (string.IsNullOrWhiteSpace(_pipelineId))
+        {
+            _allRows = [];
+            ApplyPaging();
+            return;
+        }
+
+        var state = PipelineService.GetState(_pipelineId);
+        // Divergencia desde el último reporte de conciliación (fuente única de verdad);
+        // se cruza por entidad para mostrarla junto al estado de carga. IsPartial (a nivel
+        // de reporte) indica que la divergencia máxima supera el umbral configurado — se
+        // repite en cada fila para poder marcar visualmente el warning junto al %.
+        var latestReport = Reports.GetLatestReconcile(_pipelineId);
+        var divergence = latestReport?.Entities
+            .ToDictionary(e => e.Entity, e => e.DivergencePct, StringComparer.OrdinalIgnoreCase)
+            ?? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        var reportIsPartial = latestReport?.IsPartial ?? false;
+        var paused = PauseStore.GetPaused(_pipelineId);
+
+        _allRows = state.Tables
+            .Where(kv => string.IsNullOrWhiteSpace(_search)
+                || kv.Key.Contains(_search, StringComparison.OrdinalIgnoreCase))
+            .Select(kv => new TableRow
+            {
+                Entity = kv.Key,
+                RowCount = kv.Value.RowCount,
+                Watermark = kv.Value.Watermark?.ToString("u") ?? "-",
+                Status = kv.Value.Status,
+                DivergencePct = divergence.TryGetValue(kv.Key, out var pct) ? pct : null,
+                ReportIsPartial = reportIsPartial,
+                Paused = paused.Contains(kv.Key),
+            })
+            .OrderBy(r => r.Entity, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        ApplyPaging();
+    }
+
+    // Los stores subyacentes ya cargan todo en memoria (JsonFileStore.ListAll lee cada
+    // archivo); paginar aquí es solo de presentación, sin tocar los servicios.
+    private void ApplyPaging()
+    {
+        _totalCount = _allRows.Count;
+        _totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+        if (_page > _totalPages)
+        {
+            _page = _totalPages;
+        }
+
+        _rows = _allRows.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
+    }
+
+    private void OnPageChanged(int page)
+    {
+        _page = page;
+        ApplyPaging();
+    }
+
+    // Pausar/reanudar la sincronización de una tabla. Pausada = se omite en próximas corridas
+    // del pipeline (no se ingesta ni se mergea); su estado/datos ya sincronizados se conservan.
+    private void TogglePaused(string entity, bool paused)
+    {
+        PauseStore.SetPaused(_pipelineId, entity, paused);
+        var key = paused ? "Page.Tables.PausedToast" : "Page.Tables.ResumedToast";
+        _ = NotificationService.ShowInfoToastAsync(string.Format(L[key].Value, entity));
+        ActivityLog.LogUser(
+            paused ? "table.pause" : "table.resume",
+            $"Sincronización de la tabla '{entity}' {(paused ? "pausada" : "reanudada")} en el pipeline {_pipelineId}.",
+            _pipelineId);
+        Load();
+    }
+
+    private sealed class TableRow
+    {
+        public string Entity { get; init; } = "";
+        public long RowCount { get; init; }
+        public string Watermark { get; init; } = "";
+        public string Status { get; init; } = "ok";
+        public double? DivergencePct { get; init; }
+        public bool ReportIsPartial { get; init; }
+        public bool Paused { get; init; }
+    }
+}

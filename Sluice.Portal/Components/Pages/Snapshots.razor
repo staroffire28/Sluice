@@ -1,0 +1,215 @@
+@page "/snapshots"
+@rendermode InteractiveServer
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Models
+@using Sluice.Portal.Services
+@using Sluice.Portal.Services.Adls
+@inject IPipelineService PipelineService
+@inject ISnapshotCatalogService SnapshotCatalog
+@implements IDisposable
+
+@inject IStringLocalizer<SharedResource> L
+
+<PageTitle>@L["Nav.Snapshots"]</PageTitle>
+
+<FluentStack Class="page-stack" Orientation="Orientation.Vertical" VerticalGap="12">
+    <PageHeader Title="@L["Page.Snapshots.Title"]" Subtitle="@L["Page.Snapshots.Subtitle"]" />
+
+    <PageSection>
+        <div class="toolbar">
+            <FluentSelect TOption="string" TValue="string" @bind-Value="_pipelineId" @bind-Value:after="Load" data-testid="snapshots-pipeline" Label="@L["Common.Pipeline"]" Style="min-width:240px;">
+                @foreach (var p in PipelineService.List())
+                {
+                    <FluentOption TValue="string" Value="@p.Id">@p.Name</FluentOption>
+                }
+            </FluentSelect>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="Load">@L["Common.Refresh"]</FluentButton>
+        </div>
+
+        <PanelState IsLoading="@_loading" Error="@_error" IsEmpty="@(string.IsNullOrWhiteSpace(_pipelineId))" EmptyText="@L["Page.Snapshots.SelectPipeline"]">
+            @if (_catalog is not null)
+            {
+                <div class="kpi-grid" style="margin-bottom:1rem;">
+                    <FluentCard Class="kpi-card">
+                        <FluentLabel><strong>@L["Page.Snapshots.Settled"]</strong></FluentLabel>
+                        <div class="kpi-value kpi-value--sm">@(_catalog.SettledSnapshot ?? "—")</div>
+                    </FluentCard>
+                    <FluentCard Class="kpi-card">
+                        <FluentLabel><strong>@L["Page.Snapshots.LastProcessed"]</strong></FluentLabel>
+                        <div class="kpi-value kpi-value--sm">@(_catalog.LastProcessedSnapshot ?? "—")</div>
+                    </FluentCard>
+                    <FluentCard Class="kpi-card">
+                        <FluentLabel><strong>@L["Page.Snapshots.Pending"]</strong></FluentLabel>
+                        <div class="kpi-value">@_catalog.PendingSnapshots.Count</div>
+                    </FluentCard>
+                    <FluentCard Class="kpi-card">
+                        <FluentLabel><strong>@L["Page.Snapshots.RetentionEligible"]</strong></FluentLabel>
+                        <div class="kpi-value">@_catalog.EligibleRetentionPurgeCount</div>
+                    </FluentCard>
+                    <FluentCard Class="kpi-card">
+                        <FluentLabel><strong>@L["Page.Snapshots.Changelog"]</strong></FluentLabel>
+                        <div class="kpi-value kpi-value--sm">@(_catalog.ChangelogLastModified?.ToString("g") ?? "—")</div>
+                    </FluentCard>
+                </div>
+
+                @if (_catalog.RetentionDryRun)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Info" Style="margin-bottom:0.75rem;">
+                        @L["Page.Snapshots.RetentionDryRun"]
+                    </FluentMessageBar>
+                }
+
+                @if (_catalog.IsChangelogStalled)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning" Style="margin-bottom:0.75rem;">
+                        @L["Page.Snapshots.ChangelogStall"]
+                    </FluentMessageBar>
+                }
+
+                @if (_catalog.Blocked)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Error" Style="margin-bottom:0.75rem;">
+                        @_catalog.BlockReason
+                    </FluentMessageBar>
+                }
+
+                <PanelState IsEmpty="@(_catalog.Snapshots.Count == 0)" EmptyText="@L["Page.Snapshots.NoSnapshots"]">
+                    <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" Items="@_pagedSnapshots.AsQueryable()" TGridItem="SnapshotEntry">
+                        <PropertyColumn Property="@(s => s.Name)" Title="@L["Page.Snapshots.Snapshot"]" />
+                        <TemplateColumn Title="@L["Common.Status"]">
+                            <StatusBadge Status="@context.Status" />
+                        </TemplateColumn>
+                        <TemplateColumn Title="@L["Page.Snapshots.Retention"]">
+                            @if (ShowRetentionBadge(context.RetentionDisposition))
+                            {
+                                <StatusBadge Status="@(context.RetentionDisposition ?? "")" />
+                            }
+                            else
+                            {
+                                <span>—</span>
+                            }
+                        </TemplateColumn>
+                    </FluentDataGrid>
+                    <PaginationControl Page="_page" TotalPages="_totalPages" TotalCount="_totalCount" PageChanged="OnPageChanged" />
+                </PanelState>
+            }
+        </PanelState>
+    </PageSection>
+</FluentStack>
+
+@code {
+    private string _pipelineId = "";
+    private bool _loading;
+    private string? _error;
+    private SnapshotCatalogResult? _catalog;
+    private List<SnapshotEntry> _pagedSnapshots = [];
+    private int _page = 1;
+    private const int PageSize = 20;
+    private int _totalCount;
+    private int _totalPages = 1;
+
+    // Cambiar de pipeline (o salir de la página) cancela la carga en curso: si no, el
+    // listado lento de ADLS de la selección anterior podía llegar después y pisar el nuevo.
+    private CancellationTokenSource? _loadCts;
+
+    private CancellationToken StartLoad()
+    {
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _loadCts = new CancellationTokenSource();
+        return _loadCts.Token;
+    }
+
+    public void Dispose()
+    {
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var first = PipelineService.List().FirstOrDefault();
+        if (first is null)
+        {
+            return;
+        }
+
+        _pipelineId = first.Id;
+
+        // Con prerender este método corre dos veces: ADLS se lee solo con el circuito (el
+        // prerender muestra "cargando"). Persistir el catálogo del prerender para reutilizarlo
+        // rompía el circuito con catálogos grandes: el estado viaja en el primer mensaje de
+        // SignalR, limitado a 32 KB.
+        if (!RendererInfo.IsInteractive)
+        {
+            _loading = true;
+            return;
+        }
+
+        await Load();
+    }
+
+    private static bool ShowRetentionBadge(string? disposition) =>
+        disposition is SnapshotRetentionService.DispositionRetained
+            or SnapshotRetentionService.DispositionEligible
+            or SnapshotRetentionService.DispositionProtected;
+
+    private async Task Load()
+    {
+        if (string.IsNullOrWhiteSpace(_pipelineId))
+        {
+            return;
+        }
+
+        var ct = StartLoad();
+        try
+        {
+            _loading = _catalog is null;
+            _error = null;
+            var catalog = await SnapshotCatalog.GetCatalogAsync(_pipelineId, ct);
+            if (ct.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _catalog = catalog;
+            ApplyPaging();
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // La sustituyó otra carga (o se salió de la página): no hay nada que pintar.
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            if (!ct.IsCancellationRequested)
+            {
+                _loading = false;
+            }
+        }
+    }
+
+    // El catálogo ya llega entero en memoria (ISnapshotCatalogService lista todo ADLS de
+    // una vez); paginar aquí es solo de presentación, sin tocar el servicio.
+    private void ApplyPaging()
+    {
+        var all = _catalog?.Snapshots ?? [];
+        _totalCount = all.Count;
+        _totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+        if (_page > _totalPages)
+        {
+            _page = _totalPages;
+        }
+
+        _pagedSnapshots = all.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
+    }
+
+    private void OnPageChanged(int page)
+    {
+        _page = page;
+        ApplyPaging();
+    }
+}

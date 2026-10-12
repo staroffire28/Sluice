@@ -1,0 +1,152 @@
+@page "/tables/{PipelineId}/{Entity}/analytics"
+@rendermode InteractiveServer
+@using ApexCharts
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Services.Analytics
+@inject IAnalyticsService AnalyticsSvc
+@inject IPipelineService PipelineService
+@inject IStringLocalizer<SharedResource> L
+@inject ThemeState ThemeState
+@implements IDisposable
+
+<PageTitle>@L["Page.TableGrowth.Tab"] @Entity</PageTitle>
+
+<FluentStack Class="page-stack" Orientation="Microsoft.FluentUI.AspNetCore.Components.Orientation.Vertical" VerticalGap="12">
+    <PageHeader Title="@Entity" Subtitle="@string.Format(L["Page.TableGrowth.Subtitle"].Value, PipelineName)" />
+
+    <PageSection>
+        <div class="toolbar">
+            <FluentSelect TOption="string" TValue="string" @bind-Value="_daysString" @bind-Value:after="OnDaysChanged" Label="@L["Page.TableGrowth.Window"]" Style="min-width:160px;">
+                <FluentOption TValue="string" Value="@("30")">@string.Format(L["Page.TableGrowth.WindowDays"].Value, 30)</FluentOption>
+                <FluentOption TValue="string" Value="@("90")">@string.Format(L["Page.TableGrowth.WindowDays"].Value, 90)</FluentOption>
+                <FluentOption TValue="string" Value="@("180")">@string.Format(L["Page.TableGrowth.WindowDays"].Value, 180)</FluentOption>
+            </FluentSelect>
+        </div>
+
+        @if (_report is null)
+        {
+            <FluentSpinner />
+        }
+        else
+        {
+            <div class="kpi-grid" style="margin-bottom:1rem;">
+                <FluentCard Class="kpi-card">
+                    <FluentLabel><strong>@L["Page.TableGrowth.Kpi.CurrentRows"]</strong></FluentLabel>
+                    <div class="kpi-value">@_report.CurrentRowCount.ToString("N0")</div>
+                </FluentCard>
+                <FluentCard Class="kpi-card">
+                    <FluentLabel><strong>@L["Page.TableGrowth.Kpi.LoadedInWindow"]</strong></FluentLabel>
+                    <div class="kpi-value">@_report.TotalRowsLoadedInWindow.ToString("N0")</div>
+                </FluentCard>
+            </div>
+
+            <div class="analytics-chart-grid">
+                <FluentCard>
+                    @if (_report.Growth.Count == 0)
+                    {
+                        <EmptyState Text="@L["Page.TableGrowth.Empty.Growth"]" />
+                    }
+                    else
+                    {
+                        <ApexChart TItem="TableGrowthPoint" Title="@L["Page.TableGrowth.Chart.Growth"]" Options="_growthOptions" Height="300" @key="_themeMode">
+                            <ApexPointSeries TItem="TableGrowthPoint"
+                                             Items="_report.Growth"
+                                             Name="@L["Page.TableGrowth.Series.RowCount"]"
+                                             SeriesType="SeriesType.Line"
+                                             XValue="@(e => e.Date.ToString("dd/MM"))"
+                                             YValue="@(e => (decimal)e.RowCount)" />
+                        </ApexChart>
+                    }
+                </FluentCard>
+
+                <FluentCard>
+                    @if (_report.DailyLoad.Count == 0)
+                    {
+                        <EmptyState Text="@L["Page.TableGrowth.Empty.Load"]" />
+                    }
+                    else
+                    {
+                        <ApexChart TItem="TableLoadPoint" Title="@L["Page.TableGrowth.Chart.Load"]" Options="_loadOptions" Height="300" @key="_themeMode">
+                            <ApexPointSeries TItem="TableLoadPoint"
+                                             Items="_report.DailyLoad"
+                                             Name="@L["Page.TableGrowth.Series.CsvRows"]"
+                                             SeriesType="SeriesType.Bar"
+                                             XValue="@(e => e.Date.ToString("dd/MM"))"
+                                             YValue="@(e => (decimal)e.CsvRows)" />
+                        </ApexChart>
+                    }
+                </FluentCard>
+            </div>
+
+            <FluentCard>
+                <FluentLabel Typo="Typography.H5">@L["Page.TableGrowth.SpikeDays"]</FluentLabel>
+                <PanelState IsEmpty="@(_report.TopSpikeDays.Count == 0)" EmptyText="@L["Page.TableGrowth.Empty.Spikes"]">
+                    <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Medium" Items="@_report.TopSpikeDays.AsQueryable()" TGridItem="TableSpikeDay">
+                        <PropertyColumn Property="@(s => s.Date)" Title="@L["Page.TableGrowth.Date"]" Format="dd/MM/yyyy" />
+                        <TemplateColumn Title="@L["Page.TableGrowth.Series.CsvRows"]">
+                            @context.CsvRows.ToString("N0")
+                        </TemplateColumn>
+                    </FluentDataGrid>
+                </PanelState>
+            </FluentCard>
+        }
+    </PageSection>
+</FluentStack>
+
+@code {
+    [Parameter] public string PipelineId { get; set; } = "";
+    [Parameter] public string Entity { get; set; } = "";
+
+    private static readonly List<string> BrandPalette = ["#1B365D", "#5e5d59", "#87867f", "#b0aea5"];
+
+    private int _days = 90;
+    private TableGrowthReport? _report;
+    private Mode _themeMode = Mode.Light;
+    private string PipelineName => PipelineService.Get(PipelineId)?.Name ?? PipelineId;
+
+    private ApexChartOptions<TableGrowthPoint> _growthOptions = BrandOptions<TableGrowthPoint>(Mode.Light);
+    private ApexChartOptions<TableLoadPoint> _loadOptions = BrandOptions<TableLoadPoint>(Mode.Light);
+
+    private string _daysString = "90";
+
+    protected override void OnInitialized()
+    {
+        ApplyTheme();
+        ThemeState.Changed += OnThemeChanged;
+    }
+
+    public void Dispose() => ThemeState.Changed -= OnThemeChanged;
+
+    protected override void OnParametersSet() => Load();
+
+    private void Load() => _report = AnalyticsSvc.GetTableGrowth(PipelineId, Entity, _days);
+
+    private void OnDaysChanged()
+    {
+        _days = int.TryParse(_daysString, out var days) ? days : 90;
+        Load();
+    }
+
+    private void OnThemeChanged() => _ = InvokeAsync(() =>
+    {
+        ApplyTheme();
+        StateHasChanged();
+    });
+
+    // Mismo patrón que Analytics.razor: reconstruye Options con el tema real y fuerza remount
+    // de <ApexChart> vía @key="_themeMode".
+    private void ApplyTheme()
+    {
+        _themeMode = ThemeState.IsDark ? Mode.Dark : Mode.Light;
+
+        _growthOptions = BrandOptions<TableGrowthPoint>(_themeMode);
+        _loadOptions = BrandOptions<TableLoadPoint>(_themeMode);
+    }
+
+    private static ApexChartOptions<TItem> BrandOptions<TItem>(Mode mode) where TItem : class => new()
+    {
+        Colors = new List<string>(BrandPalette),
+        Chart = new Chart { Height = 300 },
+        Theme = new ApexCharts.Theme { Mode = mode },
+    };
+}

@@ -1,0 +1,117 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using Sluice.Portal.Models;
+using Sluice.Portal.Services.Stores;
+
+namespace Sluice.Portal.Services;
+
+public interface IJobService
+{
+    // range: filtro por fecha de inicio (Desde/Hasta, días completos) de la página Jobs.
+    IReadOnlyList<Job> List(int page = 1, int pageSize = 20, string? pipelineId = null, JobStatus? status = null, DateRange? range = null);
+    int Count(string? pipelineId = null, JobStatus? status = null, DateRange? range = null);
+    IReadOnlyList<Job> ListRunning();
+    Job? Get(string id);
+    Job Create(Job job);
+    Job? Update(string id, Job job);
+    void AppendEvent(string jobId, EventLevel level, string message);
+}
+
+public sealed class JobService : IJobService
+{
+    private readonly JobStore _store;
+    private readonly ILogger<JobService> _logger;
+
+    public JobService(JobStore store, ILogger<JobService>? logger = null)
+    {
+        _store = store;
+        _logger = logger ?? NullLogger<JobService>.Instance;
+    }
+
+    public IReadOnlyList<Job> List(int page = 1, int pageSize = 20, string? pipelineId = null, JobStatus? status = null, DateRange? range = null) =>
+        Filter(pipelineId, status, range).Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+    public int Count(string? pipelineId = null, JobStatus? status = null, DateRange? range = null) =>
+        Filter(pipelineId, status, range).Count();
+
+    // List y Count filtran igual: la paginación (y la exportación CSV) no pueden desfasarse.
+    private IEnumerable<Job> Filter(string? pipelineId, JobStatus? status, DateRange? range)
+    {
+        var query = _store.ListAll().AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(pipelineId))
+        {
+            query = query.Where(j => j.PipelineId == pipelineId);
+        }
+
+        if (status is not null)
+        {
+            query = query.Where(j => j.Status == status);
+        }
+
+        if (range is { IsEmpty: false })
+        {
+            query = query.Where(j => range.Contains(j.StartedAt));
+        }
+
+        return query;
+    }
+
+    // Jobs en curso según JobProgressHelper.IsActive: incluye Partial sin FinishedAt (ingest
+    // parcial que sigue con SQL/Reconcile). De esto dependen la guarda anti doble run, el
+    // scheduler, el watchdog, la retención y los contadores de "activos".
+    public IReadOnlyList<Job> ListRunning() =>
+        _store.ListAll().Where(JobProgressHelper.IsActive).ToList();
+
+    public Job? Get(string id) => _store.GetById(id);
+
+    public Job Create(Job job)
+    {
+        _store.Save(job);
+        return job;
+    }
+
+    public Job? Update(string id, Job job)
+    {
+        if (!_store.Exists(id))
+        {
+            return null;
+        }
+
+        // job.Version viaja intacto desde el "job with {...}" del caller (récord: los campos
+        // no listados se preservan). Si no coincide con lo que hay en disco en el momento de
+        // guardar, alguien más escribió el job entre que el caller lo leyó y este Update —
+        // lost-update potencial. No se aborta (mismo comportamiento de siempre, para no romper
+        // el control de flujo de los executors), pero ahora queda visible en el log en vez de
+        // pasar en silencio total. SaveWithVersionCheck guarda bajo el mismo lock que
+        // MutateAtomic, así que tampoco corre contra un AppendEvent concurrente del mismo job.
+        var updated = _store.SaveWithVersionCheck(job with { Id = id }, out var versionConflict, out var previousVersion, out var cancellationKept);
+        if (cancellationKept)
+        {
+            _logger.LogInformation("Job {JobId}: cancelado durante la actualización; se conserva el estado Cancelado.", id);
+            return updated;
+        }
+
+        if (versionConflict)
+        {
+            _logger.LogWarning(
+                "Job {JobId}: posible lost-update en Update — versión esperada {Expected}, versión actual en disco {Actual}.",
+                id, job.Version, previousVersion);
+        }
+
+        return updated;
+    }
+
+    public void AppendEvent(string jobId, EventLevel level, string message)
+    {
+        var newEvent = new JobEvent
+        {
+            At = DateTimeOffset.UtcNow,
+            Level = level,
+            Message = message,
+        };
+
+        // Leer + agregar + guardar bajo un único lock (JobStore.MutateAtomic): ninguna otra
+        // llamada a AppendEvent/Update del mismo proceso puede intercalarse a mitad del ciclo,
+        // así que no hace falta reintento para la concurrencia dentro del propio proceso.
+        _store.MutateAtomic(jobId, job => job with { Events = [.. job.Events, newEvent] });
+    }
+}

@@ -1,0 +1,15 @@
+<section class="section-panel @Class">
+    @if (!string.IsNullOrWhiteSpace(Title))
+    {
+        <h2 class="section-panel__title"><FluentLabel Typo="Typography.H5">@Title</FluentLabel></h2>
+    }
+    <div class="section-panel__body">
+        @ChildContent
+    </div>
+</section>
+
+@code {
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

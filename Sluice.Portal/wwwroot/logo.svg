@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Sluice Portal">
+  <!-- Compuerta de esclusa: la barra es la compuerta; las ondas, el agua que deja pasar. -->
+  <rect width="64" height="64" rx="14" fill="#0B1F33"/>
+  <path d="M15 21h34" fill="none" stroke="#4CA3F0" stroke-width="6" stroke-linecap="round"/>
+  <path d="M15 35q4.25-5 8.5 0t8.5 0t8.5 0t8.5 0" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M15 46q4.25-5 8.5 0t8.5 0t8.5 0t8.5 0" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+</svg>

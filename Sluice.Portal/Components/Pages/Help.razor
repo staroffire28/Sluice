@@ -1,0 +1,46 @@
+@page "/ayuda"
+@page "/ayuda/{Slug}"
+@rendermode InteractiveServer
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Services
+@inject DocsService Docs
+@inject IStringLocalizer<SharedResource> L
+
+<PageTitle>@L["Nav.Help"]</PageTitle>
+
+<FluentStack Class="page-stack" Orientation="Orientation.Vertical" VerticalGap="12">
+    <PageHeader Title="@L["Page.Help.Title"]" Subtitle="@L["Page.Help.Subtitle"]" />
+
+    <div class="docs-layout">
+        <nav class="docs-nav">
+            @foreach (var p in DocsService.Pages)
+            {
+                <a class="docs-nav__link @(p.Slug == _current ? "docs-nav__link--active" : null)"
+                   href="@($"/ayuda/{p.Slug}")">@L[p.TitleKey]</a>
+            }
+        </nav>
+        <article class="docs-content">
+            @if (_html is null)
+            {
+                <p>@L["Page.Help.NotFound"]</p>
+            }
+            else
+            {
+                @((MarkupString)_html)
+            }
+        </article>
+    </div>
+</FluentStack>
+
+@code {
+    [Parameter] public string? Slug { get; set; }
+
+    private string _current = DocsService.Pages[0].Slug;
+    private string? _html;
+
+    protected override void OnParametersSet()
+    {
+        _current = string.IsNullOrWhiteSpace(Slug) ? DocsService.Pages[0].Slug : Slug;
+        _html = Docs.RenderHtml(_current);
+    }
+}

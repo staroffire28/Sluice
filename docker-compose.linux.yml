@@ -1,0 +1,119 @@
+# Modo distribuido en Linux containers: API (orquestador) + 3 workers por etapa.
+# Equivalente a docker-compose.yml pero con la imagen Linux (Dockerfile.linux),
+# volumen POSIX y healthcheck por curl.
+#
+# Azure (ADLS) y SQL Server se configuran DESDE EL PORTAL (Sources/Destinations).
+# Los parámetros operativos se editan en /settings. Aquí solo van la clave entre
+# servicios, el modo/volumen y la ruta al SQL del host.
+#
+# SQL Server del HOST: en la conexión del portal usa host como `host.docker.internal`.
+# extra_hosts mapea ese nombre al gateway del host — necesario en Docker Linux nativo
+# (en Docker Desktop Windows/WSL2 ya resuelve solo, ahí el mapeo es inofensivo).
+# Requiere SQL escuchando por TCP y el puerto 1433 abierto en el firewall del host.
+#
+# TRANSLATE_ENUMS (opt-in): traduce los optionsets de Dataverse/F&O añadiendo al final
+# de cada tabla una columna [<col>_$label] con el ExternalValue (idioma 1033). Solo lo
+# usa la etapa SQL, así que basta ponerlo en worker-sql.
+#
+# Escalado por etapa:
+#   docker compose -f docker-compose.linux.yml up -d --build --scale worker-ingest=3
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux
+    image: sluice-portal:linux
+    ports:
+      - "${SLUICE_HTTP_PORT:-58472}:58472"
+    environment:
+      ASPNETCORE_URLS: http://+:58472
+      EXECUTION_MODE: distributed
+      DATA_DIR: /data
+      UI_API_KEY: ${UI_API_KEY:-}
+      AUTH_MODE: ${AUTH_MODE:-key}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - pipeline-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:58472/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 2
+
+  worker-ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux
+    image: sluice-portal:linux
+    environment:
+      EXECUTION_MODE: distributed
+      DATA_DIR: /data
+      UI_API_KEY: ${UI_API_KEY:-}
+      AUTH_MODE: ${AUTH_MODE:-key}
+      WORKER_STAGE: ingest
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - pipeline-data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    # Sin mem_limit fijo: el volumen de ingesta por entidad/snapshot no es predecible de
+    # antemano (ej. el volcado histórico inicial de una tabla puede ser un único CSV de
+    # cientos de MB); un tope arbitrario solo pospone el mismo problema con otra tabla. El
+    # worker usa la memoria real disponible del host en vez de un techo artificial.
+    cpus: 2
+
+  worker-sql:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux
+    image: sluice-portal:linux
+    environment:
+      EXECUTION_MODE: distributed
+      DATA_DIR: /data
+      UI_API_KEY: ${UI_API_KEY:-}
+      AUTH_MODE: ${AUTH_MODE:-key}
+      WORKER_STAGE: sql
+      TRANSLATE_ENUMS: "true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - pipeline-data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    # Ver comentario de mem_limit en worker-ingest: memoria dinámica, sin tope fijo.
+    cpus: 2
+
+  worker-reconcile:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux
+    image: sluice-portal:linux
+    environment:
+      EXECUTION_MODE: distributed
+      DATA_DIR: /data
+      UI_API_KEY: ${UI_API_KEY:-}
+      AUTH_MODE: ${AUTH_MODE:-key}
+      WORKER_STAGE: reconcile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - pipeline-data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    # Ver comentario de mem_limit en worker-ingest: memoria dinámica, sin tope fijo.
+    cpus: 2
+
+volumes:
+  pipeline-data:

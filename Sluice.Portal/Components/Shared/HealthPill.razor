@@ -1,0 +1,87 @@
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Hosting.Server
+@using Microsoft.AspNetCore.Hosting.Server.Features
+@inject IHttpClientFactory HttpFactory
+@inject IServer Server
+@inject NavigationManager Navigation
+@inject IStringLocalizer<SharedResource> L
+@implements IAsyncDisposable
+
+<FluentBadge Appearance="@_appearance" Color="@_color" id="health-pill">@_label</FluentBadge>
+
+@code {
+    private string _label = "";
+    private BadgeAppearance _appearance = BadgeAppearance.Tint;
+    private BadgeColor _color = BadgeColor.Informative;
+    private PageRefreshTimer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _label = L["Common.Health.Checking"];
+        await RefreshAsync(CancellationToken.None);
+        // Timer común de las páginas (ciclo de vida y disposición ya resueltos ahí).
+        _timer = new PageRefreshTimer(TimeSpan.FromSeconds(60), RefreshAsync);
+        _timer.Start();
+    }
+
+    private async Task RefreshAsync(CancellationToken ct)
+    {
+        try
+        {
+            var client = HttpFactory.CreateClient();
+            client.BaseAddress = ResolveSelfBaseAddress();
+            using var response = await client.GetAsync("/health", ct);
+            if (response.IsSuccessStatusCode)
+            {
+                _label = L["Common.Health.Online"];
+                _appearance = BadgeAppearance.Tint;
+                _color = BadgeColor.Informative;
+            }
+            else
+            {
+                _label = L["Common.Health.Degraded"];
+                _appearance = BadgeAppearance.Filled;
+                _color = BadgeColor.Brand;
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Componente desmontado: no hay nada que pintar (antes se marcaba "Offline" y se
+            // llamaba a StateHasChanged sobre un componente ya desechado).
+            return;
+        }
+        catch
+        {
+            _label = L["Common.Health.Offline"];
+            _appearance = BadgeAppearance.Ghost;
+            _color = BadgeColor.Informative;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // El portal se comprueba a sí mismo por loopback usando el puerto real de
+    // Kestrel. Es fiable en cualquier entorno (container, local, tras un proxy),
+    // a diferencia de Navigation.BaseUri (URL pública, no enrutable desde dentro
+    // del propio proceso/container).
+    private Uri ResolveSelfBaseAddress()
+    {
+        var address = Server.Features.Get<IServerAddressesFeature>()?.Addresses
+            .FirstOrDefault();
+        if (address is not null && Uri.TryCreate(address, UriKind.Absolute, out var uri))
+        {
+            return new Uri($"{uri.Scheme}://localhost:{uri.Port}");
+        }
+
+        return new Uri(Navigation.BaseUri);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_timer is not null)
+        {
+            await _timer.DisposeAsync();
+        }
+    }
+}

@@ -1,0 +1,264 @@
+@page "/analytics"
+@rendermode InteractiveServer
+@using ApexCharts
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Services.Analytics
+@inject IAnalyticsService AnalyticsSvc
+@inject IPipelineService PipelineService
+@inject IStringLocalizer<SharedResource> L
+@inject ThemeState ThemeState
+@implements IDisposable
+
+<PageTitle>@L["Page.Analytics.Title"]</PageTitle>
+
+<FluentStack Class="page-stack" Orientation="Microsoft.FluentUI.AspNetCore.Components.Orientation.Vertical" VerticalGap="12">
+    <PageHeader Title="@L["Page.Analytics.Title"]" Subtitle="@L["Page.Analytics.Subtitle"]" />
+
+    <PageSection>
+        <div class="toolbar">
+            <FluentSelect TOption="string" TValue="string" @bind-Value="_pipelineFilter" @bind-Value:after="Load" data-testid="analytics-pipeline" Label="@L["Common.Pipeline"]" Style="min-width:220px;">
+                <FluentOption TValue="string" Value="@string.Empty">@L["Page.Jobs.AllPipelines"]</FluentOption>
+                @foreach (var p in PipelineService.List())
+                {
+                    <FluentOption TValue="string" Value="@p.Id">@p.Name</FluentOption>
+                }
+            </FluentSelect>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="Reload">@L["Common.Refresh"]</FluentButton>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_pipelineFilter))
+        {
+            <p class="field-hint" data-testid="analytics-shared-note">@L["Page.Analytics.SharedNote"]</p>
+        }
+
+        @if (_snapshot is null)
+        {
+            <FluentSpinner />
+        }
+        else
+        {
+            <div class="kpi-grid" style="margin-bottom:1rem;">
+                <FluentCard Class="kpi-card">
+                    <FluentLabel><strong>@L["Page.Analytics.Kpi.TotalJobs"]</strong></FluentLabel>
+                    <div class="kpi-value" data-testid="analytics-total-jobs">@_snapshot.TotalJobs</div>
+                </FluentCard>
+                <FluentCard Class="kpi-card">
+                    <FluentLabel><strong>@L["Page.Analytics.Kpi.SuccessRate"]</strong></FluentLabel>
+                    <div class="kpi-value">@_snapshot.SuccessRatePct.ToString("0.#")%</div>
+                </FluentCard>
+                <FluentCard Class="kpi-card">
+                    <FluentLabel><strong>@L["Page.Analytics.Kpi.CurrentMaxDivergence"]</strong></FluentLabel>
+                    <div class="kpi-value">@_snapshot.CurrentMaxDivergencePct.ToString("0.##")%</div>
+                </FluentCard>
+                <FluentCard Class="kpi-card">
+                    <FluentLabel><strong>@L["Page.Analytics.Kpi.ActiveWorkers"]</strong></FluentLabel>
+                    <div class="kpi-value">@_snapshot.WorkersBusy / @_snapshot.Workers.Total</div>
+                </FluentCard>
+                <FluentCard Class="kpi-card">
+                    <FluentLabel><strong>@L["Page.Analytics.Kpi.QueueDepth"]</strong></FluentLabel>
+                    <div class="kpi-value">@_snapshot.TotalQueueDepth</div>
+                </FluentCard>
+            </div>
+
+            @* Los 6 gráficos se agrupan por tema (antes: un único grid auto-fit plano, sin
+               jerarquía visual) en vez de mezclar salud operativa / calidad de datos / volumen
+               con el mismo peso. Sin cambios en AnalyticsService — solo reordena el markup. *@
+
+            <FluentLabel Typo="Typography.H5" Class="analytics-section-title">@L["Page.Analytics.Section.Health"]</FluentLabel>
+            <div class="analytics-chart-grid">
+
+                @* Queue depth by stage (bar) *@
+                <FluentCard>
+                    @if (_snapshot.QueueDepths.Count == 0)
+                    {
+                        <EmptyState Text="@L["Page.Analytics.Empty.Queue"]" />
+                    }
+                    else
+                    {
+                        <ApexChart TItem="StageQueueDepth" Title="@L["Page.Analytics.Chart.QueueByStage"]" Options="_barQueueOptions" Height="280" @key="_themeMode">
+                            <ApexPointSeries TItem="StageQueueDepth"
+                                             Items="_snapshot.QueueDepths"
+                                             Name="@L["Page.Analytics.Series.Pending"]"
+                                             SeriesType="SeriesType.Bar"
+                                             XValue="@(e => e.Stage)"
+                                             YValue="@(e => (decimal)e.Pending)" />
+                            <ApexPointSeries TItem="StageQueueDepth"
+                                             Items="_snapshot.QueueDepths"
+                                             Name="@L["Page.Analytics.Series.Claimed"]"
+                                             SeriesType="SeriesType.Bar"
+                                             XValue="@(e => e.Stage)"
+                                             YValue="@(e => (decimal)e.Claimed)" />
+                            <ApexPointSeries TItem="StageQueueDepth"
+                                             Items="_snapshot.QueueDepths"
+                                             Name="@L["Page.Analytics.Series.Errors"]"
+                                             SeriesType="SeriesType.Bar"
+                                             XValue="@(e => e.Stage)"
+                                             YValue="@(e => (decimal)e.Error)" />
+                        </ApexChart>
+                    }
+                </FluentCard>
+
+                @* Average duration by job type (bar) *@
+                <FluentCard>
+                    @if (_snapshot.AvgDurationByType.Count == 0)
+                    {
+                        <EmptyState Text="@L["Page.Analytics.Empty.FinishedJobs"]" />
+                    }
+                    else
+                    {
+                        <ApexChart TItem="LabeledValue" Title="@L["Page.Analytics.Chart.AvgDuration"]" Options="_barDurationOptions" Height="280" @key="_themeMode">
+                            <ApexPointSeries TItem="LabeledValue"
+                                             Items="_snapshot.AvgDurationByType"
+                                             Name="@L["Page.Analytics.Series.Minutes"]"
+                                             SeriesType="SeriesType.Bar"
+                                             XValue="@(e => e.Label)"
+                                             YValue="@(e => (decimal)e.Value)" />
+                        </ApexChart>
+                    }
+                </FluentCard>
+            </div>
+
+            <FluentLabel Typo="Typography.H5" Class="analytics-section-title">@L["Page.Analytics.Section.DataQuality"]</FluentLabel>
+            <div class="analytics-chart-grid">
+
+                @* Max divergence over time (line) *@
+                <FluentCard>
+                    @if (_snapshot.DivergenceOverTime.Count == 0)
+                    {
+                        <EmptyState Text="@L["Page.Analytics.Empty.Divergence"]" />
+                    }
+                    else
+                    {
+                        <ApexChart TItem="DivergencePoint" Title="@L["Page.Analytics.Chart.DivergenceOverTime"]" Options="_lineDivergenceOptions" Height="280" @key="_themeMode">
+                            <ApexPointSeries TItem="DivergencePoint"
+                                             Items="_snapshot.DivergenceOverTime"
+                                             Name="@L["Page.Analytics.Series.Divergence"]"
+                                             SeriesType="SeriesType.Line"
+                                             XValue="@(e => e.Label)"
+                                             YValue="@(e => (decimal)e.MaxDivergencePct)" />
+                        </ApexChart>
+                    }
+                </FluentCard>
+
+                @* Status distribution (donut) *@
+                <FluentCard>
+                    @if (_snapshot.StatusDistribution.Count == 0)
+                    {
+                        <EmptyState Text="@L["Page.Analytics.Empty.Status"]" />
+                    }
+                    else
+                    {
+                        <ApexChart TItem="LabeledValue" Title="@L["Page.Analytics.Chart.StatusDistribution"]" Options="_donutOptions" Height="280" @key="_themeMode">
+                            <ApexPointSeries TItem="LabeledValue"
+                                             Items="_snapshot.StatusDistribution"
+                                             Name="@L["Page.Analytics.Series.Jobs"]"
+                                             SeriesType="SeriesType.Donut"
+                                             XValue="@(e => e.Label)"
+                                             YValue="@(e => (decimal)e.Value)" />
+                        </ApexChart>
+                    }
+                </FluentCard>
+            </div>
+
+            <FluentLabel Typo="Typography.H5" Class="analytics-section-title">@L["Page.Analytics.Section.Volume"]</FluentLabel>
+            <div class="analytics-chart-grid">
+
+                @* Jobs per day (line, last 14 days) *@
+                <FluentCard>
+                    <ApexChart TItem="DailyJobCount" Title="@L["Page.Analytics.Chart.JobsPerDay"]" Options="_lineJobsOptions" Height="280" @key="_themeMode">
+                        <ApexPointSeries TItem="DailyJobCount"
+                                         Items="_snapshot.JobsPerDay"
+                                         Name="@L["Page.Analytics.Series.Success"]"
+                                         SeriesType="SeriesType.Line"
+                                         XValue="@(e => e.Date.ToString("dd/MM"))"
+                                         YValue="@(e => (decimal)e.Success)" />
+                        <ApexPointSeries TItem="DailyJobCount"
+                                         Items="_snapshot.JobsPerDay"
+                                         Name="@L["Page.Analytics.Series.Error"]"
+                                         SeriesType="SeriesType.Line"
+                                         XValue="@(e => e.Date.ToString("dd/MM"))"
+                                         YValue="@(e => (decimal)e.Error)" />
+                    </ApexChart>
+                </FluentCard>
+
+                @* Merged rows by pipeline (bar) *@
+                <FluentCard>
+                    @if (_snapshot.MergedRowsByPipeline.Count == 0)
+                    {
+                        <EmptyState Text="@L["Page.Analytics.Empty.MergedRows"]" />
+                    }
+                    else
+                    {
+                        <ApexChart TItem="LabeledValue" Title="@L["Page.Analytics.Chart.MergedRows"]" Options="_barRowsOptions" Height="280" @key="_themeMode">
+                            <ApexPointSeries TItem="LabeledValue"
+                                             Items="_snapshot.MergedRowsByPipeline"
+                                             Name="@L["Page.Analytics.Series.Rows"]"
+                                             SeriesType="SeriesType.Bar"
+                                             XValue="@(e => e.Label)"
+                                             YValue="@(e => (decimal)e.Value)" />
+                        </ApexChart>
+                    }
+                </FluentCard>
+            </div>
+        }
+    </PageSection>
+</FluentStack>
+
+@code {
+    // Paleta de marca: primaria #1B365D y grises corporativos.
+    private static readonly List<string> BrandPalette =
+        ["#1B365D", "#5e5d59", "#87867f", "#b0aea5"];
+
+    private AnalyticsSnapshot? _snapshot;
+    private string _pipelineFilter = "";
+    private Mode _themeMode = Mode.Light;
+
+    private ApexChartOptions<LabeledValue> _donutOptions = BrandOptions<LabeledValue>(Mode.Light);
+    private ApexChartOptions<LabeledValue> _barRowsOptions = BrandOptions<LabeledValue>(Mode.Light);
+    private ApexChartOptions<DailyJobCount> _lineJobsOptions = BrandOptions<DailyJobCount>(Mode.Light);
+    private ApexChartOptions<DivergencePoint> _lineDivergenceOptions = BrandOptions<DivergencePoint>(Mode.Light);
+    private ApexChartOptions<LabeledValue> _barDurationOptions = BrandOptions<LabeledValue>(Mode.Light);
+    private ApexChartOptions<StageQueueDepth> _barQueueOptions = BrandOptions<StageQueueDepth>(Mode.Light);
+
+    protected override void OnInitialized()
+    {
+        Load();
+        ApplyTheme();
+        ThemeState.Changed += OnThemeChanged;
+    }
+
+    public void Dispose() => ThemeState.Changed -= OnThemeChanged;
+
+    private void Reload() => Load();
+
+    private void Load() => _snapshot = AnalyticsSvc.GetSnapshot(_pipelineFilter);
+
+    // ThemeToggle publica el modo real poco después del render inicial (y cada cambio en vivo).
+    private void OnThemeChanged() => _ = InvokeAsync(() =>
+    {
+        ApplyTheme();
+        StateHasChanged();
+    });
+
+    // Reconstruye las 6 instancias de Options con el tema correcto; el @key="_themeMode" en
+    // cada <ApexChart> fuerza un remount completo (el wrapper JS no observa cambios de Options
+    // por sí solo).
+    private void ApplyTheme()
+    {
+        _themeMode = ThemeState.IsDark ? Mode.Dark : Mode.Light;
+
+        _donutOptions = BrandOptions<LabeledValue>(_themeMode);
+        _barRowsOptions = BrandOptions<LabeledValue>(_themeMode);
+        _lineJobsOptions = BrandOptions<DailyJobCount>(_themeMode);
+        _lineDivergenceOptions = BrandOptions<DivergencePoint>(_themeMode);
+        _barDurationOptions = BrandOptions<LabeledValue>(_themeMode);
+        _barQueueOptions = BrandOptions<StageQueueDepth>(_themeMode);
+    }
+
+    // Cada gráfico necesita su propia instancia de opciones (no se pueden compartir).
+    private static ApexChartOptions<TItem> BrandOptions<TItem>(Mode mode) where TItem : class => new()
+    {
+        Colors = new List<string>(BrandPalette),
+        Chart = new Chart { Height = 280 },
+        Theme = new ApexCharts.Theme { Mode = mode },
+    };
+}

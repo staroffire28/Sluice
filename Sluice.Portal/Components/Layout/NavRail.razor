@@ -1,0 +1,25 @@
+@inject IStringLocalizer<SharedResource> L
+
+@* Menú contraído: solo iconos. FluentNav de la v5 no tiene modo solo-iconos (y sus FluentNavItem
+   dentro de una categoría no pintan el icono), así que el riel es propio. Mismas páginas que
+   NavMenu (NavCatalog); qué menú se ve lo decide el CSS (ver "Menú lateral" en app.css). *@
+<nav id="nav-rail" class="app-rail" aria-label="@L["Nav.Menu"]" data-testid="nav-rail">
+    @foreach (var group in _groups)
+    {
+        <ul class="app-rail__group" aria-label="@L[group.TitleKey]">
+            @foreach (var entry in group.Entries)
+            {
+                <li>
+                    <NavLink href="@entry.Href" Match="@entry.Match" class="app-rail__link"
+                             title="@L[entry.TextKey]" aria-label="@L[entry.TextKey]">
+                        <FluentIcon Value="@entry.Icon" Color="Color.Custom" CustomColor="currentColor" />
+                    </NavLink>
+                </li>
+            }
+        </ul>
+    }
+</nav>
+
+@code {
+    private readonly IReadOnlyList<NavGroup> _groups = NavCatalog.Groups;
+}

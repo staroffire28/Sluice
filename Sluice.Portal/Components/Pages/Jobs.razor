@@ -1,0 +1,237 @@
+@page "/jobs"
+@rendermode InteractiveServer
+@using System.Globalization
+@using System.Text.Json
+@using Microsoft.AspNetCore.WebUtilities
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Models
+@using Sluice.Portal.Services
+@using Sluice.Portal.Services.Reporting
+@using Sluice.Portal.Services.Stores
+@using Sluice.Portal.Services.Logging
+@inject IJobService JobService
+@inject IActivityLog ActivityLog
+@inject IPipelineService PipelineService
+@inject IOrchestrationService Orchestration
+@inject IJobReportPdfService ReportPdf
+@inject ReportStore ReportStore
+@inject INotificationService NotificationService
+@inject IDialogService DialogService
+@inject IJSRuntime Js
+@inject NavigationManager Nav
+
+@inject IStringLocalizer<SharedResource> L
+
+<PageTitle>@L["Nav.Jobs"]</PageTitle>
+
+<FluentStack Class="page-stack" Orientation="Orientation.Vertical" VerticalGap="12">
+    <PageHeader Title="@L["Page.Jobs.Title"]" Subtitle="@L["Page.Jobs.Subtitle"]" />
+
+    <PageSection>
+    <div class="toolbar">
+        <FluentSelect TOption="string" TValue="string" @bind-Value="_pipelineFilter" @bind-Value:after="Load" data-testid="jobs-pipeline" Label="@L["Common.Pipeline"]" Style="min-width:200px;">
+            <FluentOption TValue="string" Value="@string.Empty">@L["Page.Jobs.AllPipelines"]</FluentOption>
+            @foreach (var p in PipelineService.List())
+            {
+                <FluentOption TValue="string" Value="@p.Id">@p.Name</FluentOption>
+            }
+        </FluentSelect>
+        <FluentSelect TOption="string" TValue="string" @bind-Value="_statusFilter" @bind-Value:after="Load" data-testid="jobs-status" Label="@L["Common.Status"]" Style="min-width:160px;">
+            <FluentOption TValue="string" Value="@string.Empty">@L["Page.Jobs.AllStatuses"]</FluentOption>
+            @foreach (var s in Enum.GetValues<JobStatus>())
+            {
+                <FluentOption TValue="string" Value="@s.ToString()">@JobStatusLabels.Get(L, s)</FluentOption>
+            }
+        </FluentSelect>
+        <DateRangeFilter @bind-Value="_range" @bind-Value:after="Load" />
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="Load">@L["Common.Refresh"]</FluentButton>
+        @* Descarga por HTTP (no por el circuito): todos los jobs que cumplen los filtros. ForceLoad:
+           sin él el router de Blazor busca /api/... como página y muestra "Not found". *@
+        <FluentAnchorButton Href="@ExportUrl" ForceLoad="true" Appearance="ButtonAppearance.Outline" data-testid="jobs-export"
+                            IconStart="@(new Icons.Regular.Size20.ArrowDownload())">@L["Common.ExportCsv"]</FluentAnchorButton>
+    </div>
+
+    <PanelState IsEmpty="@(_jobs.Count == 0)" EmptyText="@L["Page.Jobs.Empty"]">
+        <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true" Items="@_jobs.AsQueryable()" TGridItem="Job">
+            @* Solo el hash del id (una línea); el id completo en el tooltip, el detalle y el CSV. *@
+            <TemplateColumn Title="@L["Page.Jobs.ColumnJob"]">
+                <code class="cell-mono" style="white-space:nowrap;" title="@context.Id" data-testid="@($"job-id-{context.Id}")">@JobIdLabels.Short(context.Id)</code>
+            </TemplateColumn>
+            <PropertyColumn Property="@(j => j.PipelineId)" Title="@L["Common.Pipeline"]" />
+            <TemplateColumn Title="@L["Page.Jobs.ColumnType"]">
+                @JobTypeLabels.Get(L, context.Type)
+            </TemplateColumn>
+            <TemplateColumn Title="@L["Common.Status"]">
+                <StatusBadge Status="@context.Status.ToString().ToLowerInvariant()" />
+            </TemplateColumn>
+            <PropertyColumn Property="@(j => j.StartedAt)" Title="@L["Page.Jobs.ColumnStarted"]" Format="g" />
+            <TemplateColumn Title="@L["Common.Actions"]">
+                <FluentMenu>
+                    <FluentMenuButton Appearance="ButtonAppearance.Outline" data-testid="@($"job-actions-{context.Id}")" Label="@L["Common.Actions"]" />
+                    <FluentMenuList>
+                        <FluentMenuItem data-testid="@($"job-details-{context.Id}")" OnClick="@(() => Nav.NavigateTo($"/jobs/{context.Id}"))">@L["Common.Details"]</FluentMenuItem>
+                        <FluentMenuItem data-testid="@($"job-report-{context.Id}")" OnClick="@(() => GenerateReportAsync(context.Id))">@L["Page.Jobs.Report"]</FluentMenuItem>
+                        <FluentMenuItem data-testid="@($"job-json-{context.Id}")" OnClick="@(() => DownloadAsync(context.Id))">@L["Page.Jobs.Json"]</FluentMenuItem>
+                        @if (JobProgressHelper.IsActive(context))
+                        {
+                            <FluentMenuItem OnClick="@(() => CancelJobAsync(context.Id))">@L["Common.Cancel"]</FluentMenuItem>
+                        }
+                        else if (context.Status is JobStatus.Error or JobStatus.Partial or JobStatus.Blocked)
+                        {
+                            <FluentMenuItem OnClick="@(() => RetryJobAsync(context.Id))">@L["Common.Retry"]</FluentMenuItem>
+                        }
+                    </FluentMenuList>
+                </FluentMenu>
+            </TemplateColumn>
+        </FluentDataGrid>
+    </PanelState>
+
+    <PaginationControl Page="_page" TotalPages="_totalPages" TotalCount="_totalCount" PageChanged="OnPageChanged" />
+    </PageSection>
+</FluentStack>
+
+@code {
+    private List<Job> _jobs = [];
+    private string _pipelineFilter = "";
+    private string _statusFilter = "";
+    private DateRange _range = new(null, null);
+    private int _page = 1;
+    private const int PageSize = 20;
+    private int _totalCount;
+    private int _totalPages = 1;
+
+    protected override void OnInitialized() => Load();
+
+    private void Load()
+    {
+        var status = ParseStatus(_statusFilter);
+        _totalCount = JobService.Count(
+            string.IsNullOrWhiteSpace(_pipelineFilter) ? null : _pipelineFilter,
+            status,
+            _range);
+        _totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+        if (_page > _totalPages)
+        {
+            _page = _totalPages;
+        }
+
+        _jobs = JobService.List(
+            _page,
+            PageSize,
+            string.IsNullOrWhiteSpace(_pipelineFilter) ? null : _pipelineFilter,
+            status,
+            _range).ToList();
+    }
+
+    // Mismos filtros que la tabla, en la query de /api/jobs/export.
+    private string ExportUrl => QueryHelpers.AddQueryString("/api/jobs/export", new Dictionary<string, string?>
+    {
+        ["pipelineId"] = string.IsNullOrWhiteSpace(_pipelineFilter) ? null : _pipelineFilter,
+        ["status"] = string.IsNullOrWhiteSpace(_statusFilter) ? null : _statusFilter,
+        ["from"] = _range.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        ["to"] = _range.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+    });
+
+    private void OnPageChanged(int page)
+    {
+        _page = page;
+        Load();
+    }
+
+    private static JobStatus? ParseStatus(string value) =>
+        string.IsNullOrWhiteSpace(value) ? null : Enum.Parse<JobStatus>(value);
+
+    private async Task CancelJobAsync(string jobId)
+    {
+        var result = await DialogService.ShowConfirmationAsync(
+            string.Format(L["Common.CancelJobConfirm"].Value, jobId),
+            L["Common.CancelJobTitle"].Value,
+            L["Common.Cancel"].Value,
+            L["Common.Back"].Value);
+        if (result.Cancelled)
+        {
+            return;
+        }
+
+        try
+        {
+            await Orchestration.CancelAsync(jobId);
+            await NotificationService.ShowInfoToastAsync(string.Format(L["Common.JobCancelled"].Value, jobId));
+            ActivityLog.LogUser("job.cancel", $"Cancelación manual del job {jobId}.", jobId: jobId);
+            Load();
+        }
+        catch (Exception ex)
+        {
+            await NotificationService.ShowErrorToastAsync(ex.Message);
+        }
+    }
+
+    private async Task RetryJobAsync(string jobId)
+    {
+        // Reintentar crea una NUEVA ejecución del pipeline; confirmamos para evitar misclics.
+        var result = await DialogService.ShowConfirmationAsync(
+            string.Format(L["Common.RetryConfirm"].Value, jobId),
+            L["Common.RetryTitle"].Value,
+            L["Common.Retry"].Value,
+            L["Common.Cancel"].Value);
+        if (result.Cancelled)
+        {
+            return;
+        }
+
+        try
+        {
+            var job = await Orchestration.RetryJobAsync(jobId);
+            await NotificationService.ShowSuccessToastAsync(string.Format(L["Common.RetryStarted"].Value, job.Id));
+            ActivityLog.LogUser("pipeline.retry", $"Reintento del job {jobId} (nuevo job {job.Id}).", job.PipelineId, job.Id);
+            Load();
+        }
+        catch (Exception ex)
+        {
+            await NotificationService.ShowErrorToastAsync(ex.Message);
+        }
+    }
+
+    private async Task DownloadAsync(string jobId)
+    {
+        var job = JobService.Get(jobId);
+        if (job is null)
+        {
+            return;
+        }
+
+        var json = JsonSerializer.Serialize(job, JsonDefaults.Options);
+        await Js.InvokeVoidAsync("sluiceUi.downloadJson", $"{jobId}.json", json);
+    }
+
+    private async Task GenerateReportAsync(string jobId)
+    {
+        var job = JobService.Get(jobId);
+        if (job is null)
+        {
+            return;
+        }
+
+        // Toast de progreso: la generación + descarga ocurre del lado servidor.
+        await NotificationService.ShowInfoToastAsync(L["Page.Jobs.ReportGenerating"].Value);
+        try
+        {
+            // Solo los reportes de ESTE job (recon-/diff-{jobId}). Sin respaldo al último del
+            // pipeline: sería de otro job y mezclaría sus filas y KPI en este PDF. Sin reporte
+            // propio, el PDF sale de las entidades del job.
+            var reconcile = ReportStore.GetReconcileByJob(jobId);
+            var diff = ReportStore.GetDiffByJob(jobId);
+            // La generación con QuestPDF es CPU-bound; fuera del hilo del circuito para
+            // no bloquear el render (el toast "Generando…" se pinta y la UI sigue viva).
+            var pdf = await Task.Run(() => ReportPdf.GenerateEquityReport(job, reconcile, diff));
+            var base64 = Convert.ToBase64String(pdf);
+            await Js.InvokeVoidAsync("sluiceUi.downloadFileBase64", $"reporte-{jobId}.pdf", base64, "application/pdf");
+            await NotificationService.ShowSuccessToastAsync(L["Page.Jobs.ReportReady"].Value);
+            ActivityLog.LogUser("job.report", $"Generó el reporte PDF del job {jobId}.", job.PipelineId, jobId);
+        }
+        catch (Exception ex)
+        {
+            await NotificationService.ShowErrorToastAsync(ex.Message);
+        }
+    }
+}

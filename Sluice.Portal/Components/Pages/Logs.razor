@@ -1,0 +1,133 @@
+@page "/logs"
+@rendermode InteractiveServer
+@using System.Globalization
+@using Microsoft.AspNetCore.WebUtilities
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Models
+@using Sluice.Portal.Services.Logging
+@inject IActivityLog ActivityLog
+@inject IStringLocalizer<SharedResource> L
+
+<PageTitle>@L["Page.Logs.Title"]</PageTitle>
+
+<FluentStack Class="page-stack" Orientation="Orientation.Vertical" VerticalGap="12">
+    <PageHeader Title="@L["Page.Logs.Title"]" Subtitle="@L["Page.Logs.Subtitle"]" />
+
+    <PageSection>
+    <div class="toolbar">
+        <FluentSelect TOption="string" TValue="string" @bind-Value="_sourceFilter" @bind-Value:after="Load" Label="@L["Page.Logs.Filter.Source"]" Style="min-width:160px;">
+            <FluentOption TValue="string" Value="@string.Empty">@L["Page.Logs.All"]</FluentOption>
+            <FluentOption TValue="string" Value="@("user")">@L["Page.Logs.Source.User"]</FluentOption>
+            <FluentOption TValue="string" Value="@("system")">@L["Page.Logs.Source.System"]</FluentOption>
+        </FluentSelect>
+        <FluentSelect TOption="string" TValue="string" @bind-Value="_levelFilter" @bind-Value:after="Load" Label="@L["Page.Logs.Filter.Level"]" Style="min-width:140px;">
+            <FluentOption TValue="string" Value="@string.Empty">@L["Page.Logs.All"]</FluentOption>
+            <FluentOption TValue="string" Value="@("info")">info</FluentOption>
+            <FluentOption TValue="string" Value="@("warning")">warning</FluentOption>
+            <FluentOption TValue="string" Value="@("error")">error</FluentOption>
+        </FluentSelect>
+        <FluentTextInput @bind-Value="_search" @bind-Value:after="Load" data-testid="logs-search" Label="@L["Page.Logs.Search"]" Placeholder="@L["Page.Logs.SearchPlaceholder"]" Style="min-width:240px;" />
+        <DateRangeFilter @bind-Value="_range" @bind-Value:after="Load" />
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="Load">@L["Common.Refresh"]</FluentButton>
+        @* Descarga por HTTP (no por el circuito): todos los registros que cumplen los filtros. ForceLoad:
+           sin él el router de Blazor busca /api/... como página y muestra "Not found". *@
+        <FluentAnchorButton Href="@ExportUrl" ForceLoad="true" Appearance="ButtonAppearance.Outline" data-testid="logs-export"
+                            IconStart="@(new Icons.Regular.Size20.ArrowDownload())">@L["Common.ExportCsv"]</FluentAnchorButton>
+    </div>
+
+    <PanelState IsEmpty="@(_entries.Count == 0)" EmptyText="@L["Page.Logs.Empty"]">
+        @* Filas finas monolinea: MultiLine+Large + CSS white-space:normal hacía
+           que cada log se expandiera y “agrupara” el texto. Compact = 1 línea + ellipsis. *@
+        <FluentDataGrid Class="data-panel data-panel--compact logs-grid"
+                        RowSize="DataGridRowSize.Small"
+                        MultiLine="false"
+                        GridTemplateColumns="8.5rem 5.5rem 5rem 10rem 1fr 9rem 10rem"
+                        Items="@_entries.AsQueryable()"
+                        TGridItem="ActivityLogEntry">
+            @* Fecha corta ("09 oct 20:28") para que quepa en la columna; la completa, con
+               segundos, en el tooltip. *@
+            <TemplateColumn Title="@L["Page.Logs.Col.Date"]">
+                <span class="cell-mono" data-testid="log-date" title="@context.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")">
+                    @context.Timestamp.ToLocalTime().ToString("dd MMM HH:mm")
+                </span>
+            </TemplateColumn>
+            <TemplateColumn Title="@L["Page.Logs.Col.Source"]">
+                <FluentBadge Appearance="@(context.Source == "user" ? BadgeAppearance.Filled : BadgeAppearance.Tint)" Color="@(context.Source == "user" ? BadgeColor.Brand : BadgeColor.Informative)">
+                    @(context.Source == "user" ? L["Page.Logs.Source.User"] : L["Page.Logs.Source.System"])
+                </FluentBadge>
+            </TemplateColumn>
+            <TemplateColumn Title="@L["Page.Logs.Col.Level"]">
+                <FluentBadge Appearance="@LevelAppearance(context.Level)" Color="@LevelColor(context.Level)">
+                    @context.Level.ToLowerInvariant()
+                </FluentBadge>
+            </TemplateColumn>
+            <TemplateColumn Title="@L["Page.Logs.Col.Action"]">
+                <span class="cell-ellipsis" title="@context.Action">@context.Action</span>
+            </TemplateColumn>
+            <TemplateColumn Title="@L["Page.Logs.Col.Message"]">
+                <span class="cell-ellipsis" title="@context.Message">@context.Message</span>
+            </TemplateColumn>
+            <TemplateColumn Title="@L["Page.Logs.Col.Pipeline"]">
+                <span class="cell-ellipsis" title="@(context.PipelineId ?? "")">@(context.PipelineId ?? "—")</span>
+            </TemplateColumn>
+            <TemplateColumn Title="@L["Page.Logs.Col.Job"]">
+                <span class="cell-ellipsis" title="@(context.JobId ?? "")">@(context.JobId ?? "—")</span>
+            </TemplateColumn>
+        </FluentDataGrid>
+    </PanelState>
+
+    <PaginationControl Page="_page" TotalPages="_totalPages" TotalCount="_totalCount" PageChanged="OnPageChanged" />
+    </PageSection>
+</FluentStack>
+
+@code {
+    private List<ActivityLogEntry> _entries = [];
+    private string _sourceFilter = "";
+    private string _levelFilter = "";
+    private string _search = "";
+    private DateRange _range = new(null, null);
+    private int _page = 1;
+    private const int PageSize = 25;
+    private int _totalCount;
+    private int _totalPages = 1;
+
+    protected override void OnInitialized() => Load();
+
+    private void Load()
+    {
+        var result = ActivityLog.QueryPage(new ActivityLogFilter(NullIfBlank(_sourceFilter), NullIfBlank(_levelFilter), NullIfBlank(_search), _range), _page, PageSize);
+        _page = result.Page;
+        _totalCount = result.Total;
+        _totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+        _entries = result.Items.ToList();
+    }
+
+    // Mismos filtros que la tabla, en la query de /api/logs/export.
+    private string ExportUrl => QueryHelpers.AddQueryString("/api/logs/export", new Dictionary<string, string?>
+    {
+        ["source"] = NullIfBlank(_sourceFilter),
+        ["level"] = NullIfBlank(_levelFilter),
+        ["search"] = NullIfBlank(_search),
+        ["from"] = _range.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        ["to"] = _range.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+    });
+
+    private static string? NullIfBlank(string value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    private void OnPageChanged(int page)
+    {
+        _page = page;
+        Load();
+    }
+
+    // Colores por nivel (mismo criterio cromático que StatusBadge): info=neutral, warning=ámbar, error=rojo.
+    private static BadgeColor LevelColor(string level) => level.ToLowerInvariant() switch
+    {
+        "warning" => BadgeColor.Warning,
+        "error" => BadgeColor.Danger,
+        _ => BadgeColor.Informative,
+    };
+
+    private static BadgeAppearance LevelAppearance(string level) =>
+        LevelColor(level) == BadgeColor.Informative ? BadgeAppearance.Tint : BadgeAppearance.Filled;
+}

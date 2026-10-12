@@ -1,0 +1,124 @@
+@inherits LayoutComponentBase
+@inject IStringLocalizer<SharedResource> L
+@inject Sluice.Portal.Services.Auth.IAuthService Auth
+
+<a href="#main-content" class="skip-link">@L["Common.SkipToContent"]</a>
+
+@* Sin NavigationDeferredLoading: con él, el menú lateral solo se pinta si .NET cree estar en
+   escritorio, y ese estado lo avisa el JS de FluentLayout únicamente al cruzar los 768px (sin
+   esperar la llamada). Si el aviso de vuelta a escritorio se perdía con el circuito caído, la app
+   se quedaba sin menú en escritorio. Ahora la visibilidad la decide solo el CSS; la hamburguesa
+   lleva su propio NavMenu (id distinto) para no duplicar el del lateral. *@
+<FluentLayout Class="app-shell">
+    <FluentLayoutItem Area="LayoutArea.Header">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center" Style="width:100%;">
+            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px" Width="auto">
+                @* En móvil el menú lateral se pliega en este botón (sustituye a Collapsible de la v4). *@
+                <FluentLayoutHamburger>
+                    <NavMenu Id="mobile-menu" />
+                </FluentLayoutHamburger>
+                <img src="logo.svg" alt="" width="24" height="24" style="flex: none;" />
+                <span style="font-weight: 600; white-space: nowrap;">@L["App.Title"]</span>
+                <HealthPill />
+                @* Sin clave (AUTH_MODE=none o Development sin UI_API_KEY): visible en todas las páginas. *@
+                @if (!Auth.IsUiAuthEnabled)
+                {
+                    <span class="open-access-badge" title="@L["Auth.OpenAccessTitle"]" data-testid="open-access-badge">@L["Auth.OpenAccess"]</span>
+                }
+            </FluentStack>
+            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px" Width="auto">
+                <LanguageToggle />
+                <ThemeToggle />
+                @* Sin clave no hay sesión que cerrar: el botón solo revocaría sesiones y volvería a la landing. *@
+                @if (Auth.IsUiAuthEnabled)
+                {
+                    <form method="post" action="/auth/logout" style="display: inline; margin: 0;">
+                        <AntiforgeryToken />
+                        @* IconStart sin contenido = botón solo-icono (32px), como LanguageToggle. *@
+                        <FluentButton Type="ButtonType.Submit"
+                                      Appearance="ButtonAppearance.Subtle"
+                                      IconStart="@(new Icons.Regular.Size20.SignOut())"
+                                      Title="@L["Auth.Logout"]"
+                                      aria-label="@L["Auth.Logout"]"
+                                      data-testid="logout-button" />
+                    </form>
+                }
+            </FluentStack>
+        </FluentStack>
+    </FluentLayoutItem>
+    @* Sin Width: el ancho (menú expandido o riel de iconos) lo pone app.css según el ancho de la
+       ventana o la elección guardada en <html data-nav-mode>; no depende de estado .NET. Dos
+       botones con estado fijo (en vez de uno que cambie): el CSS muestra el que corresponde, y
+       app-ui.js atiende el clic aunque el circuito no esté conectado. *@
+    <FluentLayoutItem Area="LayoutArea.Navigation">
+        <div id="app-sidebar" class="app-sidebar">
+            <div class="app-sidebar__toggle">
+                <FluentButton Appearance="ButtonAppearance.Subtle"
+                              IconStart="@(new Icons.Regular.Size20.PanelLeftContract())"
+                              Title="@L["Nav.Collapse"]"
+                              aria-label="@L["Nav.Collapse"]"
+                              aria-expanded="true"
+                              aria-controls="app-sidebar"
+                              data-nav-mode-set="rail"
+                              data-testid="nav-collapse" />
+                <FluentButton Appearance="ButtonAppearance.Subtle"
+                              IconStart="@(new Icons.Regular.Size20.PanelLeftExpand())"
+                              Title="@L["Nav.Expand"]"
+                              aria-label="@L["Nav.Expand"]"
+                              aria-expanded="false"
+                              aria-controls="app-sidebar"
+                              data-nav-mode-set="expanded"
+                              data-testid="nav-expand" />
+            </div>
+            <NavMenu />
+            <NavRail />
+        </div>
+    </FluentLayoutItem>
+    <FluentLayoutItem Area="LayoutArea.Content">
+            <div class="page-shell" id="main-content" tabindex="-1" data-blazor-interactive="@(_interactive ? "true" : null)">
+                @* Una excepción no controlada en una página (handler, carga inicial) mostraba el
+                   aviso global y dejaba el circuito inservible; aquí se acota a la página. *@
+                <ErrorBoundary @ref="_errorBoundary">
+                    <ChildContent>
+                        @Body
+                    </ChildContent>
+                    <ErrorContent>
+                        <div role="alert" data-testid="page-error">
+                            <p>@L["Common.UnexpectedError"]</p>
+                            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@(() => _errorBoundary?.Recover())">@L["Common.Retry"]</FluentButton>
+                        </div>
+                    </ErrorContent>
+                </ErrorBoundary>
+            </div>
+    </FluentLayoutItem>
+</FluentLayout>
+
+@* Diálogos, toasts, tooltips y message bars (en la v4 eran cinco providers separados). *@
+<FluentProviders />
+
+<div id="blazor-error-ui">
+    An unhandled error has occurred.
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>
+
+@code {
+    private ErrorBoundary? _errorBoundary;
+    private bool _interactive;
+
+    // El layout recibe parámetros nuevos en cada navegación: así un error en una página no
+    // deja bloqueadas las demás.
+    protected override void OnParametersSet() => _errorBoundary?.Recover();
+
+    // OnAfterRender no corre en el prerender, solo con el circuito conectado: la marca
+    // data-blazor-interactive indica que los handlers ya están cableados (los UI tests la esperan
+    // antes de interactuar; un click sobre el HTML prerenderizado se pierde).
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _interactive = true;
+            StateHasChanged();
+        }
+    }
+}

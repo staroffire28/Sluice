@@ -1,0 +1,196 @@
+@page "/settings"
+@rendermode InteractiveServer
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Models
+@using Sluice.Portal.Services
+@using Sluice.Portal.Services.Stores
+@inject SettingsStore SettingsStore
+@inject AlertService AlertService
+@inject IStringLocalizer<SharedResource> L
+
+<PageTitle>@L["Nav.Settings"]</PageTitle>
+
+<FluentStack Class="page-stack" Orientation="Orientation.Vertical" VerticalGap="12">
+    <PageHeader Title="@L["Page.Settings.Title"]" Subtitle="@L["Page.Settings.Subtitle"]" />
+
+    <PageSection Title="@L["Page.Settings.Scheduler.Title"]">
+        <div class="dialog-form" style="max-width:560px;">
+            <FluentNumberInput TValue="int" @bind-Value="_pollMinutes" Label="@L["Page.Settings.PollMinutes"]" Style="width:100%;" />
+            <FluentNumberInput TValue="int" @bind-Value="_leaseSeconds" Label="@L["Page.Settings.LeaseSeconds"]" Style="width:100%;" />
+            <FluentNumberInput TValue="double" @bind-Value="_divergencePct" Label="@L["Page.Settings.DivergencePct"]" Style="width:100%;" />
+            <FluentSwitch @bind-Value="_autoRemediate" Label="@L["Page.Settings.AutoRemediate"]" data-testid="settings-autofix" />
+            <p class="field-hint">@L["Page.Settings.AutoRemediate.Hint"]</p>
+        </div>
+    </PageSection>
+
+    <PageSection Title="@L["Page.Settings.Retention.Title"]">
+        <div class="dialog-form" style="max-width:560px;">
+            <FluentNumberInput TValue="int" @bind-Value="_retentionDays" Label="@L["Page.Settings.RetentionDays"]" Style="width:100%;" />
+            <p class="field-hint">@L["Page.Settings.RetentionDays.Hint"]</p>
+            <FluentNumberInput TValue="int" @bind-Value="_sourceSnapshotRetentionDays" Label="@L["Page.Settings.SourceSnapshotRetentionDays"]" Style="width:100%;" />
+            <p class="field-hint">@L["Page.Settings.SourceSnapshotRetentionDays.Hint"]</p>
+            <FluentSwitch @bind-Value="_sourceSnapshotRetentionDryRun" Label="@L["Page.Settings.SourceSnapshotRetentionDryRun"]" />
+            <p class="field-hint">@L["Page.Settings.SourceSnapshotRetentionDryRun.Hint"]</p>
+            <FluentSwitch @bind-Value="_sourceSnapshotRetentionRequireParquet" Label="@L["Page.Settings.SourceSnapshotRetentionRequireParquet"]" />
+            <p class="field-hint">@L["Page.Settings.SourceSnapshotRetentionRequireParquet.Hint"]</p>
+        </div>
+    </PageSection>
+
+    <PageSection Title="@L["Page.Settings.Alerts.Title"]">
+        <div class="dialog-form" style="max-width:560px;">
+            <p class="field-hint">@L["Page.Settings.Alerts.Hint"]</p>
+            <FluentSwitch @bind-Value="_alertEnabled" Label="@L["Page.Settings.Alerts.Enabled"]" />
+            @* La URL lleva la firma (sig=...): no se envía al navegador. Vacío = conservar la guardada. *@
+            <FluentTextInput @bind-Value="_alertWebhookUrl" Label="@L["Page.Settings.Alerts.WebhookUrl"]" Style="width:100%;"
+                             TextInputType="TextInputType.Password"
+                             Placeholder="@(string.IsNullOrWhiteSpace(_storedWebhookUrl) ? "https://..." : L["Page.Settings.Alerts.WebhookStored"].Value)" />
+            <FluentButton Appearance="ButtonAppearance.Outline" data-testid="settings-test-alert" OnClick="TestAlertAsync" Disabled="_testingAlert">
+                @(_testingAlert ? L["Page.Settings.Alerts.Testing"] : L["Page.Settings.Alerts.Test"])
+            </FluentButton>
+
+            @if (_testResult is not null)
+            {
+                <FluentMessageBar data-testid="settings-alert-test-result" Intent="@(_testResult.Success ? MessageBarIntent.Success : MessageBarIntent.Error)">
+                    @_testResult.Detail
+                </FluentMessageBar>
+            }
+        </div>
+    </PageSection>
+
+    <PageSection Title="@L["Page.Settings.LogicApp.Title"]">
+        @* Paquete descargable de la Logic App que convierte el webhook de alertas en correos. Descarga
+           por HTTP con ForceLoad: sin él el router de Blazor trata /api/... como página ("Not found"). *@
+        <div class="la-card" data-testid="logicapp-card">
+            <div class="la-card__hero">
+                <img src="logo.svg" width="48" height="48" alt="" />
+                <div>
+                    <p class="la-card__eyebrow">Azure Logic App · Office 365 Outlook</p>
+                    <h3>@L["Page.Settings.LogicApp.Headline"]</h3>
+                    <p>@L["Page.Settings.LogicApp.Pitch"]</p>
+                </div>
+            </div>
+            <div class="la-card__body">
+                <ol class="la-card__steps">
+                    @for (var i = 1; i <= 4; i++)
+                    {
+                        <li><span class="la-card__num">@i</span><span>@L[$"Page.Settings.LogicApp.Step{i}"]</span></li>
+                    }
+                </ol>
+                <div class="la-card__events">
+                    <span class="la-card__label">@L["Page.Settings.LogicApp.Events"]</span>
+                    <span class="la-chip"><i style="background:#c4314b"></i>@L["Page.Settings.LogicApp.Event.Failure"]</span>
+                    <span class="la-chip"><i style="background:#c27c0e"></i>@L["Page.Settings.LogicApp.Event.Divergence"]</span>
+                    <span class="la-chip"><i style="background:#7a4fd1"></i>@L["Page.Settings.LogicApp.Event.Values"]</span>
+                    <span class="la-chip"><i style="background:#0f6cbd"></i>@L["Page.Settings.LogicApp.Event.Test"]</span>
+                </div>
+                <div class="la-card__actions">
+                    <FluentAnchorButton Href="/api/settings/logic-app-package" ForceLoad="true" Appearance="ButtonAppearance.Primary"
+                                        IconStart="@(new Icons.Regular.Size20.ArrowDownload())" data-testid="logicapp-download">@L["Page.Settings.LogicApp.Download"]</FluentAnchorButton>
+                    <span class="la-card__meta">@L["Page.Settings.LogicApp.Contents"]</span>
+                </div>
+            </div>
+        </div>
+    </PageSection>
+
+    <div class="dialog-form" style="max-width:560px;">
+        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="settings-save" OnClick="SaveSettings">@L["Common.Save"]</FluentButton>
+
+        @if (!string.IsNullOrWhiteSpace(_saveError))
+        {
+            <FluentMessageBar data-testid="settings-save-error" Intent="MessageBarIntent.Error">@_saveError</FluentMessageBar>
+        }
+
+        @if (_saved)
+        {
+            <FluentMessageBar data-testid="settings-saved" Intent="MessageBarIntent.Success">@L["Page.Settings.Saved"]</FluentMessageBar>
+        }
+    </div>
+</FluentStack>
+
+@code {
+    private int _pollMinutes = 5;
+    private int _leaseSeconds = 120;
+    private double _divergencePct = 1.0;
+    private bool _autoRemediate;
+    private int _retentionDays = 90;
+    private int _sourceSnapshotRetentionDays = 30;
+    private bool _sourceSnapshotRetentionDryRun;
+    private bool _sourceSnapshotRetentionRequireParquet = true;
+    private bool _alertEnabled;
+    private string? _alertWebhookUrl;
+    private string? _storedWebhookUrl;
+
+    private string? EffectiveWebhookUrl =>
+        string.IsNullOrWhiteSpace(_alertWebhookUrl) ? _storedWebhookUrl : _alertWebhookUrl.Trim();
+    private bool _saved;
+    private string? _saveError;
+    private bool _testingAlert;
+    private AlertDeliveryResult? _testResult;
+
+    protected override void OnInitialized()
+    {
+        var settings = SettingsStore.Get();
+        _pollMinutes = settings.SchedulerPollMinutes;
+        _leaseSeconds = settings.TaskLeaseSeconds;
+        _divergencePct = settings.ReconDivergencePct;
+        _autoRemediate = settings.AutoRemediate;
+        _retentionDays = settings.RetentionDays;
+        _sourceSnapshotRetentionDays = settings.SourceSnapshotRetentionDays;
+        _sourceSnapshotRetentionDryRun = settings.SourceSnapshotRetentionDryRun;
+        _sourceSnapshotRetentionRequireParquet = settings.SourceSnapshotRetentionRequireParquet;
+        _alertEnabled = settings.AlertEnabled;
+        _storedWebhookUrl = settings.AlertWebhookUrl;
+    }
+
+    private void SaveSettings()
+    {
+        _saveError = null;
+        _saved = false;
+
+        if (_alertEnabled && string.IsNullOrWhiteSpace(EffectiveWebhookUrl))
+        {
+            _saveError = L["Page.Settings.Alerts.UrlRequired"].Value;
+            return;
+        }
+
+        var settings = new AppSettings
+        {
+            SchedulerPollMinutes = _pollMinutes,
+            TaskLeaseSeconds = _leaseSeconds,
+            ReconDivergencePct = _divergencePct,
+            AutoRemediate = _autoRemediate,
+            RetentionDays = _retentionDays,
+            SourceSnapshotRetentionDays = _sourceSnapshotRetentionDays,
+            SourceSnapshotRetentionDryRun = _sourceSnapshotRetentionDryRun,
+            SourceSnapshotRetentionRequireParquet = _sourceSnapshotRetentionRequireParquet,
+            AlertEnabled = _alertEnabled,
+            AlertWebhookUrl = EffectiveWebhookUrl,
+        };
+
+        if (SettingsStore.Validate(settings) is { } invalidKey)
+        {
+            _saveError = L[invalidKey].Value;
+            return;
+        }
+
+        SettingsStore.Save(settings);
+        _storedWebhookUrl = settings.AlertWebhookUrl;
+        _alertWebhookUrl = null;
+        _saved = true;
+        _testResult = null;
+    }
+
+    private async Task TestAlertAsync()
+    {
+        _testingAlert = true;
+        _testResult = null;
+        try
+        {
+            _testResult = await AlertService.SendTestAlertAsync(EffectiveWebhookUrl);
+        }
+        finally
+        {
+            _testingAlert = false;
+        }
+    }
+}

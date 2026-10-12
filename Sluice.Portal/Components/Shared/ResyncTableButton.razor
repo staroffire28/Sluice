@@ -1,0 +1,79 @@
+@using Sluice.Portal.Models
+@using Sluice.Portal.Services
+@using Sluice.Portal.Services.Logging
+@inject IOrchestrationService Orchestration
+@inject INotificationService NotificationService
+@inject IDialogService DialogService
+@inject IActivityLog ActivityLog
+@inject IStringLocalizer<SharedResource> L
+
+@* Re-sincronizar UNA tabla (Tablas y Conciliación): confirmación, job de re-sync, aviso y registro
+   de actividad. Reload = upsert + borrado de huérfanas; Remerge = solo upsert. Como botón
+   (Conciliación) o como opción de un menú de acciones (Tablas). *@
+@if (AsMenuItem)
+{
+    <FluentMenuItem data-testid="@TestId" IconStart="@(new Icons.Regular.Size20.ArrowSync())" OnClick="ResyncAsync">@Label</FluentMenuItem>
+}
+else
+{
+    <FluentButton Appearance="@Appearance" data-testid="@TestId" OnClick="ResyncAsync">@Label</FluentButton>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public string PipelineId { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public string Entity { get; set; } = "";
+
+    [Parameter]
+    public ResyncMode Mode { get; set; } = ResyncMode.Reload;
+
+    [Parameter]
+    public ButtonAppearance Appearance { get; set; } = ButtonAppearance.Outline;
+
+    [Parameter]
+    public string? TestId { get; set; }
+
+    // true: se pinta como opción de un FluentMenuList (el padre pone el FluentMenu).
+    [Parameter]
+    public bool AsMenuItem { get; set; }
+
+    private string Label => (Mode == ResyncMode.Reload ? L["Page.Reconcile.Resync"] : L["Page.Reconcile.Remerge"]).Value;
+
+    // Acción del registro de actividad: cada página conserva la suya (table.resync, reconcile.resync).
+    [Parameter, EditorRequired]
+    public string ActivityAction { get; set; } = "";
+
+    [Parameter]
+    public EventCallback OnStarted { get; set; }
+
+    private async Task ResyncAsync()
+    {
+        var message = string.Format(
+            (Mode == ResyncMode.Reload ? L["Page.Reconcile.ResyncConfirm"] : L["Page.Reconcile.RemergeConfirm"]).Value,
+            Entity);
+        var confirm = await DialogService.ShowConfirmationAsync(
+            message,
+            L["Page.Reconcile.ConfirmTitle"].Value,
+            L["Common.Run"].Value,
+            L["Common.Cancel"].Value);
+        if (confirm.Cancelled)
+        {
+            return;
+        }
+
+        try
+        {
+            var job = await Orchestration.ResyncTableAsync(PipelineId, Entity, Mode);
+            await NotificationService.ShowSuccessToastAsync(string.Format(L["Page.Reconcile.ResyncStarted"].Value, Entity, job.Id));
+            ActivityLog.LogUser(ActivityAction, $"Re-sync {Mode} de {Entity} en {PipelineId} (job {job.Id}).", PipelineId, job.Id);
+            await OnStarted.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            await NotificationService.ShowErrorToastAsync(ex.Message);
+            ActivityLog.LogUser(ActivityAction, $"No se pudo iniciar re-sync de {Entity}: {ex.Message}", PipelineId, level: "error");
+        }
+    }
+}

@@ -1,0 +1,145 @@
+/* Tarjeta del paquete de la Logic App: cabecera azul marino de marca (como la landing) y cuerpo con
+   los tokens de Fluent, para que el tema oscuro funcione. */
+.la-card {
+    max-width: 760px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--colorNeutralStroke2, #e3e9ef);
+    background: var(--colorNeutralBackground1, #ffffff);
+    box-shadow: 0 2px 10px rgba(11, 31, 51, 0.08);
+}
+
+.la-card__hero {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    padding: 24px 28px;
+    background: linear-gradient(135deg, #0b1f33 0%, #13304d 100%);
+    color: #e8eef5;
+    border-bottom: 4px solid #4ca3f0;
+}
+
+.la-card__hero img {
+    flex: none;
+    border-radius: 12px;
+}
+
+.la-card__eyebrow {
+    margin: 0 0 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #4ca3f0;
+}
+
+.la-card__hero h3 {
+    margin: 0 0 6px;
+    font-size: 20px;
+    line-height: 1.3;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.la-card__hero p:last-child {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #a9b8c9;
+}
+
+.la-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 22px 28px 24px;
+}
+
+.la-card__steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+    gap: 12px 24px;
+}
+
+.la-card__steps li {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--colorNeutralForeground2, #4a5d72);
+}
+
+.la-card__num {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffffff;
+    background: var(--colorBrandBackground, #0f6cbd);
+}
+
+.la-card__events {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.la-card__label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--colorNeutralForeground3, #4a5d72);
+    margin-right: 4px;
+}
+
+.la-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--colorNeutralForeground1, #0b1f33);
+    background: var(--colorNeutralBackground3, #eef2f6);
+}
+
+.la-chip i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.la-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--colorNeutralStroke2, #e3e9ef);
+}
+
+.la-card__meta {
+    font-size: 12px;
+    color: var(--colorNeutralForeground3, #4a5d72);
+}
+
+@media (max-width: 600px) {
+    .la-card__hero,
+    .la-card__body {
+        padding-left: 18px;
+        padding-right: 18px;
+    }
+
+    .la-card__hero {
+        flex-direction: column;
+    }
+}

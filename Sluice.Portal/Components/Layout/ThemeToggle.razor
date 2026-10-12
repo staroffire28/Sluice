@@ -1,0 +1,31 @@
+@rendermode InteractiveServer
+@inject IStringLocalizer<SharedResource> L
+@inject IThemeService ThemeService
+@inject ThemeState ThemeState
+
+@* Toggle de tema claro/oscuro. Interactivo (el OnClick necesita un circuito
+   activo). IThemeService de Fluent UI v5 persiste el modo en localStorage y lo
+   aplica en la siguiente carga; ThemeState avisa del cambio a las gráficas. *@
+@* Icono en IconStart y sin contenido: la v5 lo pinta como botón solo-icono (32px); con el
+   icono como contenido ocupaba el ancho mínimo de 96px y desbordaba la cabecera en móvil. *@
+<FluentButton Appearance="ButtonAppearance.Subtle"
+              IconStart="@(ThemeState.IsDark ? new Icons.Filled.Size20.WeatherSunny() : new Icons.Filled.Size20.WeatherMoon())"
+              Title="@(ThemeState.IsDark ? L["Theme.SwitchToLight"] : L["Theme.SwitchToDark"])"
+              aria-label="@(ThemeState.IsDark ? L["Theme.SwitchToLight"] : L["Theme.SwitchToDark"])"
+              data-testid="theme-toggle"
+              OnClick="ToggleAsync" />
+
+@code {
+    // El modo real solo se conoce con el circuito conectado (vive en el navegador).
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            ThemeState.Set(await ThemeService.IsDarkModeAsync());
+            StateHasChanged();
+        }
+    }
+
+    // SwitchThemeAsync alterna claro/oscuro y devuelve si el nuevo modo es oscuro.
+    private async Task ToggleAsync() => ThemeState.Set(await ThemeService.SwitchThemeAsync());
+}

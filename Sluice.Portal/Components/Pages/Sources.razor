@@ -1,0 +1,308 @@
+@page "/sources"
+@rendermode InteractiveServer
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Models
+@using Sluice.Portal.Services
+@using Sluice.Portal.Services.Logging
+@inject IConnectionService Connections
+@inject INotificationService NotificationService
+@inject IDialogService DialogService
+@inject IActivityLog ActivityLog
+@inject Microsoft.Extensions.Options.IOptions<Sluice.Portal.Configuration.AppOptions> Options
+@using Sluice.Portal.Services.Adls
+
+@inject IStringLocalizer<SharedResource> L
+
+<PageTitle>@L["Nav.Sources"]</PageTitle>
+
+<FluentStack Class="page-stack" Orientation="Orientation.Vertical" VerticalGap="12">
+    <PageHeader Title="@L["Page.Sources.Title"]" Subtitle="@L["Page.Sources.Subtitle"]">
+        <Actions>
+            <FluentButton Appearance="ButtonAppearance.Primary" data-testid="add-source" OnClick="OpenCreate">@L["Page.Sources.AddSource"]</FluentButton>
+        </Actions>
+    </PageHeader>
+
+    <PageSection>
+    <ListWithEmptyCta HasItems="@(_allItems.Count > 0)" EmptyText="@L["Page.Sources.EmptyText"]">
+        <EmptyAction>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OpenCreate">@L["Page.Sources.AddSource"]</FluentButton>
+        </EmptyAction>
+        <ListContent>
+            <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true" Items="@_items.AsQueryable()" TGridItem="Connection">
+                <PropertyColumn Property="@(c => c.Name)" Title="@L["Common.Name"]" />
+                <PropertyColumn Property="@(c => c.Type)" Title="@L["Common.Type"]" />
+                <PropertyColumn Property="@(c => c.CreatedAt)" Title="@L["Page.Sources.Created"]" Format="g" />
+                <TemplateColumn Title="@L["Common.Actions"]">
+                    @if (_testingId == context.Id)
+                    {
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                            <FluentSpinner Style="width:20px;height:20px;" />
+                            <FluentLabel>@L["Common.Testing"]</FluentLabel>
+                        </FluentStack>
+                    }
+                    else
+                    {
+                        <FluentMenu>
+                            <FluentMenuButton Appearance="ButtonAppearance.Outline" data-testid="@($"src-actions-{context.Id}")" Label="@L["Common.Actions"]" />
+                            <FluentMenuList>
+                                <FluentMenuItem data-testid="@($"src-test-{context.Id}")" OnClick="@(() => Test(context.Id))">@L["Common.Test"]</FluentMenuItem>
+                                <FluentMenuItem data-testid="@($"src-edit-{context.Id}")" OnClick="@(() => Edit(context))">@L["Common.Edit"]</FluentMenuItem>
+                                <FluentMenuItem data-testid="@($"src-delete-{context.Id}")" OnClick="@(() => ConfirmDelete(context))">@L["Common.Delete"]</FluentMenuItem>
+                            </FluentMenuList>
+                        </FluentMenu>
+                    }
+                </TemplateColumn>
+            </FluentDataGrid>
+        </ListContent>
+    </ListWithEmptyCta>
+
+    <PaginationControl Page="_page" TotalPages="_totalPages" TotalCount="_totalCount" PageChanged="OnPageChanged" />
+    </PageSection>
+</FluentStack>
+
+<InlineDialog @bind-Visible="_showEditor" Title="@_editorTitle" Class="dialog-wide">
+    <ChildContent>
+    <div class="dialog-form" @key="_editorKey">
+        <FluentTextInput @bind-Value="_name" data-testid="src-name" Label="@L["Common.Name"]" Style="width:100%;" />
+        <FluentSelect TOption="string" TValue="string" @bind-Value="_type" data-testid="src-type" Label="@L["Common.Type"]" Style="width:100%;">
+            <FluentOption TValue="string" Value="@("adls")">ADLS Gen2</FluentOption>
+            @if (Options.Value.IsLocalSourceEnabled)
+            {
+                @* Origen simulado de las pruebas UAT: solo con LOCAL_SOURCE_ROOT (nunca en producción). *@
+                <FluentOption TValue="string" Value="@AdlsClientFactory.LocalType">Local (UAT)</FluentOption>
+            }
+        </FluentSelect>
+
+        <p class="dialog-form-subtitle">@L["Page.Sources.StorageSection"]</p>
+        @if (_type != AdlsClientFactory.LocalType)
+        {
+            <FluentTextInput @bind-Value="_account" data-testid="src-account" Label="@L["Page.Sources.StorageAccount"]" Style="width:100%;" />
+        }
+        <FluentTextInput @bind-Value="_container" data-testid="src-container" Label="@L["Page.Sources.Container"]" Style="width:100%;" />
+        <FluentTextInput @bind-Value="_parquetContainer" data-testid="src-parquet-container" Label="@L["Page.Sources.ParquetContainer"]" Style="width:100%;" />
+
+        @if (_type != AdlsClientFactory.LocalType)
+        {
+            <p class="dialog-form-subtitle">@L["Page.Sources.AuthSection"]</p>
+            <div class="dialog-form-grid">
+                <FluentTextInput @bind-Value="_tenantId" Label="@L["Page.Sources.TenantId"]" Style="width:100%;" />
+                <FluentTextInput @bind-Value="_clientId" Label="@L["Page.Sources.ClientId"]" Style="width:100%;" />
+            </div>
+
+            <FluentTextInput @bind-Value="_clientSecret" data-testid="src-secret" Label="@L["Page.Sources.ClientSecret"]" TextInputType="TextInputType.Password" Style="width:100%;" />
+        }
+    </div>
+    </ChildContent>
+    <Actions>
+        <FluentButton data-testid="src-cancel" OnClick="() => _showEditor = false">@L["Common.Cancel"]</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="src-save" OnClick="Save">@L["Common.Save"]</FluentButton>
+    </Actions>
+</InlineDialog>
+
+@code {
+    private List<Connection> _allItems = [];
+    private List<Connection> _items = [];
+    private int _page = 1;
+    private const int PageSize = 20;
+    private int _totalCount;
+    private int _totalPages = 1;
+    private bool _showEditor;
+    private string? _testingId;
+    private string _editorTitle = "";
+    // Se renueva en cada apertura: los FluentSelect con opciones a mano conservaban la
+    // selección del registro editado antes (ver el mismo caso en Pipelines.razor).
+    private Guid _editorKey = Guid.NewGuid();
+    private string? _editingId;
+    private string _name = "";
+    private string _type = "adls";
+    private string _account = "";
+    private string _container = "";
+    private string _parquetContainer = "";
+    private string _tenantId = "";
+    private string _clientId = "";
+    private string _clientSecret = "";
+
+    protected override void OnInitialized() => Load();
+
+    private void Load()
+    {
+        _allItems = Connections.List(ConnectionRole.Source).OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        ApplyPaging();
+    }
+
+    // La lista ya se carga entera en memoria (ConnectionStore.ListAll); paginar aquí es
+    // solo de presentación, sin tocar IConnectionService (mismo patrón que Tables.razor).
+    private void ApplyPaging()
+    {
+        _totalCount = _allItems.Count;
+        _totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+        if (_page > _totalPages)
+        {
+            _page = _totalPages;
+        }
+
+        _items = _allItems.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
+    }
+
+    private void OnPageChanged(int page)
+    {
+        _page = page;
+        ApplyPaging();
+    }
+
+    private void OpenCreate()
+    {
+        _editingId = null;
+        _editorTitle = L["Page.Sources.NewSource"].Value;
+        _name = "";
+        _type = "adls";
+        _account = "";
+        _container = "";
+        _parquetContainer = "";
+        _tenantId = "";
+        _clientId = "";
+        _clientSecret = "";
+        _editorKey = Guid.NewGuid();
+        _showEditor = true;
+    }
+
+    private void Edit(Connection connection)
+    {
+        _editingId = connection.Id;
+        _editorTitle = L["Page.Sources.EditSource"].Value;
+        _name = connection.Name;
+        _type = connection.Type;
+        _account = GetConfig(connection, "account", "storage_account");
+        _container = GetConfig(connection, "container");
+        _parquetContainer = GetConfig(connection, "parquet_container", "destination_container");
+        _tenantId = GetConfig(connection, "tenant_id");
+        _clientId = GetConfig(connection, "client_id");
+        _clientSecret = GetConfig(connection, "client_secret");
+        _editorKey = Guid.NewGuid();
+        _showEditor = true;
+    }
+
+    private void Save()
+    {
+        var config = new Dictionary<string, string?>
+        {
+            ["container"] = _container,
+            ["parquet_container"] = _parquetContainer,
+        };
+
+        // Un origen local no usa la cuenta ni las credenciales de Azure (el formulario las oculta):
+        // no se guardan, para no dejar un secreto invisible en la conexión.
+        if (_type != AdlsClientFactory.LocalType)
+        {
+            config["account"] = _account;
+            config["tenant_id"] = _tenantId;
+            config["client_id"] = _clientId;
+            config["client_secret"] = _clientSecret;
+        }
+
+        try
+        {
+            if (_editingId is null)
+            {
+                var slug = Sluice.Portal.Services.Stores.EntityIds.Slugify(_name);
+                if (slug.Length == 0)
+                {
+                    _ = NotificationService.ShowErrorToastAsync(L["Common.NameRequired"].Value);
+                    return;
+                }
+
+                Connections.Create(new Connection
+                {
+                    Id = $"conn-src-{slug}",
+                    Name = _name,
+                    Role = ConnectionRole.Source,
+                    Type = _type,
+                    Config = config,
+                });
+            }
+            else
+            {
+                var existing = Connections.Get(_editingId)!;
+                Connections.Update(_editingId, existing with
+                {
+                    Name = _name,
+                    Type = _type,
+                    Config = config,
+                });
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Id duplicado (otro nombre que normaliza igual) o no válido: avisar sin tumbar el circuito.
+            _ = NotificationService.ShowErrorToastAsync(ex.Message);
+            return;
+        }
+
+        _showEditor = false;
+        _ = NotificationService.ShowSuccessToastAsync(L["Common.Saved"].Value);
+        ActivityLog.LogUser("source.save", $"Conexión de origen '{_name}' {(_editingId is null ? "creada" : "actualizada")}.");
+        Load();
+    }
+
+    private async Task Test(string id)
+    {
+        // Indicador de progreso por fila: el test es I/O de red (puede tardar hasta el
+        // Connect Timeout). _testingId muestra un FluentProgressRing en esa fila y oculta el menú.
+        _testingId = id;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var (ok, msg) = await Connections.TestAsync(id);
+            if (ok)
+            {
+                await NotificationService.ShowSuccessToastAsync(msg);
+            }
+            else
+            {
+                await NotificationService.ShowErrorToastAsync(msg);
+            }
+            ActivityLog.LogUser("source.test", $"Test de origen {id}: {msg}", level: ok ? "info" : "warning");
+        }
+        finally
+        {
+            _testingId = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ConfirmDelete(Connection connection)
+    {
+        var result = await DialogService.ShowConfirmationAsync(
+            $"{L["Page.Sources.DeleteConfirm"].Value} {connection.Name}?",
+            L["Page.Sources.DeleteSource"].Value,
+            L["Common.Delete"].Value,
+            L["Common.Cancel"].Value);
+        if (result.Cancelled)
+        {
+            return;
+        }
+
+        if (!Connections.Delete(connection.Id, out var error))
+        {
+            await NotificationService.ShowErrorToastAsync(error ?? L["Common.DeleteFailed"].Value);
+            return;
+        }
+
+        await NotificationService.ShowInfoToastAsync(string.Format(L["Common.Deleted"].Value, connection.Name));
+        ActivityLog.LogUser("source.delete", $"Conexión de origen '{connection.Name}' eliminada.");
+        Load();
+    }
+
+    private static string GetConfig(Connection connection, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (connection.Config.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return "";
+    }
+}

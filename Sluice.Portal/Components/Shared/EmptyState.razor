@@ -1,0 +1,12 @@
+@inject IStringLocalizer<SharedResource> L
+
+<div class="empty-state">
+    <FluentIcon Value="@(new Icons.Regular.Size24.Search())" Color="Color.Default" />
+    <FluentLabel>@(string.IsNullOrEmpty(Text) ? L["Common.NoData"].Value : Text)</FluentLabel>
+    @Action
+</div>
+
+@code {
+    [Parameter] public string Text { get; set; } = "";
+    [Parameter] public RenderFragment? Action { get; set; }
+}

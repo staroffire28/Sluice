@@ -1,0 +1,256 @@
+/* Landing (propuesta A): panel de marca azul marino fijo a la izquierda y acceso a la derecha con
+   los tokens de Fluent, para que el tema oscuro funcione. En pantallas estrechas se apilan. */
+.landing {
+    min-height: 100vh;
+    display: flex;
+    flex-wrap: wrap;
+    background: var(--colorNeutralBackground2, #f5f7fa);
+    color: var(--colorNeutralForeground1, #0b1f33);
+}
+
+.landing__hero {
+    flex: 1 1 560px;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 56px 64px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 48px;
+    background: #0b1f33;
+    color: #e8eef5;
+}
+
+.landing__brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.landing__pitch {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 520px;
+}
+
+.landing__pitch h1 {
+    margin: 0;
+    font-size: 44px;
+    line-height: 1.12;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.landing__pitch p {
+    margin: 0;
+    font-size: 17px;
+    line-height: 1.6;
+    color: #a9b8c9;
+}
+
+.landing__meta {
+    margin: 0;
+    font-size: 13px;
+    color: #7d93ab;
+}
+
+.landing__panel {
+    flex: 1 1 420px;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 24px 64px 56px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.landing__toolbar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* Idioma y tema de la landing: enlace y botón propios (sin circuito), con el aspecto de los
+   botones solo-icono de la cabecera del portal. */
+.landing__tool {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--colorNeutralForeground1, #0b1f33);
+    cursor: pointer;
+}
+
+.landing__tool:hover {
+    background: var(--colorSubtleBackgroundHover, #f3f2f1);
+}
+
+/* El icono muestra el modo al que se cambia: luna en claro, sol en oscuro (data-dark lo fija
+   app-ui.js al cargar). */
+.landing__tool[data-dark="true"] .landing__icon-moon,
+.landing__tool:not([data-dark="true"]) .landing__icon-sun {
+    display: none;
+}
+
+.landing__icon-moon,
+.landing__icon-sun {
+    display: inline-flex;
+}
+
+.landing__card {
+    flex: 1;
+    width: 100%;
+    max-width: 380px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 20px;
+}
+
+.landing__heading {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.landing__heading h2 {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 600;
+}
+
+.landing__heading p,
+.landing__help {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--colorNeutralForeground3, #4a5d72);
+}
+
+.landing__help {
+    font-size: 13px;
+}
+
+.landing__form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.landing__form label {
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.landing__key {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--colorNeutralStroke1, #b9c4d0);
+    border-radius: 6px;
+    background: var(--colorNeutralBackground1, #ffffff);
+}
+
+.landing__key:focus-within {
+    outline: 2px solid var(--colorBrandStroke1, #0f6cbd);
+    outline-offset: 1px;
+}
+
+.landing__key input {
+    flex: 1;
+    min-width: 0;
+    height: 44px;
+    padding: 0 12px;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--colorNeutralForeground1, #0b1f33);
+    font: inherit;
+    font-size: 15px;
+}
+
+.landing__eye {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+.landing__eye svg {
+    fill: none;
+    stroke: var(--colorNeutralForeground3, #4a5d72);
+    stroke-width: 1.6;
+}
+
+.landing__button {
+    margin-top: 12px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    background: var(--colorBrandBackground, #0f6cbd);
+    color: #ffffff;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.landing__button:hover {
+    background: var(--colorBrandBackgroundHover, #115ea3);
+    color: #ffffff;
+}
+
+.landing__warning {
+    margin: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--colorStatusWarningForeground3, #6b4a00);
+}
+
+.landing__warning svg {
+    flex: none;
+    margin-top: 2px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+}
+
+/* Móvil: el panel de marca se compacta encima del acceso. */
+@media (max-width: 768px) {
+    .landing__hero {
+        padding: 24px 24px 32px;
+        gap: 20px;
+    }
+
+    .landing__pitch h1 {
+        font-size: 28px;
+        line-height: 1.18;
+    }
+
+    .landing__pitch p,
+    .landing__meta {
+        display: none;
+    }
+
+    .landing__panel {
+        padding: 16px 24px 32px;
+    }
+}

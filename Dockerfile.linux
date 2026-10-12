@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1
+# Imagen Linux del portal (Ubuntu 24.04, base por defecto de .NET 10). Alternativa a Dockerfile (Windows containers).
+# Microsoft.Data.SqlClient usa TDS nativo: no requiere ODBC Driver en Linux.
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY NuGet.config ./
+COPY Sluice.Portal.sln ./
+COPY Sluice.Portal/Sluice.Portal.csproj Sluice.Portal/
+RUN dotnet restore Sluice.Portal/Sluice.Portal.csproj
+COPY Sluice.Portal/ Sluice.Portal/
+# Guía de usuario (Markdown): la referencia el .csproj como Content y se sirve en /ayuda.
+COPY docs/ docs/
+RUN dotnet publish Sluice.Portal/Sluice.Portal.csproj -c Release -o /app/publish /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+# libfontconfig1: QuestPDF (SkiaSharp) lo necesita para renderizar los PDF de jobs.
+# curl: para el HEALTHCHECK.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libfontconfig1 curl \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /app/publish .
+# Sin root: el usuario "app" (UID 1654) viene en las imágenes de .NET. /data es donde compose
+# monta DATA_DIR (/app/data, el valor por defecto sin DATA_DIR): un volumen nuevo hereda este
+# propietario; uno existente creado como root necesita un chown una vez (guía de instalación).
+RUN mkdir -p /data /app/data && chown app:app /data /app/data
+USER app
+ENV ASPNETCORE_URLS=http://+:58472
+EXPOSE 58472
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
+    CMD curl -f http://localhost:58472/health || exit 1
+ENTRYPOINT ["dotnet", "Sluice.Portal.dll"]

@@ -1,0 +1,26 @@
+<div class="page-header" data-testid="page-header">
+    <div class="page-header__titles">
+        <h1 class="page-header__title-heading"><FluentLabel Typo="Typography.H3">@Title</FluentLabel></h1>
+        @if (!string.IsNullOrWhiteSpace(Subtitle))
+        {
+            <FluentLabel Typo="Typography.Body" Class="page-header__subtitle">@Subtitle</FluentLabel>
+        }
+    </div>
+    <div class="page-header__meta">
+        @if (!string.IsNullOrWhiteSpace(Badge))
+        {
+            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">@Badge</FluentBadge>
+        }
+        @if (Actions is not null)
+        {
+            @Actions
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public string? Badge { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+}

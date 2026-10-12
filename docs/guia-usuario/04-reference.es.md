@@ -1,0 +1,86 @@
+# Referencia
+
+## Glosario
+
+- **Pipeline** — un origen (ADLS) más un destino (SQL), con un nombre. Su interruptor de "scheduler" controla solo las corridas automáticas; nunca bloquea una corrida manual.
+- **Job (corrida)** — una ejecución de un pipeline, con un tipo, un estado, resultados por tabla y una línea de tiempo.
+- **Tipo de job** — **Incremental** (solo snapshots nuevos, el predeterminado), **Force** (recarga SQL desde parquet consolidado — todas las tablas, sin ingest), **Reconcile** (solo verifica conteos), **Diff** (reporta deltas de filas), **Re-sync tabla** (re-sincroniza una o varias tablas desde el Parquet existente; desde Conciliación, Tablas o la corrección automática), **Comparar valores** (compara fila a fila, por Id, el Parquet con SQL; desde Conciliación).
+- **Snapshot** — una carpeta de exportación de Synapse Link en ADLS (una foto de los datos en un punto en el tiempo).
+- **Changelog** — un archivo que Synapse escribe nombrando la carpeta que está escribiendo *en ese momento*. El portal solo consume carpetas estrictamente más antiguas que esa, así que nunca lee datos a medio escribir.
+- **Snapshot asentado (settled)** — la última carpeta totalmente cerrada (la inmediatamente anterior a la del changelog). El último snapshot seguro de consumir.
+- **Marca de agua (watermark)** — una marca de tiempo que indica hasta dónde llegó el procesamiento; se usa para deduplicar (gana la marca de agua más alta para la misma fila).
+- **Tarea / cola** — la unidad atómica de trabajo de una etapa de un job. Los estados son carpetas: `pending`, `claimed` (retenida con un lease), `done`, `error`.
+- **Lease / heartbeat** — el lease es la retención temporal de una tarea reclamada (por defecto 120 s); el heartbeat lo renueva. Si un worker muere, el lease expira y la tarea vuelve a `pending`.
+- **Conciliación (Reconcile)** — la verificación de que los conteos de filas de SQL coinciden con el Parquet consolidado.
+- **Diff** — un reporte informativo del delta de filas (origen vs destino); no marca un job como Partial.
+- **Divergencia / umbral** — `|source − dest| / max(source, dest) × 100`. Por encima del umbral (`ReconDivergencePct`, por defecto 1.0%), el job se marca Partial.
+- **Remediación (resync por tabla)** — corregir una tabla divergente re-mergeando el Parquet existente. **Re-sincronizar** = upsert + eliminar huérfanos (en ambas direcciones); **Re-mergear** = solo upsert (cuando a SQL le faltan filas).
+- **Aceptación de divergencia (recon-ack)** — declarar una divergencia como legítima. Suprime la alerta mientras la divergencia se mantenga cerca del valor aceptado; si se sale de rango, la aceptación expira y la alerta se reanuda.
+- **Conexión (Origen / Destino)** — las credenciales y la configuración de un origen ADLS o un destino SQL. Los secretos se cifran y se muestran como `***`.
+- **Worker / etapa** — un worker es el proceso que reclama y ejecuta tareas; una etapa es una de Ingest, SQL, Reconcile. En modo distribuido un worker puede limitarse a una sola etapa.
+- **Orquestador** — el nodo que programa y purga. En modo distribuido solo él lo hace; los workers solo procesan su cola.
+
+## Estados de job
+
+| Estado | Significado |
+|---|---|
+| Running | En progreso (creándose o procesando etapas). |
+| OK | Terminó limpio, sin divergencia por encima del umbral. |
+| Partial | Una tabla no aceptada diverge por encima del umbral (revisa Conciliación), o algunas tablas fallaron en la ingesta o en SQL. Tras una ingesta parcial el job sigue con SQL y Conciliación: mientras no termine cuenta como en curso (se puede cancelar, no reintentar). |
+| Error | Una etapa lanzó un error (p. ej. SQL inalcanzable) — revisa la línea de tiempo. |
+| Stalled (Blocked) | El origen aún no tenía snapshots seguros — no es culpa tuya, reintentará. |
+| Cancelled | Alguien lo canceló; sus tareas pendientes se purgaron. |
+
+## Estados de tarea
+
+| Estado | Significado |
+|---|---|
+| Pending | En cola, esperando ser reclamada. |
+| Claimed | Retenida por un worker con un lease activo (en ejecución). |
+| Done | Completada con éxito. |
+| Error | Falló; el archivo conserva el mensaje de error. |
+
+## Seguridad
+
+La documentación completa de autenticación (tutorial, guía práctica, referencia y explicación) está en `docs/auth/` del repositorio.
+
+- **`UI_API_KEY`** protege la interfaz y la API de gestión (`/api/*`). Inicia sesión en `/login` (clave compartida + cookie `sluice_session`). Fuera de Development, el portal se niega a arrancar sin ella, salvo con `AUTH_MODE=none` (acceso abierto a propósito: la landing ofrece **Entrar** sin clave y la cabecera muestra **Acceso abierto**).
+- Los workers no se autentican contra el portal: no hay API entre ellos, comparten la cola de tareas en el volumen de `DATA_DIR`.
+- **Clave placeholder** (`changeme-ui`) se rechaza fuera de Development — define un valor real en `.env` antes de desplegar.
+- **Login/logout por formulario** requieren token antiforgery; el `POST /auth/login` JSON (scripts/automatización) queda exento.
+- **Data Protection** cifra los secretos de conexión en reposo; el keyring vive en `DATA_DIR/keys` en el volumen compartido.
+
+## Observabilidad y alertas
+
+- **Salud**: `GET /health` → `{ "status": "ok" }`.
+- **Registro de actividad**: persistido por proceso bajo `DATA_DIR/logs`, con eventos `user` y `system` (`scheduler.run`, `retention.sweep`, …). Filtrable en `/logs` (también por fechas Desde/Hasta, días completos en la hora del servidor) y exportable a CSV (UTF-8, separador coma).
+- **Alertas** se disparan ante: un **fallo de job de pipeline** (`Error`), una conciliación Partial, diferencias en **Comparar valores**, un error del scheduler, un estancamiento del changelog (deduplicado), un fallo del barrido de retención y un posible bloqueo en SQL (ver abajo). Configúralas en `/settings` (activar + URL del disparador HTTP de la Logic App). Este webhook es el único canal de alertas del portal (no hay SMTP); para recibirlas por correo, **Ajustes → Alertas por correo (Logic App)** descarga un paquete listo para desplegar en Azure: una Logic App que envía cada alerta como correo de Office 365 con el diseño de Sluice (plantilla ARM, `deploy.ps1`, guía y vista previa del correo).
+- **Payloads JSON del webhook** (POST, `Content-Type: application/json`):
+  - `test.ping` — enviado por **Enviar prueba** en Ajustes (la URL debe ser `https://`): `{ "eventType": "test.ping", "timestamp": "...", "message": "Sluice portal alert test" }`
+  - `pipeline.failure` — job falló en una etapa: `{ "eventType": "pipeline.failure", "pipelineId", "pipelineName", "jobId", "jobType", "stage", "status": "error", "message", "timestamp" }`
+  - `reconcile.divergence` / `reconcile.values` — conciliación Partial o diferencias de valores: `{ "eventType", "pipelineId", "pipelineName", "jobId", "status": "warning", "message", "text", "maxDivergencePct" (solo divergencia), "entities": [tablas], "autoRemediation": "off" | "scheduled" | "unresolved" | "none", "timestamp" }`
+  - `system.alert` — scheduler/retención/changelog: `{ "eventType": "system.alert", "text", "message", "timestamp" }`
+- **Posible bloqueo en SQL**: si una sentencia SQL no avanza durante 1 hora, la línea de tiempo del job recibe un Warning con la entidad y la fase, y se envía un `system.alert`. La sentencia **no** se cancela y el estado del job no cambia; revisa las sesiones bloqueantes en la base de destino. El umbral de 1 hora está fijado en el código.
+- **Dead-man ping**: si `DEADMAN_PING_URL` está configurada, el scheduler le hace un GET en cada ciclo.
+
+## Retención
+
+### Volumen local (`DATA_DIR`)
+
+Un janitor limita el crecimiento del volumen. El **job es la unidad de retención**: un job viejo se purga junto con su directorio de corrida, reportes, tareas terminadas y staging.
+
+- **Siempre se conservan**: los últimos 50 jobs por pipeline (aunque sean viejos), los jobs en ejecución, las aceptaciones de divergencia y el estado del pipeline.
+- **Perilla**: `RetentionDays` en `/settings` (por defecto 90). `0` o negativo desactiva la purga.
+- **Cadencia**: cada 6 horas, solo en el orquestador; registrado como `retention.sweep`. Los archivos corruptos o bloqueados se omiten sin romper el barrido.
+
+### Snapshots origen (container Synapse Link en ADLS)
+
+Un segundo janitor purga carpetas CSV **ya procesadas** en el container origen de Synapse Link. El parquet consolidado en el container dedicado es el artefacto de recovery.
+
+- **Siempre se conservan**: las últimas 14 snapshots procesadas (piso K), snapshots pendientes o en export, `Changelog/` y metadatos CDM.
+- **Perilla**: `SourceSnapshotRetentionDays` en `/settings` (por defecto 30). `0` o negativo desactiva la purga.
+- **Cadencia**: cada 6 horas, solo en el orquestador; registrado como `snapshot-retention.sweep`.
+- **Recovery tras purga**: usa **Force** (o `POST /api/pipelines/{id}/reload-from-parquet`, mismo camino) para recargar SQL desde parquet consolidado. Incremental sigue leyendo CSV nuevos en ADLS.
+- **Dry-run**: `SourceSnapshotRetentionDryRun` en `/settings` — **activo por defecto**; simula sin borrar. Revisa `/snapshots` (columna Retención) y activity log `snapshot-retention.dry-run` antes de desactivarlo.
+- **Certificación parquet**: `SourceSnapshotRetentionRequireParquet` (default activo) — no purga si falta algún `{pipeline}/{entity}.parquet`.
+- **Soft-delete**: habilita blob soft-delete en la storage account de Azure para recuperar carpetas borradas por error (configuración fuera del portal).

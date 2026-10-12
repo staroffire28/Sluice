@@ -1,0 +1,54 @@
+name: Docker Windows
+
+# Construye la imagen de Windows containers (Dockerfile) y comprueba que arranca y que su
+# HEALTHCHECK la da por sana. Solo cuando cambia la imagen o este workflow (los minutos de
+# Windows cuentan doble y la base servercore es pesada); a mano desde Actions para el resto.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - docker-compose.yml
+      - .github/workflows/docker-windows.yml
+  workflow_dispatch:
+
+jobs:
+  build-and-smoke:
+    # windows-2022 = Windows Server 2022, la misma versión que las bases ltsc2022: los runners
+    # no tienen aislamiento Hyper-V y el host debe coincidir con la imagen.
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -f Dockerfile -t sluice-portal:ci .
+
+      # Clave y volumen solo viven en el runner durante el job. Fuera de Development el portal
+      # no arranca sin una UI_API_KEY que no sea la de ejemplo.
+      - name: Run container
+        run: >-
+          docker run -d --name sluice
+          -e EXECUTION_MODE=local
+          -e DATA_DIR=C:/data
+          -e UI_API_KEY=ci-windows-smoke-only
+          -v sluice-data:C:/data
+          sluice-portal:ci
+
+      - name: Wait for healthy
+        shell: pwsh
+        run: |
+          for ($i = 0; $i -lt 40; $i++) {
+            $status = docker inspect --format '{{.State.Health.Status}}' sluice
+            $running = docker inspect --format '{{.State.Running}}' sluice
+            Write-Host "health=$status running=$running"
+            if ($status -eq 'healthy') { exit 0 }
+            if ($running -ne 'true') { break }
+            Start-Sleep -Seconds 15
+          }
+          docker logs sluice
+          exit 1
+
+      - name: Container logs
+        if: always()
+        run: docker logs sluice

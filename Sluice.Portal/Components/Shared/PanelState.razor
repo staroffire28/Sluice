@@ -1,0 +1,33 @@
+@inject IStringLocalizer<SharedResource> L
+
+@if (IsLoading)
+{
+    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+        <FluentSpinner />
+        <FluentLabel>@(string.IsNullOrEmpty(LoadingText) ? L["Common.Loading"].Value : LoadingText)</FluentLabel>
+    </FluentStack>
+}
+else if (!string.IsNullOrWhiteSpace(Error))
+{
+    <FluentMessageBar Intent="MessageBarIntent.Error">@Error</FluentMessageBar>
+}
+else if (IsEmpty)
+{
+    <div class="empty-state">
+        <FluentIcon Value="@(new Icons.Regular.Size24.Search())" Color="Color.Default" />
+        <FluentLabel>@(string.IsNullOrEmpty(EmptyText) ? L["Common.NoData"].Value : EmptyText)</FluentLabel>
+    </div>
+}
+else
+{
+    @ChildContent
+}
+
+@code {
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public string LoadingText { get; set; } = "";
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public bool IsEmpty { get; set; }
+    [Parameter] public string EmptyText { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

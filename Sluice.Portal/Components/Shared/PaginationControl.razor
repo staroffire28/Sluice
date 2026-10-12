@@ -1,0 +1,19 @@
+@* Control de paginación reutilizable (antes duplicado en Jobs.razor/Logs.razor con la misma
+   estructura: botones Anterior/Siguiente + etiqueta "Página X / Y (Z total)"). El padre sigue
+   siendo dueño de la carga de datos: solo recibe el número de página nuevo vía PageChanged. *@
+@inject IStringLocalizer<SharedResource> L
+
+<FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center" Style="margin-top:0.75rem;">
+    <FluentButton Disabled="@(Page <= 1)" data-testid="page-prev" OnClick="@(() => ChangePage(Page - 1))">@L["Common.Previous"]</FluentButton>
+    <FluentLabel>@L["Common.Pagination", Page, TotalPages, TotalCount]</FluentLabel>
+    <FluentButton Disabled="@(Page >= TotalPages)" data-testid="page-next" OnClick="@(() => ChangePage(Page + 1))">@L["Common.Next"]</FluentButton>
+</FluentStack>
+
+@code {
+    [Parameter, EditorRequired] public int Page { get; set; }
+    [Parameter, EditorRequired] public int TotalPages { get; set; }
+    [Parameter, EditorRequired] public int TotalCount { get; set; }
+    [Parameter] public EventCallback<int> PageChanged { get; set; }
+
+    private Task ChangePage(int page) => PageChanged.InvokeAsync(page);
+}

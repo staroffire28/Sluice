@@ -1,0 +1,55 @@
+@using Sluice.Portal.Models
+@using Sluice.Portal.Services
+@using Sluice.Portal.Services.Logging
+@inject IOrchestrationService Orchestration
+@inject INotificationService NotificationService
+@inject IDialogService DialogService
+@inject IActivityLog ActivityLog
+@inject IStringLocalizer<SharedResource> L
+
+<FluentMenuItem data-testid="@($"run-{PipelineId}")" Disabled="@string.IsNullOrWhiteSpace(PipelineId)" OnClick="@(() => RunAsync(JobType.Incremental))">@L["Common.Run"]</FluentMenuItem>
+<FluentMenuItem data-testid="@($"force-{PipelineId}")" Disabled="@string.IsNullOrWhiteSpace(PipelineId)" OnClick="@(() => RunAsync(JobType.Force))">@L["Page.Pipelines.Force"]</FluentMenuItem>
+<FluentMenuItem data-testid="@($"reconcile-{PipelineId}")" Disabled="@string.IsNullOrWhiteSpace(PipelineId)" OnClick="@(() => RunAsync(JobType.Reconcile))">@L["Page.Pipelines.Reconcile"]</FluentMenuItem>
+<FluentMenuItem data-testid="@($"diff-{PipelineId}")" Disabled="@string.IsNullOrWhiteSpace(PipelineId)" OnClick="@(() => RunAsync(JobType.Diff))">@L["Page.Pipelines.Diff"]</FluentMenuItem>
+
+@code {
+    [Parameter, EditorRequired]
+    public string PipelineId { get; set; } = "";
+
+    [Parameter]
+    public EventCallback OnCompleted { get; set; }
+
+    private async Task RunAsync(JobType type)
+    {
+        if (!await ConfirmRunAsync(type))
+        {
+            return;
+        }
+
+        try
+        {
+            var job = await Orchestration.RunPipelineAsync(PipelineId, type);
+            await NotificationService.ShowSuccessToastAsync(string.Format(L["Page.Pipelines.JobStarted"].Value, job.Id, JobTypeLabels.Get(L, type)));
+            ActivityLog.LogUser("pipeline.run", $"Ejecución manual {type} del pipeline {PipelineId} (job {job.Id}).", PipelineId, job.Id);
+            await OnCompleted.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            await NotificationService.ShowErrorToastAsync(ex.Message);
+            ActivityLog.LogUser("pipeline.run", $"No se pudo iniciar {type} en {PipelineId}: {ex.Message}", PipelineId, level: "error");
+        }
+    }
+
+    private async Task<bool> ConfirmRunAsync(JobType type)
+    {
+        var message = type == JobType.Force
+            ? L["Page.Dashboard.ForceConfirm"].Value
+            : string.Format(L["Page.Dashboard.RunConfirm"].Value, JobTypeLabels.Get(L, type));
+        var result = await DialogService.ShowConfirmationAsync(
+            message,
+            L["Page.Dashboard.RunConfirmTitle"].Value,
+            L["Common.Run"].Value,
+            L["Common.Cancel"].Value);
+        return !result.Cancelled;
+    }
+}

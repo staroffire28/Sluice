@@ -1,0 +1,539 @@
+@page "/"
+@rendermode InteractiveServer
+@using System.Globalization
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Models
+@using Sluice.Portal.Services
+@using Sluice.Portal.Services.Adls
+@using Sluice.Portal.Services.Logging
+@inject IOrchestrationService Orchestration
+@inject IJobService JobService
+@inject IPipelineService PipelineService
+@inject IConnectionService Connections
+@inject ISnapshotCatalogService SnapshotCatalog
+@inject IStorageOverviewService StorageOverview
+@inject INotificationService NotificationService
+@inject IDialogService DialogService
+@inject IActivityLog ActivityLog
+@inject IJSRuntime Js
+@inject ILogger<Dashboard> Logger
+@inject Sluice.Portal.Services.Pipeline.JobProgressStore ProgressStore
+@inject WorkerRegistry WorkerRegistry
+@inject Sluice.Portal.Services.Stores.SettingsStore Settings
+@implements IAsyncDisposable
+
+@inject IStringLocalizer<SharedResource> L
+
+<PageTitle>@L["Nav.Dashboard"]</PageTitle>
+
+@* Panel en una sola pantalla (sin scroll a 1366x768): cabecera con los controles de ejecución,
+   una fila de cifras, el job activo con su lienzo compacto y cola + workers lado a lado. *@
+<div class="page-stack dash">
+    <PageHeader Title="@L["Page.Dashboard.Title"]" Badge="@_mode">
+        <Actions>
+            <div class="dash-run">
+                <FluentSelect TOption="string" TValue="string" Value="@_selectedPipeline" ValueChanged="OnPipelineChanged"
+                              aria-label="@L["Common.Pipeline"]" data-testid="dashboard-pipeline" Style="width:260px;">
+                    @foreach (var p in _pipelines)
+                    {
+                        <FluentOption TValue="string" Value="@p.Id">@p.Name</FluentOption>
+                    }
+                </FluentSelect>
+                <FluentMenu>
+                    <FluentMenuButton Appearance="ButtonAppearance.Primary" Disabled="@string.IsNullOrWhiteSpace(_selectedPipeline)" Label="@L["Common.Actions"]" />
+                    <FluentMenuList>
+                        <PipelineRunActions PipelineId="@_selectedPipeline" OnCompleted="@OnRunCompleted" />
+                    </FluentMenuList>
+                </FluentMenu>
+                <FluentButton Appearance="ButtonAppearance.Subtle" data-testid="test-connections" Disabled="@(string.IsNullOrWhiteSpace(_selectedPipeline) || _testingConnections)" OnClick="TestConnectionAsync">
+                    @if (_testingConnections)
+                    {
+                        <FluentSpinner slot="start" data-testid="test-connections-spinner" Style="width:16px;height:16px;" />
+                    }
+                    @L["Page.Dashboard.TestConnections"]
+                </FluentButton>
+            </div>
+        </Actions>
+    </PageHeader>
+
+    <PanelState IsLoading="@_loading" Error="@_error">
+        <section class="dash-stats" aria-label="@L["Page.Dashboard.Overview"]" data-testid="dashboard-stats">
+            <div class="dash-stat">
+                <span class="dash-stat__label">@L["Page.Dashboard.Tables"]</span>
+                <span class="dash-stat__value">@_tableCount.ToString("N0")</span>
+                <span class="dash-stat__hint">
+                    @L["Page.Dashboard.TablesOk", _okTables.ToString("N0")]
+                    @if (_errorTables > 0)
+                    {
+                        <span class="dash-bad">· @L["Page.Dashboard.TablesError", _errorTables.ToString("N0")]</span>
+                    }
+                </span>
+            </div>
+            @* El aviso de changelog estancado va en la propia cifra del snapshot (con el texto
+               completo en el title): una barra a todo el ancho empujaba el Panel fuera de pantalla. *@
+            <div class="dash-stat@(_changelogStalled ? " dash-stat--warn" : "")" data-testid="dashboard-snapshot">
+                <span class="dash-stat__label">@L["Page.Dashboard.LastSnapshot"]</span>
+                <span class="dash-stat__value dash-stat__value--sm" title="@_lastSnapshot">@(_lastSnapshot ?? "—")</span>
+                @if (_changelogStalled)
+                {
+                    <span class="dash-stat__hint dash-warn" title="@L["Page.Dashboard.ChangelogStalled"]" data-testid="changelog-stalled">
+                        <FluentIcon Value="@WarningIcon" Color="Color.Custom" CustomColor="var(--dash-icon)" />@L["Page.Dashboard.ChangelogStalledShort"]
+                        <span class="dash-vh">: @L["Page.Dashboard.ChangelogStalled"]</span>
+                    </span>
+                }
+                else if (_pendingSnapshots > 0)
+                {
+                    <span class="dash-stat__hint">@L["Page.Dashboard.PendingSnapshots", _pendingSnapshots]</span>
+                }
+            </div>
+            @* La última ejecución es toda la tarjeta: estado, inicio, duración y enlace a su detalle. *@
+            @if (_lastJob is { } last)
+            {
+                <a class="dash-stat dash-stat--link" href="@($"/jobs/{last.Id}")" data-testid="dashboard-last-run"
+                   title="@L["Page.Dashboard.ViewDetail"]">
+                    <span class="dash-stat__label">@L["Page.Dashboard.LastRun"]</span>
+                    <span class="dash-stat__value dash-stat__value--sm dash-stat__run">
+                        <StatusBadge Status="@last.Status.ToString().ToLowerInvariant()" />
+                        <span>@FormatDateTime(last.StartedAt)</span>
+                    </span>
+                    <span class="dash-stat__hint">
+                        @if (RunDuration(last) is { } duration)
+                        {
+                            <span class="dash-num">@JobFlowCanvas.FormatDuration(L, duration) · </span>
+                        }
+                        @JobTypeLabels.Get(L, last.Type) · @PipelineName(last.PipelineId)
+                    </span>
+                </a>
+            }
+            else
+            {
+                <div class="dash-stat">
+                    <span class="dash-stat__label">@L["Page.Dashboard.LastRun"]</span>
+                    <span class="dash-stat__value dash-stat__value--sm">—</span>
+                </div>
+            }
+            <div class="dash-stat" data-testid="dashboard-storage">
+                <span class="dash-stat__label">@L["Page.Dashboard.Storage"]</span>
+                @if (_storageLoading && _storageRow is null)
+                {
+                    <span class="dash-stat__value dash-stat__value--sm">…</span>
+                }
+                else if (_storageRow is null || _storageRow.Unavailable)
+                {
+                    <span class="dash-stat__value dash-stat__value--sm">—</span>
+                    <span class="dash-stat__hint">@L["Page.Dashboard.StorageUnavailable"]</span>
+                }
+                else
+                {
+                    <span class="dash-stat__value dash-stat__value--sm">@L["Page.Dashboard.StorageParquet", _storageRow.ParquetMb]</span>
+                    <span class="dash-stat__hint">@L["Page.Dashboard.StorageFolders", _storageRow.SnapshotFolders.ToString("N0"), _storageRow.EligiblePurge.ToString("N0")]</span>
+                }
+            </div>
+        </section>
+
+        @* Solo con un job activo: sin él, la cifra "Última ejecución" ya cuenta el último. *@
+        @if (_primary is { } active)
+        {
+            <section class="dash-card dash-job" aria-labelledby="dash-job-title" data-testid="dashboard-job">
+                <div class="dash-job__head">
+                    <h2 class="dash-card__title" id="dash-job-title">@L["Page.Dashboard.ActiveJob"]</h2>
+                    <StatusBadge Status="@active.Job.Status.ToString().ToLowerInvariant()" />
+                    <span class="dash-job__name">@JobTypeLabels.Get(L, active.Job.Type) · @PipelineName(active.Job.PipelineId)</span>
+                    <span class="dash-job__pct" data-testid="dashboard-job-percent">@active.Flow.Percent %</span>
+                    <span class="dash-muted dash-num">@JobFlowCanvas.FormatDuration(L, DateTimeOffset.UtcNow - active.Job.StartedAt)</span>
+                    <span class="dash-job__actions">
+                        <a class="dash-link" href="@($"/jobs/{active.Job.Id}")" data-testid="dashboard-job-detail">@L["Page.Dashboard.ViewDetail"]</a>
+                        <FluentButton Appearance="ButtonAppearance.Outline" Size="ButtonSize.Small" Class="btn-danger" OnClick="@(() => CancelJobAsync(active.Job.Id))">@L["Common.Cancel"]</FluentButton>
+                    </span>
+                </div>
+                <JobFlowCanvas Flow="active.Flow" Compact="true" />
+                @* Como mucho una fila más (alto fijo); el resto, enlazado al historial de jobs. *@
+                @if (_active.FirstOrDefault(a => a != active) is { } other)
+                {
+                    var more = _active.Count - 2;
+                    <div class="dash-others" data-testid="dashboard-other-jobs">
+                        <span class="dash-others__name">@JobTypeLabels.Get(L, other.Job.Type) · @PipelineName(other.Job.PipelineId)</span>
+                        <span class="dash-minibar" aria-hidden="true"><span style="--p:@other.Flow.Percent"></span></span>
+                        <span class="dash-num">@other.Flow.Percent %</span>
+                        <span class="dash-muted dash-num">@JobFlowCanvas.FormatDuration(L, DateTimeOffset.UtcNow - other.Job.StartedAt)</span>
+                        <a class="dash-link" href="@($"/jobs/{other.Job.Id}")">@L["Page.Dashboard.ViewDetail"]</a>
+                        @if (more > 0)
+                        {
+                            <a class="dash-link" href="/jobs" data-testid="dashboard-more-jobs">@L["Page.Dashboard.MoreActiveJobs", more]</a>
+                        }
+                    </div>
+                }
+            </section>
+        }
+
+        <div class="dash-ops">
+            <section class="dash-card" aria-labelledby="dash-queue-title" data-testid="dashboard-queue">
+                <h2 class="dash-card__title" id="dash-queue-title">@L["Page.Dashboard.TaskQueue"]</h2>
+                @if (_queue is not null)
+                {
+                    <table class="dash-table">
+                        <thead>
+                            <tr>
+                                <th scope="col"><span class="dash-vh">@L["Page.Dashboard.Stage"]</span></th>
+                                <th scope="col">@L["Page.Dashboard.Pending"]</th>
+                                <th scope="col">@L["Page.Dashboard.Claimed"]</th>
+                                <th scope="col">@L["Page.Dashboard.Done"]</th>
+                                <th scope="col">@L["Page.Dashboard.Error"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var (stage, counts) in QueueRows)
+                            {
+                                <tr>
+                                    <th scope="row">@PipelineStageLabels.GetStageKey(L, stage)</th>
+                                    <td class="@(counts.Pending > 0 ? "dash-strong" : "")">@counts.Pending.ToString("N0")</td>
+                                    <td class="@(counts.Claimed > 0 ? "dash-active" : "")">@counts.Claimed.ToString("N0")</td>
+                                    <td>@counts.Done.ToString("N0")</td>
+                                    <td class="@(counts.Error > 0 ? "dash-bad" : "")">@counts.Error.ToString("N0")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </section>
+
+            <section class="dash-card" aria-labelledby="dash-workers-title" data-testid="dashboard-workers">
+                <h2 class="dash-card__title" id="dash-workers-title">@L["Page.Dashboard.Workers"]</h2>
+                @if (_workers.Count == 0)
+                {
+                    <p class="dash-muted dash-empty">@L["Page.Dashboard.NoWorkers"]</p>
+                }
+                else
+                {
+                    @* Caben las mismas filas que en la cola (4): con más, 3 y una fila "y N más". *@
+                    var shown = _workers.Count <= MaxWorkers ? _workers : _workers.Take(MaxWorkers - 1).ToList();
+                    <ul class="dash-workers">
+                        @foreach (var worker in shown)
+                        {
+                            <li @key="worker.Id">
+                                <code title="@worker.Id">@worker.Id</code>
+                                <span>@PipelineStageLabels.Get(L, worker.Stage)</span>
+                                <StatusBadge Status="@(worker.Status == WorkerState.Busy ? "running" : "idle")" />
+                                <span class="dash-muted dash-num">@(worker.Since is { } since ? L["Page.Dashboard.SinceTime", FormatTime(since)].Value : "")</span>
+                            </li>
+                        }
+                        @if (shown.Count < _workers.Count)
+                        {
+                            <li class="dash-workers__more">
+                                <span class="dash-muted">@L["Page.Dashboard.MoreWorkers", _workers.Count - shown.Count]</span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+        </div>
+    </PanelState>
+</div>
+
+@code {
+    private sealed record StorageRow(int SnapshotFolders, string ParquetMb, int EligiblePurge, bool Unavailable = false);
+    private sealed record ActiveJob(Job Job, JobFlowView Flow);
+
+    private const int MaxWorkers = 4;
+    private static readonly Icon WarningIcon = new Icons.Filled.Size16.Warning();
+
+    private bool _loading = true;
+    private string? _error;
+    private string _mode = "local";
+    private int _tableCount;
+    private int _okTables;
+    private int _errorTables;
+    private string? _lastSnapshot;
+    private Job? _lastJob;
+    private List<Pipeline> _pipelines = [];
+    private string _selectedPipeline = "";
+    private List<ActiveJob> _active = [];
+    private ActiveJob? _primary;
+    private QueueSnapshot? _queue;
+    private List<WorkerStatus> _workers = [];
+    private bool _changelogStalled;
+    private int _pendingSnapshots;
+    private bool _testingConnections;
+    private StorageRow? _storageRow;
+    private bool _storageLoading;
+    private PageRefreshTimer? _timer;
+    private int _adlsRefreshGeneration;
+    private TimeZoneInfo? _timeZone;
+
+    // Cancela la carga de ADLS en curso al salir de la página (si no, terminaba más tarde y
+    // pintaba un componente ya desechado).
+    private readonly CancellationTokenSource _disposeCts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshCoreAsync();
+
+        // Con prerender este método corre dos veces: los datos locales (jobs, cola) se pintan en
+        // el HTML inicial, pero la carga de ADLS y el timer solo arrancan con el circuito (en el
+        // prerender su resultado se descartaba y ADLS se consultaba dos veces).
+        if (!RendererInfo.IsInteractive)
+        {
+            return;
+        }
+
+        _ = RefreshAdlsAsync(Interlocked.Increment(ref _adlsRefreshGeneration), _disposeCts.Token);
+        // Sin jobs en curso refresca cada 15 s (antes se paraba para siempre y un job lanzado
+        // por el scheduler u otro usuario no aparecía sin recargar); con jobs vuelve a 3 s.
+        // El timer dispara en un hilo del pool: el refresco se ejecuta en el dispatcher del
+        // componente (InvokeAsync) para no reasignar listas mientras el renderer las recorre.
+        _timer = new PageRefreshTimer(
+            TimeSpan.FromSeconds(3),
+            ct => InvokeAsync(() => RefreshCoreAsync(ct)),
+            () => _active.Count > 0,
+            idleInterval: TimeSpan.FromSeconds(15),
+            onError: ex => Logger.LogWarning(ex, "Refresco del dashboard falló; se reintenta."));
+        _timer.Start();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        // Las horas se muestran en la zona del navegador (solo se conoce con el circuito conectado).
+        try
+        {
+            var id = await Js.InvokeAsync<string?>("sluiceUi.timeZone");
+            if (!string.IsNullOrWhiteSpace(id) && TimeZoneInfo.TryFindSystemTimeZoneById(id, out var tz))
+            {
+                _timeZone = tz;
+                StateHasChanged();
+            }
+        }
+        catch (JSException ex)
+        {
+            Logger.LogDebug(ex, "No se pudo leer la zona horaria del navegador.");
+        }
+    }
+
+    private async Task OnRunCompleted()
+    {
+        await RefreshCoreAsync();
+    }
+
+    private async Task OnPipelineChanged(string? pipelineId)
+    {
+        _selectedPipeline = pipelineId ?? "";
+        _primary = PickPrimary(_active);
+        _ = RefreshAdlsAsync(Interlocked.Increment(ref _adlsRefreshGeneration), _disposeCts.Token);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RefreshCoreAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            _loading = _pipelines.Count == 0;
+            _error = null;
+            _pipelines = PipelineService.List().ToList();
+            if (string.IsNullOrWhiteSpace(_selectedPipeline) && _pipelines.Count > 0)
+            {
+                _selectedPipeline = _pipelines[0].Id;
+            }
+
+            _tableCount = 0;
+            _okTables = 0;
+            _errorTables = 0;
+            _lastSnapshot = null;
+            foreach (var pipeline in _pipelines)
+            {
+                var state = PipelineService.GetState(pipeline.Id);
+                _tableCount += state.Tables.Count;
+                _okTables += state.Tables.Values.Count(t => string.Equals(t.Status, "ok", StringComparison.OrdinalIgnoreCase));
+                _errorTables += state.Tables.Values.Count(t => !string.Equals(t.Status, "ok", StringComparison.OrdinalIgnoreCase));
+                if (_lastSnapshot is null || string.CompareOrdinal(state.LastProcessedSnapshot, _lastSnapshot) > 0)
+                {
+                    _lastSnapshot = state.LastProcessedSnapshot;
+                }
+            }
+
+            _lastJob = JobService.List(1, 1).FirstOrDefault();
+
+            // ListRunning = JobProgressHelper.IsActive (incluye Partial sin FinishedAt, que sigue
+            // con SQL/Conciliación). El % sale del mismo JobFlowBuilder que el detalle del job.
+            var now = DateTimeOffset.UtcNow;
+            _active = JobService.ListRunning()
+                .OrderByDescending(j => j.StartedAt)
+                .Select(j => new ActiveJob(j, JobFlowBuilder.Build(j, ProgressStore.Load(j.PipelineId, j.Id), now)))
+                .ToList();
+            _primary = PickPrimary(_active);
+
+            _queue = Orchestration.GetQueueSnapshot();
+            // Solo los workers con señal de vida reciente: los de contenedores ya recreados siguen
+            // en disco hasta la purga (WorkerRegistry.StaleAfter) y confundían en el Panel.
+            _workers = WorkerRegistry.ListAlive(WorkerRegistry.AliveWithin(Settings.Get().TaskLeaseSeconds)).ToList();
+            var mode = Orchestration.GetMode();
+            _mode = mode.GetType().GetProperty("mode")?.GetValue(mode)?.ToString() ?? "local";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // El job del pipeline seleccionado manda; si no tiene, el más reciente de los demás.
+    private ActiveJob? PickPrimary(List<ActiveJob> active) =>
+        active.FirstOrDefault(a => a.Job.PipelineId == _selectedPipeline) ?? active.FirstOrDefault();
+
+    private IEnumerable<(string Stage, StageQueueCounts Counts)> QueueRows =>
+        _queue is null
+            ? []
+            : [("ingest", _queue.Ingest), ("sql", _queue.Sql), ("reconcile", _queue.Reconcile)];
+
+    private static TimeSpan? RunDuration(Job job) =>
+        job.FinishedAt is { } finished ? finished - job.StartedAt
+        : JobProgressHelper.IsActive(job) ? DateTimeOffset.UtcNow - job.StartedAt
+        : null;
+
+    private string PipelineName(string pipelineId) =>
+        _pipelines.FirstOrDefault(p => p.Id == pipelineId)?.Name ?? pipelineId;
+
+    private DateTimeOffset ToLocal(DateTimeOffset at) =>
+        _timeZone is null ? at.ToLocalTime() : TimeZoneInfo.ConvertTime(at, _timeZone);
+
+    private string FormatDateTime(DateTimeOffset at) => ToLocal(at).ToString("g", CultureInfo.CurrentCulture);
+
+    private string FormatTime(DateTimeOffset at) => ToLocal(at).ToString("HH:mm", CultureInfo.CurrentCulture);
+
+    // ADLS (storage + changelog) se carga en segundo plano: no bloquea el panel ni el timer de 3s.
+    private async Task RefreshAdlsAsync(int generation, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(_selectedPipeline))
+        {
+            _storageRow = null;
+            _changelogStalled = false;
+            _pendingSnapshots = 0;
+            return;
+        }
+
+        _storageLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var pipelineId = _selectedPipeline;
+            var storageTask = StorageOverview.GetPipelineAsync(pipelineId, ct);
+            var catalogTask = SnapshotCatalog.GetCatalogAsync(pipelineId, ct);
+            await Task.WhenAll(storageTask, catalogTask);
+
+            if (generation != _adlsRefreshGeneration || pipelineId != _selectedPipeline)
+            {
+                return;
+            }
+
+            var stats = await storageTask;
+            _storageRow = stats is null
+                ? null
+                : new StorageRow(
+                    stats.SnapshotFolderCount,
+                    FormatMb(stats.ParquetBytes),
+                    stats.EligibleSnapshotPurgeCount,
+                    stats.Unavailable);
+
+            var catalog = await catalogTask;
+            _changelogStalled = catalog.IsChangelogStalled;
+            _pendingSnapshots = catalog.PendingSnapshots.Count;
+        }
+        catch
+        {
+            if (generation == _adlsRefreshGeneration)
+            {
+                _storageRow = new StorageRow(0, "—", 0, Unavailable: true);
+                _changelogStalled = false;
+                _pendingSnapshots = 0;
+            }
+        }
+        finally
+        {
+            if (generation == _adlsRefreshGeneration && !ct.IsCancellationRequested)
+            {
+                _storageLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private static string FormatMb(long bytes) => (bytes / (1024.0 * 1024.0)).ToString("N1");
+
+    private async Task CancelJobAsync(string jobId)
+    {
+        // Confirmación con MessageBox: cancelar un job en ejecución es destructivo.
+        var result = await DialogService.ShowConfirmationAsync(
+            string.Format(L["Common.CancelJobConfirm"].Value, jobId),
+            L["Common.CancelJobTitle"].Value,
+            L["Common.Cancel"].Value,
+            L["Common.Back"].Value);
+        if (result.Cancelled)
+        {
+            return;
+        }
+
+        try
+        {
+            await Orchestration.CancelAsync(jobId);
+            await NotificationService.ShowInfoToastAsync(string.Format(L["Page.Dashboard.JobCancelled"].Value, jobId));
+            ActivityLog.LogUser("job.cancel", $"Cancelación manual del job {jobId}.", jobId: jobId);
+            await RefreshCoreAsync();
+        }
+        catch (Exception ex)
+        {
+            await NotificationService.ShowErrorToastAsync(ex.Message);
+        }
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        var pipeline = _pipelines.FirstOrDefault(p => p.Id == _selectedPipeline);
+        if (pipeline is null)
+        {
+            return;
+        }
+
+        // Spinner mientras corren los dos tests secuenciales (source + destination): es el
+        // caso de mayor latencia (hasta dos Connect Timeout encadenados).
+        _testingConnections = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var src = await Connections.TestAsync(pipeline.SourceId);
+            var dst = await Connections.TestAsync(pipeline.DestinationId);
+            var summary = $"{L["Page.Dashboard.Source"].Value}: {(src.Ok ? L["Page.Dashboard.Ok"].Value : src.Message)} | {L["Page.Dashboard.Destination"].Value}: {(dst.Ok ? L["Page.Dashboard.Ok"].Value : dst.Message)}";
+            if (src.Ok && dst.Ok)
+            {
+                await NotificationService.ShowSuccessToastAsync(summary);
+            }
+            else
+            {
+                await NotificationService.ShowWarningToastAsync(summary);
+            }
+            ActivityLog.LogUser("connection.test", $"Test de conexiones del pipeline {_selectedPipeline}: {summary}", _selectedPipeline, level: src.Ok && dst.Ok ? "info" : "warning");
+        }
+        finally
+        {
+            _testingConnections = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
+        if (_timer is not null)
+        {
+            await _timer.DisposeAsync();
+        }
+    }
+}

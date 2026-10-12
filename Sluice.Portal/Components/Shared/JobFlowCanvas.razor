@@ -1,0 +1,425 @@
+@* Lienzo del flujo de un job: carriles (etapas) con sus pasos, conectores, estado con icono +
+   texto, paso en curso animado y panel de detalle del paso seleccionado. Solo pinta lo que trae
+   JobFlowView (estados, contadores y porcentajes los calcula JobFlowBuilder).
+   Se re-renderiza cada 2 s con el job en curso: @key en carriles y pasos + clases estables por
+   estado => Blazor solo parchea textos/variables y las animaciones CSS no se reinician. *@
+@using System.Globalization
+@inject IStringLocalizer<SharedResource> L
+
+<div class="jfc@(Compact ? " jfc--compact" : "")" data-testid="job-flow">
+    @if (!Compact)
+    {
+    <p class="jfc__shape">
+        <strong>@JobTypeLabels.Get(L, Flow.Type)</strong>
+        <span class="jfc__shape-sep" aria-hidden="true">|</span>
+        <span>@ShapePath</span>
+        @if (!string.IsNullOrWhiteSpace(Flow.ScopeEntity))
+        {
+            <span class="jfc__shape-sep" aria-hidden="true">|</span>
+            <span>@L["JobFlow.ScopeEntity", Flow.ScopeEntity]</span>
+        }
+        <span class="jfc__shape-sep" aria-hidden="true">|</span>
+        <span>@L["JobFlow.StepCount", Flow.Steps.Count()]</span>
+    </p>
+    }
+
+    <div class="jfc__body">
+        <div class="jfc__canvas">
+            <ol class="jfc__lanes" aria-label="@L["JobFlow.AriaLabel"]">
+                @for (var li = 0; li < Flow.Stages.Count; li++)
+                {
+                    var stage = Flow.Stages[li];
+                    var linkState = li == 0 ? null : LinkState(Flow.Stages[li - 1], stage);
+                    <li @key="stage.Key" class="jfc-lane jfc-lane--@Css(stage.Status)" data-testid="flow-stage-@stage.Key" data-status="@Css(stage.Status)">
+                        @if (linkState is not null)
+                        {
+                            <span class="jfc-link" data-state="@linkState" aria-hidden="true"></span>
+                        }
+                        <div class="jfc-lane__head">
+                            <span class="jfc-lane__tile" aria-hidden="true"><FluentIcon Value="@StageIcon(stage.Key)" Color="Color.Custom" CustomColor="var(--jfc-icon)" /></span>
+                            <div class="jfc-lane__titles">
+                                <h3 class="jfc-lane__title" id="@($"jfc-lane-{stage.Key}")">@PipelineStageLabels.GetStageKey(L, stage.Key)</h3>
+                                <p class="jfc-lane__meta">
+                                    <span class="jfc-chip jfc-chip--@Css(stage.Status)"><FluentIcon Value="@StatusIcon(stage.Status)" Color="Color.Custom" CustomColor="var(--jfc-icon)" />@StatusText(stage.Status)</span>
+                                    @if (stage.Duration is { } stageDuration)
+                                    {
+                                        <span>@FormatDuration(L, stageDuration)</span>
+                                    }
+                                </p>
+                            </div>
+                        </div>
+                        @if (stage.Status == FlowStatus.Skipped)
+                        {
+                            <p class="jfc-lane__skip">
+                                <b>@L["JobFlow.SkippedSteps", JobStepCatalog.ForStage(stage.Key).Count()]</b>
+                                @if (!string.IsNullOrWhiteSpace(stage.SkipReasonKey))
+                                {
+                                    @L[stage.SkipReasonKey]
+                                }
+                            </p>
+                        }
+                        else
+                        {
+                            <div class="jfc-lane__bar" aria-hidden="true"><span style="--p:@stage.Percent"></span></div>
+                            <ol class="jfc-steps" aria-labelledby="@($"jfc-lane-{stage.Key}")">
+                                @for (var si = 0; si < stage.Steps.Count; si++)
+                                {
+                                    var step = stage.Steps[si];
+                                    var position = si + 1;
+                                    var selected = step.Key == EffectiveSelection;
+                                    <li @key="step.Key" class="jfc-step" data-link="@StepLink(step.Status)">
+                                        @if (Compact)
+                                        {
+                                            @* Compacto (Panel): sin selección ni detalle, el nodo no es interactivo. *@
+                                            <div class="jfc-node jfc-node--@Css(step.Status)"
+                                                 aria-current="@(step.Status == FlowStatus.Running ? "step" : null)"
+                                                 data-testid="flow-step-@step.Key"
+                                                 data-status="@Css(step.Status)">
+                                                @NodeBody(step, position, stage.Steps.Count)
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <button type="button"
+                                                    class="jfc-node jfc-node--@Css(step.Status)"
+                                                    aria-pressed="@(selected ? "true" : "false")"
+                                                    aria-current="@(step.Status == FlowStatus.Running ? "step" : null)"
+                                                    data-testid="flow-step-@step.Key"
+                                                    data-status="@Css(step.Status)"
+                                                    @onclick="() => SelectAsync(step.Key)">
+                                                @NodeBody(step, position, stage.Steps.Count)
+                                            </button>
+                                        }
+                                    </li>
+                                }
+                            </ol>
+                        }
+                    </li>
+                }
+            </ol>
+        </div>
+
+        @if (!Compact && SelectedStep is { } detail)
+        {
+            var detailStage = Flow.Stages.First(s => s.Key == detail.StageKey);
+            <section class="jfc-detail jfc-detail--@Css(detail.Status)" aria-labelledby="jfc-detail-title" data-testid="flow-detail">
+                <div class="jfc-detail__head">
+                    <span class="jfc-detail__tile" aria-hidden="true"><FluentIcon Value="@StepIcon(detail.Key)" Color="Color.Custom" CustomColor="var(--jfc-icon)" /></span>
+                    <div>
+                        <p class="jfc-detail__eyebrow">@PipelineStageLabels.GetStageKey(L, detail.StageKey) · @L["JobFlow.StepOf", detailStage.Steps.ToList().IndexOf(detail) + 1, detailStage.Steps.Count]</p>
+                        <h3 class="jfc-detail__title" id="jfc-detail-title">@StepLabel(detail.Key)</h3>
+                        <p class="jfc-detail__hint">@L[$"JobFlow.Step.{detail.Key}.Hint"]</p>
+                    </div>
+                </div>
+                <p class="jfc-detail__status">
+                    <span class="jfc-chip jfc-chip--@Css(detail.Status)"><FluentIcon Value="@StatusIcon(detail.Status)" Color="Color.Custom" CustomColor="var(--jfc-icon)" />@StatusText(detail.Status)</span>
+                </p>
+                @if (detail.Total > 0)
+                {
+                    <div class="jfc-detail__progress">
+                        <div class="jfc-detail__progress-row">
+                            <strong>@detail.Done.ToString("N0") / @detail.Total.ToString("N0")</strong>
+                            <span>@UnitText(detail.Unit) · @detail.Percent %</span>
+                        </div>
+                        <span class="jfc-node__bar" aria-hidden="true"><span style="--p:@detail.Percent"></span></span>
+                    </div>
+                }
+                <dl class="jfc-detail__grid">
+                    <div><dt>@L["JobFlow.Detail.Start"]</dt><dd>@FormatTime(detail.StartedAt)</dd></div>
+                    <div><dt>@L["JobFlow.Detail.End"]</dt><dd>@(detail.Status == FlowStatus.Running ? L["JobFlow.Detail.InProgress"].Value : FormatTime(detail.FinishedAt))</dd></div>
+                    <div><dt>@L["JobFlow.Detail.Duration"]</dt><dd>@(detail.Duration is { } d ? FormatDuration(L, d) : "—")</dd></div>
+                    @if (!string.IsNullOrWhiteSpace(detail.Phase))
+                    {
+                        <div><dt>@L["JobFlow.Detail.Phase"]</dt><dd>@PhaseText(detail.Phase)</dd></div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(detail.Item))
+                    {
+                        <div><dt>@L[detail.Unit == StepUnit.Snapshots ? "JobFlow.Detail.CurrentSnapshot" : "JobFlow.Detail.CurrentEntity"]</dt><dd>@detail.Item</dd></div>
+                    }
+                    @if (detail.Failed > 0)
+                    {
+                        <div><dt>@L["JobFlow.Detail.Failed"]</dt><dd>@detail.Failed.ToString("N0")</dd></div>
+                    }
+                    @foreach (var fact in detail.Facts)
+                    {
+                        <div><dt>@L[fact.LabelKey]</dt><dd>@FactValue(fact)</dd></div>
+                    }
+                    @if (ParquetLocation is not null && detail.Key is JobStepCatalog.Consolidate or JobStepCatalog.Compare)
+                    {
+                        <div class="jfc-detail__wide" data-testid="flow-detail-parquet">
+                            <dt>@L[detail.Key == JobStepCatalog.Consolidate ? "JobFlow.Detail.PublishedTo" : "JobFlow.Detail.ComparedParquet"]</dt>
+                            <dd>
+                                <code>@ParquetLocation</code>
+                                @if (ParquetHref is not null)
+                                {
+                                    <a href="@ParquetHref">@L["JobFlow.Detail.OpenParquet"]</a>
+                                }
+                            </dd>
+                        </div>
+                    }
+                </dl>
+                <div class="jfc-detail__msg">
+                    <h4>@L["JobFlow.Detail.LastMessage"]</h4>
+                    <p>@(string.IsNullOrWhiteSpace(detail.Message) ? L["JobFlow.Detail.NoMessage"].Value : detail.Message)</p>
+                </div>
+            </section>
+        }
+    </div>
+
+    @* Solo anuncia cambios de estado de los pasos (no los contadores: el refresco es cada 2 s). *@
+    <div class="jfc-vh" role="status" aria-live="polite">@_announcement</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public JobFlowView Flow { get; set; } = default!;
+
+    // Paso seleccionado (null = automático: sigue al paso en curso o al que falló).
+    [Parameter] public string? SelectedKey { get; set; }
+    [Parameter] public EventCallback<string?> SelectedKeyChanged { get; set; }
+
+    // Compacto (Panel): sin línea de forma ni panel de detalle; nodos bajos (icono, nombre,
+    // estado y contador) y no interactivos.
+    [Parameter] public bool Compact { get; set; }
+
+    // Zona horaria del navegador para Inicio/Fin (null = hora local del servidor).
+    [Parameter] public TimeZoneInfo? TimeZone { get; set; }
+
+    // Dónde publica el ingest el parquet consolidado (cuenta/contenedor/pipeline/) y enlace a la
+    // página Parquet: se muestran en el detalle de "Consolidar y publicar en ADLS" y "Comparar".
+    [Parameter] public string? ParquetLocation { get; set; }
+    [Parameter] public string? ParquetHref { get; set; }
+
+    private Dictionary<string, FlowStatus>? _previous;
+    private string? _announcement;
+
+    private static readonly Dictionary<string, Icon> StepIcons = new()
+    {
+        [JobStepCatalog.Discover] = new Icons.Regular.Size20.FolderSearch(),
+        [JobStepCatalog.Snapshots] = new Icons.Regular.Size20.DocumentTableArrowRight(),
+        [JobStepCatalog.Consolidate] = new Icons.Regular.Size20.Merge(),
+        [JobStepCatalog.Register] = new Icons.Regular.Size20.BookmarkMultiple(),
+        [JobStepCatalog.Prepare] = new Icons.Regular.Size20.DatabaseSettings(),
+        [JobStepCatalog.Merge] = new Icons.Regular.Size20.DatabaseArrowRight(),
+        [JobStepCatalog.Compare] = new Icons.Regular.Size20.ColumnDoubleCompare(),
+        [JobStepCatalog.Report] = new Icons.Regular.Size20.ClipboardTaskListLtr(),
+    };
+
+    private static readonly Dictionary<string, Icon> StageIcons = new()
+    {
+        ["ingest"] = new Icons.Regular.Size20.CloudArrowDown(),
+        ["sql"] = new Icons.Regular.Size20.Database(),
+        ["reconcile"] = new Icons.Regular.Size20.Scales(),
+    };
+
+    private static readonly Icon FallbackIcon = new Icons.Regular.Size20.Circle();
+
+    private static readonly Dictionary<FlowStatus, Icon> StatusIcons = new()
+    {
+        [FlowStatus.Pending] = new Icons.Regular.Size16.Clock(),
+        [FlowStatus.Running] = new Icons.Regular.Size16.ArrowSync(),
+        [FlowStatus.Done] = new Icons.Filled.Size16.CheckmarkCircle(),
+        [FlowStatus.NoNewData] = new Icons.Regular.Size16.CheckmarkCircleHint(),
+        [FlowStatus.Warning] = new Icons.Filled.Size16.Warning(),
+        [FlowStatus.Error] = new Icons.Filled.Size16.ErrorCircle(),
+        [FlowStatus.Blocked] = new Icons.Regular.Size16.ClockWarning(),
+        [FlowStatus.Cancelled] = new Icons.Regular.Size16.DismissCircle(),
+        [FlowStatus.Skipped] = new Icons.Regular.Size16.ArrowStepOver(),
+        [FlowStatus.NotReached] = new Icons.Regular.Size16.SubtractCircle(),
+        [FlowStatus.Interrupted] = new Icons.Regular.Size16.PlugDisconnected(),
+    };
+
+    // Estados "alcanzados": la etapa o el paso llegó a ejecutarse.
+    private static bool Reached(FlowStatus s) =>
+        s is FlowStatus.Running or FlowStatus.Done or FlowStatus.NoNewData or FlowStatus.Warning
+            or FlowStatus.Error or FlowStatus.Blocked or FlowStatus.Interrupted;
+
+    protected override void OnParametersSet()
+    {
+        var current = Flow.Steps.ToDictionary(s => s.Key, s => s.Status);
+        if (_previous is not null)
+        {
+            var changed = Flow.Steps.Where(s => _previous.TryGetValue(s.Key, out var before) && before != s.Status).ToList();
+            if (changed.Count > 0)
+            {
+                _announcement = string.Join(". ", changed.Select(s => L["JobFlow.Announce", StepLabel(s.Key), StatusText(s.Status)].Value));
+            }
+        }
+
+        _previous = current;
+    }
+
+    private string? EffectiveSelection
+    {
+        get
+        {
+            if (SelectedKey is not null && Flow.Steps.Any(s => s.Key == SelectedKey))
+            {
+                return SelectedKey;
+            }
+
+            if (Flow.CurrentStepKey is not null)
+            {
+                return Flow.CurrentStepKey;
+            }
+
+            var steps = Flow.Steps.ToList();
+            return (steps.FirstOrDefault(s => s.Status is FlowStatus.Error or FlowStatus.Blocked or FlowStatus.Interrupted or FlowStatus.Warning)
+                    ?? steps.LastOrDefault(s => Reached(s.Status))
+                    ?? steps.FirstOrDefault())?.Key;
+        }
+    }
+
+    private FlowStepView? SelectedStep => Flow.Steps.FirstOrDefault(s => s.Key == EffectiveSelection);
+
+    private Task SelectAsync(string key) => SelectedKeyChanged.InvokeAsync(key);
+
+    private RenderFragment NodeBody(FlowStepView step, int position, int count) => __builder =>
+    {
+        var counter = CounterText(step);
+        var activity = Compact ? null : ActivityText(step);
+        <span class="jfc-node__tile" aria-hidden="true"><FluentIcon Value="@StepIcon(step.Key)" Color="Color.Custom" CustomColor="var(--jfc-icon)" /></span>
+        <span class="jfc-node__text">
+            <span class="jfc-vh">@L["JobFlow.StepOf", position, count]: </span>
+            <span class="jfc-node__label">@StepLabel(step.Key)</span>
+            <span class="jfc-node__status">
+                <span class="jfc-node__state"><FluentIcon Value="@StatusIcon(step.Status)" Color="Color.Custom" CustomColor="var(--jfc-icon)" />@StatusText(step.Status)</span>
+                @if (!Compact && step.Duration is { } stepDuration)
+                {
+                    <span>· @FormatDuration(L, stepDuration)</span>
+                }
+                @if (Compact && counter is not null)
+                {
+                    <span class="jfc-node__counter">· @counter</span>
+                }
+            </span>
+            @if (!Compact && counter is not null)
+            {
+                <span class="jfc-node__counter">
+                    @counter
+                    @if (step.Failed > 0)
+                    {
+                        <span class="jfc-node__failed"> · @L["JobFlow.Counter.Failed", step.Failed]</span>
+                    }
+                </span>
+            }
+            @if (Compact && step.Failed > 0)
+            {
+                <span class="jfc-node__failed">@L["JobFlow.Counter.Failed", step.Failed]</span>
+            }
+            @if (activity is not null)
+            {
+                <span class="jfc-node__activity">@activity</span>
+            }
+            @if (ShowBar(step))
+            {
+                <span class="jfc-node__bar" aria-hidden="true"><span style="--p:@step.Percent"></span></span>
+            }
+        </span>
+    };
+
+    private string ShapePath
+    {
+        get
+        {
+            var active = Flow.Stages.Where(s => s.Status != FlowStatus.Skipped).Select(s => PipelineStageLabels.GetStageKey(L, s.Key));
+            var skipped = Flow.Stages.Where(s => s.Status == FlowStatus.Skipped).Select(s => L["JobFlow.StageSkipped", PipelineStageLabels.GetStageKey(L, s.Key)].Value);
+            var path = string.Join(" → ", active);
+            return skipped.Any() ? $"{string.Join(" · ", skipped)} · {path}" : path;
+        }
+    }
+
+    // Conector de entrada a un carril: punteado si el anterior se omitió (Force/Resync empiezan en SQL).
+    private static string LinkState(FlowStageView previous, FlowStageView stage) =>
+        previous.Status == FlowStatus.Skipped || !Reached(stage.Status) ? "idle"
+        : stage.Status == FlowStatus.Running ? "active"
+        : "done";
+
+    private static string StepLink(FlowStatus status) =>
+        status == FlowStatus.Running ? "active" : Reached(status) ? "done" : "idle";
+
+    private static string Css(FlowStatus status) => status.ToString().ToLowerInvariant();
+
+    private static bool ShowBar(FlowStepView step) =>
+        step.Total > 0 && step.Status is FlowStatus.Running or FlowStatus.Error or FlowStatus.Warning or FlowStatus.Blocked or FlowStatus.Interrupted;
+
+    private static Icon StepIcon(string key) => StepIcons.GetValueOrDefault(key, FallbackIcon);
+
+    private static Icon StageIcon(string key) => StageIcons.GetValueOrDefault(key, FallbackIcon);
+
+    private static Icon StatusIcon(FlowStatus status) => StatusIcons[status];
+
+    private string StatusText(FlowStatus status) => L[$"JobFlow.Status.{status}"].Value;
+
+    private string StepLabel(string key) => L[$"JobFlow.Step.{key}"].Value;
+
+    private string UnitText(StepUnit unit) => unit switch
+    {
+        StepUnit.Snapshots => L["JobFlow.Unit.Snapshots"].Value,
+        StepUnit.Entities => L["JobFlow.Unit.Entities"].Value,
+        _ => "",
+    };
+
+    private string? CounterText(FlowStepView step)
+    {
+        // Sin avance todavía (pendiente, no alcanzado...) el "0 / 63" solo añade ruido.
+        if (step.Unit == StepUnit.None || (step.Done == 0 && step.Status != FlowStatus.Running))
+        {
+            return null;
+        }
+
+        return step.Total > 0
+            ? $"{step.Done.ToString("N0")} / {step.Total.ToString("N0")} {UnitText(step.Unit)}"
+            : $"{step.Done.ToString("N0")} {UnitText(step.Unit)}";
+    }
+
+    // Fase + elemento en curso ("Eliminando huérfanas · custinvoicetrans"), solo mientras corre.
+    private string? ActivityText(FlowStepView step)
+    {
+        if (step.Status != FlowStatus.Running)
+        {
+            return null;
+        }
+
+        var parts = new[] { string.IsNullOrWhiteSpace(step.Phase) ? null : PhaseText(step.Phase), step.Item }
+            .Where(p => !string.IsNullOrWhiteSpace(p));
+        var text = string.Join(" · ", parts);
+        return text.Length == 0 ? null : text;
+    }
+
+    private string PhaseText(string phase)
+    {
+        var text = L[$"JobFlow.Phase.{phase}"];
+        return text.ResourceNotFound ? phase : text.Value;
+    }
+
+    private static string FactValue(FlowFact fact) =>
+        fact.Number is { } n ? n.ToString("N0")
+        : fact.Percent is { } p ? p.ToString("P2")
+        : fact.Text ?? "—";
+
+    private string FormatTime(DateTimeOffset? at)
+    {
+        if (at is null)
+        {
+            return "—";
+        }
+
+        var local = TimeZone is null ? at.Value.ToLocalTime() : TimeZoneInfo.ConvertTime(at.Value, TimeZone);
+        return local.ToString("HH:mm:ss", CultureInfo.CurrentCulture);
+    }
+
+    // "7 s", "6 min 02 s", "1 h 05 min". Compartido con la cabecera de JobDetail.
+    public static string FormatDuration(IStringLocalizer<SharedResource> l, TimeSpan d)
+    {
+        if (d < TimeSpan.Zero)
+        {
+            d = TimeSpan.Zero;
+        }
+
+        return d.TotalHours >= 1
+            ? l["JobFlow.Duration.HoursMinutes", (int)d.TotalHours, d.Minutes.ToString("00")].Value
+            : d.TotalMinutes >= 1
+                ? l["JobFlow.Duration.MinutesSeconds", (int)d.TotalMinutes, d.Seconds.ToString("00")].Value
+                : l["JobFlow.Duration.Seconds", (int)d.TotalSeconds].Value;
+    }
+}

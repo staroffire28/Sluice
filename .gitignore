@@ -1,0 +1,45 @@
+# Secretos locales
+Sluice.Portal/appsettings.Development.json
+.env
+.env.*
+!.env.example
+
+# Build / IDE
+bin/
+obj/
+.vs/
+*.user
+
+# Artefactos de ejecución de tests (xUnit / Playwright)
+[Tt]est[Rr]esults/
+test-results/
+playwright-report/
+*.trx
+
+# Datos de runtime
+data/
+.gstack/
+
+# Material de referencia/análisis: pipeline de Microsoft y datos de la instancia
+# F&O (model.json, GlobalOptionsetMetadata.csv). No es código del proyecto.
+references/
+
+# Configuraciones de otros asistentes IA y logs de agentes (ruido, no es código)
+.kiro/
+.junie/
+.continue/
+.codebuddy/
+.agents/
+.omc/
+.spec-workflow/
+terminals/
+agent-tools/
+.claude/
+docs/superpowers/
+mcps/
+skills-lock.json
+.mcp.json
+
+# Artefactos de runtime del redeploy
+scripts/redeploy-done.txt
+scripts/redeploy.log

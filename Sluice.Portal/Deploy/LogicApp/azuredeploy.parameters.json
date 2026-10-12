@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "logicAppName": { "value": "sluice-alertas" },
+    "recipients": { "value": "operaciones@contoso.com;dba@contoso.com" },
+    "portalBaseUrl": { "value": "https://sluice.contoso.com" },
+    "office365ConnectionName": { "value": "sluice-office365" }
+  }
+}

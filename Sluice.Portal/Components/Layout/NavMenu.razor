@@ -1,0 +1,74 @@
+@using System.Text.Json
+@inject IStringLocalizer<SharedResource> L
+@inject IJSRuntime Js
+@rendermode InteractiveServer
+
+<FluentNav Id="@Id" Class="app-nav">
+    @foreach (var group in _groups)
+    {
+        <FluentNavCategory Title="@L[group.TitleKey]" IconRest="@group.Icon"
+                           Expanded="@_expanded[group.Key]"
+                           ExpandedChanged="@(expanded => OnGroupToggledAsync(group.Key, expanded))">
+            @foreach (var entry in group.Entries)
+            {
+                <FluentNavItem Href="@entry.Href" Match="@entry.Match" IconRest="@entry.Icon">
+                    @L[entry.TextKey]
+                </FluentNavItem>
+            }
+        </FluentNavCategory>
+    }
+</FluentNav>
+
+@code {
+    private const string GroupsStorageKey = "sluice-nav-groups";
+
+    // El layout pinta dos menús (lateral y panel de la hamburguesa en móvil): cada uno con su id.
+    [Parameter] public string Id { get; set; } = "main-menu";
+
+    // Páginas y grupos compartidos con el riel de iconos (NavRail).
+    private readonly IReadOnlyList<NavGroup> _groups = NavCatalog.Groups;
+    private readonly Dictionary<string, bool> _expanded = NavCatalog.Groups.ToDictionary(g => g.Key, _ => true);
+
+    // Igual que el tema (ThemeToggle), el estado persistido solo puede
+    // leerse tras el primer render (requiere el circuito interactivo); hasta entonces se
+    // muestran los 4 grupos expandidos por defecto.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        var stored = await Js.InvokeAsync<string?>("sluiceUi.getItem", GroupsStorageKey);
+        if (string.IsNullOrWhiteSpace(stored))
+        {
+            return;
+        }
+
+        try
+        {
+            var state = JsonSerializer.Deserialize<Dictionary<string, bool>>(stored);
+            if (state is null)
+            {
+                return;
+            }
+
+            foreach (var group in _groups)
+            {
+                _expanded[group.Key] = state.GetValueOrDefault(group.Key, true);
+            }
+
+            StateHasChanged();
+        }
+        catch (JsonException)
+        {
+            // Valor corrupto en localStorage: se ignora, quedan expandidos por defecto.
+        }
+    }
+
+    private async Task OnGroupToggledAsync(string key, bool expanded)
+    {
+        _expanded[key] = expanded;
+        await Js.InvokeVoidAsync("sluiceUi.setItem", GroupsStorageKey, JsonSerializer.Serialize(_expanded));
+    }
+}

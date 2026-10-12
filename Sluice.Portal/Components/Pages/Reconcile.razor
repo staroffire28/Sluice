@@ -1,0 +1,313 @@
+@page "/reconcile"
+@rendermode InteractiveServer
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Models
+@using Sluice.Portal.Services
+@using Sluice.Portal.Services.Stores
+@using Sluice.Portal.Services.Logging
+@inject IPipelineService PipelineService
+@inject ReportStore Reports
+@inject SettingsStore Settings
+@inject IOrchestrationService Orchestration
+@inject INotificationService NotificationService
+@inject IActivityLog ActivityLog
+
+@inject IStringLocalizer<SharedResource> L
+
+<PageTitle>@L["Nav.Reconcile"]</PageTitle>
+
+<FluentStack Class="page-stack" Orientation="Orientation.Vertical" VerticalGap="12">
+    <PageHeader Title="@L["Page.Reconcile.Title"]" Subtitle="@L["Page.Reconcile.Subtitle"]" />
+
+    <PageSection>
+        <div class="toolbar">
+            <FluentSelect TOption="string" TValue="string" @bind-Value="_pipelineId" @bind-Value:after="Load" data-testid="recon-pipeline" Label="@L["Common.Pipeline"]" Style="min-width:240px;">
+                @foreach (var p in PipelineService.List())
+                {
+                    <FluentOption TValue="string" Value="@p.Id">@p.Name</FluentOption>
+                }
+            </FluentSelect>
+            <FluentButton Appearance="ButtonAppearance.Outline" data-testid="recon-compare-values"
+                          Disabled="@string.IsNullOrWhiteSpace(_pipelineId)"
+                          IconStart="@(new Icons.Regular.Size20.Search())"
+                          OnClick="@(() => CompareValuesAsync(null))">@L["Page.Reconcile.CompareValues"]</FluentButton>
+        </div>
+
+        @if (_autoRemediate)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Info" data-testid="recon-autofix-on" Style="margin-bottom:0.75rem;">@L["Page.Reconcile.AutoFixOn"]</FluentMessageBar>
+        }
+
+        <PanelState IsEmpty="@(string.IsNullOrWhiteSpace(_pipelineId))" EmptyText="@L["Page.Reconcile.SelectPipeline"]">
+            <PanelState IsEmpty="@(_report is null)" EmptyText="@L["Page.Reconcile.NoReport"]">
+                @if (_report is not null)
+                {
+                    <FluentMessageBar Intent="@(_report.IsPartial ? MessageBarIntent.Warning : MessageBarIntent.Success)" Style="margin-bottom:0.75rem;">
+                        @L["Page.Reconcile.LastReconcile"]: @_report.CreatedAt.ToLocalTime().ToString("u") — @_report.MaxDivergencePct.ToString("F2")%
+                    </FluentMessageBar>
+
+                    <PanelState IsEmpty="@(_allRows.Count == 0)" EmptyText="@L["Page.Reconcile.NoDivergence"]">
+                        @* MultiLine: sin él la fila tiene alto fijo y, si los botones de acciones no
+                           caben en una línea, el que salta invade la fila siguiente. La columna de
+                           acciones reserva sitio para los tres botones en escritorio. *@
+                        <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true"
+                                        GridTemplateColumns="minmax(160px, 1.6fr) 1fr 1fr 0.9fr 1.2fr 0.9fr minmax(300px, 2fr)"
+                                        Items="@_rows.AsQueryable()" TGridItem="ReconRow">
+                            <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" />
+                            <PropertyColumn Property="@(r => r.SourceRows)" Title="@L["Page.Reconcile.Source"]" />
+                            <PropertyColumn Property="@(r => r.DestinationRows)" Title="@L["Page.Reconcile.Destination"]" />
+                            <TemplateColumn Title="@L["Page.Reconcile.Divergence"]">
+                                <FluentBadge Appearance="@(context.DivergencePct > 0 ? BadgeAppearance.Filled : BadgeAppearance.Tint)" Color="@(context.DivergencePct > 0 ? BadgeColor.Brand : BadgeColor.Informative)">
+                                    @context.DivergencePct.ToString("F2")%
+                                </FluentBadge>
+                            </TemplateColumn>
+                            <TemplateColumn Title="@L["Page.Reconcile.Direction"]">
+                                @DirectionLabel(context)
+                            </TemplateColumn>
+                            <TemplateColumn Title="@L["Common.Status"]">
+                                @if (context.Accepted)
+                                {
+                                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">@L["Page.Reconcile.Accepted"]</FluentBadge>
+                                }
+                            </TemplateColumn>
+                            <TemplateColumn Title="@L["Common.Actions"]">
+                                <div class="grid-actions">
+                                    <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity" Appearance="ButtonAppearance.Primary"
+                                                       TestId="@($"recon-resync-{context.Entity}")" ActivityAction="reconcile.resync" OnStarted="Load" />
+                                    @if (context.SourceRows > context.DestinationRows)
+                                    {
+                                        <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity" Mode="ResyncMode.Remerge"
+                                                           TestId="@($"recon-remerge-{context.Entity}")" ActivityAction="reconcile.resync" OnStarted="Load" />
+                                    }
+                                    @if (context.Accepted)
+                                    {
+                                        <FluentButton Appearance="ButtonAppearance.Outline" data-testid="@($"recon-unaccept-{context.Entity}")" OnClick="@(() => Unaccept(context))">@L["Page.Reconcile.Unaccept"]</FluentButton>
+                                    }
+                                    else
+                                    {
+                                        <FluentButton Appearance="ButtonAppearance.Outline" data-testid="@($"recon-accept-{context.Entity}")" OnClick="@(() => Accept(context))">@L["Page.Reconcile.Accept"]</FluentButton>
+                                    }
+                                </div>
+                            </TemplateColumn>
+                        </FluentDataGrid>
+                        <PaginationControl Page="_page" TotalPages="_totalPages" TotalCount="_totalCount" PageChanged="OnPageChanged" />
+                    </PanelState>
+                }
+            </PanelState>
+        </PanelState>
+    </PageSection>
+
+    @if (!string.IsNullOrWhiteSpace(_pipelineId))
+    {
+        <PageSection>
+            <h4>@L["Page.Reconcile.Values.Title"]</h4>
+            <p class="field-hint">@L["Page.Reconcile.Values.Hint"]</p>
+            <PanelState IsEmpty="@(_values is null)" EmptyText="@L["Page.Reconcile.Values.None"]">
+                @if (_values is not null)
+                {
+                    <FluentMessageBar data-testid="values-summary" Intent="@(_values.HasDifferences ? MessageBarIntent.Warning : MessageBarIntent.Success)" Style="margin-bottom:0.75rem;">
+                        @L["Page.Reconcile.Values.Last"]: @_values.CreatedAt.ToLocalTime().ToString("u") — @string.Format(L["Page.Reconcile.Values.Summary"].Value, _values.Entities.Count, _values.Entities.Count(e => e.HasDifferences))
+                    </FluentMessageBar>
+
+                    @if (_valueRows.Count > 0)
+                    {
+                        <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true"
+                                        GridTemplateColumns="minmax(160px, 1.6fr) 1fr 1fr 0.9fr 0.9fr 0.9fr minmax(280px, 2fr)"
+                                        Items="@_valueRows.AsQueryable()" TGridItem="ValueCompareEntityResult" data-testid="values-grid">
+                            <TemplateColumn Title="@L["Common.Entity"]">
+                                <span data-testid="@($"values-row-{context.Entity}")">@context.Entity</span>
+                            </TemplateColumn>
+                            <PropertyColumn Property="@(r => r.SourceRows)" Title="@L["Page.Reconcile.Source"]" />
+                            <PropertyColumn Property="@(r => r.DestinationRows)" Title="@L["Page.Reconcile.Destination"]" />
+                            @* Las muestras de Id (hasta 20) van en el tooltip de cada contador. *@
+                            <TemplateColumn Title="@L["Page.Reconcile.Values.Different"]">
+                                <span data-testid="@($"values-different-{context.Entity}")" title="@string.Join("\n", context.SampleDifferent)">@context.Different</span>
+                            </TemplateColumn>
+                            <TemplateColumn Title="@L["Page.Reconcile.Values.Missing"]">
+                                <span data-testid="@($"values-missing-{context.Entity}")" title="@string.Join("\n", context.SampleMissing)">@context.MissingInDestination</span>
+                            </TemplateColumn>
+                            <TemplateColumn Title="@L["Page.Reconcile.Values.Extra"]">
+                                <span data-testid="@($"values-extra-{context.Entity}")" title="@string.Join("\n", context.SampleExtra)">@context.ExtraInDestination</span>
+                            </TemplateColumn>
+                            <TemplateColumn Title="@L["Common.Actions"]">
+                                <div class="grid-actions">
+                                    @if (context.Error is not null)
+                                    {
+                                        <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Danger" title="@context.Error">@L["Page.Reconcile.Values.Error"]</FluentBadge>
+                                    }
+                                    else
+                                    {
+                                        <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity" Appearance="ButtonAppearance.Primary"
+                                                           TestId="@($"values-resync-{context.Entity}")" ActivityAction="reconcile.resync" OnStarted="Load" />
+                                    }
+                                    <FluentButton Appearance="ButtonAppearance.Outline" data-testid="@($"values-compare-{context.Entity}")"
+                                                  OnClick="@(() => CompareValuesAsync(context.Entity))">@L["Page.Reconcile.CompareAgain"]</FluentButton>
+                                </div>
+                            </TemplateColumn>
+                        </FluentDataGrid>
+                    }
+                }
+            </PanelState>
+        </PageSection>
+    }
+
+    @if (_history.Count > 0)
+    {
+        <PageSection>
+            <h4>@L["Page.Reconcile.History"]</h4>
+            <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Medium" Items="@_history.AsQueryable()" TGridItem="ReconcileRemediation" data-testid="recon-history">
+                <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" />
+                <PropertyColumn Property="@(r => r.Mode)" Title="@L["Page.Reconcile.Mode"]" />
+                <TemplateColumn Title="@L["Page.Reconcile.Origin"]">
+                    @if (context.TriggeredBy == AutoRemediation.TriggeredByAuto)
+                    {
+                        <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Brand" data-testid="@($"history-auto-{context.Entity}")">@L["Page.Reconcile.Origin.Auto"]</FluentBadge>
+                    }
+                    else
+                    {
+                        <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">@L["Page.Reconcile.Origin.User"]</FluentBadge>
+                    }
+                </TemplateColumn>
+                <PropertyColumn Property="@(r => r.DivergenceBefore)" Title="@L["Page.Reconcile.Divergence"]" Format="F2" />
+                <PropertyColumn Property="@(r => r.TriggeredAt)" Title="@L["Page.Reconcile.LastReconcile"]" Format="u" />
+            </FluentDataGrid>
+        </PageSection>
+    }
+</FluentStack>
+
+@code {
+    private string _pipelineId = "";
+    private ReconcileReport? _report;
+    private List<ReconRow> _allRows = [];
+    private List<ReconRow> _rows = [];
+    private List<ReconcileRemediation> _history = [];
+    private ValueCompareReport? _values;
+    private List<ValueCompareEntityResult> _valueRows = [];
+    private bool _autoRemediate;
+    private int _page = 1;
+    private const int PageSize = 20;
+    private int _totalCount;
+    private int _totalPages = 1;
+
+    protected override void OnInitialized()
+    {
+        // El aviso de corrección automática no depende de que haya pipelines.
+        _autoRemediate = Settings.Get().AutoRemediate;
+        var first = PipelineService.List().FirstOrDefault();
+        if (first is not null)
+        {
+            _pipelineId = first.Id;
+            Load();
+        }
+    }
+
+    private void Load()
+    {
+        _autoRemediate = Settings.Get().AutoRemediate;
+        if (string.IsNullOrWhiteSpace(_pipelineId))
+        {
+            _report = null;
+            _allRows = [];
+            _history = [];
+            _values = null;
+            _valueRows = [];
+            ApplyPaging();
+            return;
+        }
+
+        // Comparación de valores: solo las tablas con diferencias o que no se pudieron comparar.
+        _values = Reports.GetLatestValues(_pipelineId);
+        _valueRows = _values?.Entities
+            .Where(e => e.HasDifferences || e.Error is not null)
+            .OrderByDescending(e => e.Different + e.MissingInDestination + e.ExtraInDestination)
+            .ToList() ?? [];
+
+        _report = Reports.GetLatestReconcile(_pipelineId);
+        var acks = Reports.GetAcks(_pipelineId);
+        _history = Reports.ListRemediations(_pipelineId).ToList();
+        _allRows = _report is null
+            ? []
+            : _report.Entities
+                // Solo las que divergen: las que ya coinciden no necesitan acción.
+                .Where(e => e.DivergencePct > 0)
+                .OrderByDescending(e => e.DivergencePct)
+                .Select(e => new ReconRow
+                {
+                    Entity = e.Entity,
+                    SourceRows = e.SourceRows,
+                    DestinationRows = e.DestinationRows,
+                    DivergencePct = e.DivergencePct,
+                    Accepted = acks.ContainsKey(e.Entity),
+                })
+                .ToList();
+
+        ApplyPaging();
+    }
+
+    // Los stores subyacentes ya cargan todo en memoria; paginar aquí es solo de
+    // presentación, sin tocar los servicios (ver Tables.razor, mismo patrón).
+    private void ApplyPaging()
+    {
+        _totalCount = _allRows.Count;
+        _totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+        if (_page > _totalPages)
+        {
+            _page = _totalPages;
+        }
+
+        _rows = _allRows.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
+    }
+
+    private void OnPageChanged(int page)
+    {
+        _page = page;
+        ApplyPaging();
+    }
+
+    private string DirectionLabel(ReconRow row) =>
+        row.SourceRows > row.DestinationRows ? L["Page.Reconcile.DirSourceGtDest"].Value
+        : row.DestinationRows > row.SourceRows ? L["Page.Reconcile.DirDestGtSource"].Value
+        : L["Page.Reconcile.DirMatch"].Value;
+
+    // Comparación de valores de una tabla o, con entity null, de todas las del pipeline. Es un job:
+    // el resultado aparece aquí al terminar.
+    private async Task CompareValuesAsync(string? entity)
+    {
+        try
+        {
+            var job = await Orchestration.CompareValuesAsync(_pipelineId, entity);
+            await NotificationService.ShowSuccessToastAsync(string.Format(L["Page.Reconcile.Values.Started"].Value, job.Id));
+            ActivityLog.LogUser("reconcile.values", $"Comparación de valores de {entity ?? "todas las tablas"} (job {job.Id}).", _pipelineId, job.Id);
+        }
+        catch (Exception ex)
+        {
+            await NotificationService.ShowErrorToastAsync(ex.Message);
+            ActivityLog.LogUser("reconcile.values", $"No se pudo iniciar la comparación de valores: {ex.Message}", _pipelineId, level: "error");
+        }
+    }
+
+    private void Accept(ReconRow row)
+    {
+        Reports.SaveAck(_pipelineId, row.Entity, new ReconAck { AckPct = row.DivergencePct });
+        _ = NotificationService.ShowInfoToastAsync(string.Format(L["Page.Reconcile.AcceptedToast"].Value, row.Entity));
+        ActivityLog.LogUser("reconcile.accept", $"Divergencia de {row.Entity} aceptada ({row.DivergencePct:F2}%).", _pipelineId);
+        Load();
+    }
+
+    private void Unaccept(ReconRow row)
+    {
+        Reports.RemoveAck(_pipelineId, row.Entity);
+        _ = NotificationService.ShowInfoToastAsync(string.Format(L["Page.Reconcile.UnacceptedToast"].Value, row.Entity));
+        ActivityLog.LogUser("reconcile.accept", $"Se quitó la aceptación de {row.Entity}.", _pipelineId);
+        Load();
+    }
+
+    private sealed class ReconRow
+    {
+        public string Entity { get; init; } = "";
+        public long SourceRows { get; init; }
+        public long DestinationRows { get; init; }
+        public double DivergencePct { get; init; }
+        public bool Accepted { get; init; }
+    }
+}

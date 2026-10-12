@@ -1,0 +1,136 @@
+.docs-layout {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+}
+
+.docs-nav {
+    flex: 0 0 220px;
+    position: sticky;
+    top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.docs-nav__link {
+    padding: 6px 10px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--colorNeutralForeground1, #242424);
+    font-size: 0.9rem;
+}
+
+.docs-nav__link:hover {
+    background: var(--colorSubtleBackgroundHover, #f3f2f1);
+}
+
+.docs-nav__link--active {
+    background: var(--colorBrandBackground, #1B365D);
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.docs-content {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 900px;
+    line-height: 1.6;
+}
+
+/* El HTML viene de MarkupString (sin atributo de scope), así que se estiliza con ::deep.
+   DocsService baja un nivel los encabezados (el h1 es la cabecera de la página): h2 es el
+   título del documento, h3 sus secciones y h4 las subsecciones. */
+.docs-content ::deep h2 {
+    font-size: 1.6rem;
+    margin: 0 0 0.5em;
+}
+
+.docs-content ::deep h3 {
+    font-size: 1.3rem;
+    margin: 1.4em 0 0.4em;
+    border-bottom: 1px solid var(--colorNeutralStroke2, #e1dfdd);
+    padding-bottom: 0.2em;
+}
+
+.docs-content ::deep h4 {
+    font-size: 1.1rem;
+    margin: 1.2em 0 0.3em;
+}
+
+.docs-content ::deep table {
+    border-collapse: collapse;
+    margin: 1em 0;
+    width: 100%;
+}
+
+.docs-content ::deep th,
+.docs-content ::deep td {
+    border: 1px solid var(--colorNeutralStroke2, #e1dfdd);
+    padding: 6px 10px;
+    text-align: left;
+    font-size: 0.88rem;
+}
+
+.docs-content ::deep th {
+    background: var(--colorNeutralBackground3, #f3f2f1);
+}
+
+.docs-content ::deep code {
+    background: var(--colorNeutralBackground3, #f3f2f1);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.85em;
+}
+
+.docs-content ::deep pre {
+    background: var(--colorNeutralBackground3, #f3f2f1);
+    padding: 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+}
+
+.docs-content ::deep pre code {
+    background: none;
+    padding: 0;
+}
+
+.docs-content ::deep blockquote {
+    border-left: 3px solid var(--colorBrandStroke1, #1B365D);
+    margin: 1em 0;
+    padding: 0.2em 1em;
+    color: var(--colorNeutralForeground3, #605e5c);
+}
+
+.docs-content ::deep a {
+    color: var(--colorBrandForeground1, #1B365D);
+}
+
+@media (max-width: 768px) {
+    /* stretch: con flex-start el artículo tomaba el ancho de su línea más larga (un <pre>)
+       y desbordaba la pantalla; así el <pre> se ciñe a la columna y usa su scroll. */
+    .docs-layout {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    /* El índice en fila (chips que pasan a la línea siguiente) en vez de cuatro enlaces
+       apilados que ocupaban la primera pantalla. */
+    .docs-nav {
+        position: static;
+        flex-basis: auto;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .docs-nav__link {
+        border: 1px solid var(--colorNeutralStroke2, #e1dfdd);
+    }
+
+    /* Una tabla más ancha que la pantalla se desplaza en horizontal, como el <pre>. */
+    .docs-content ::deep table {
+        display: block;
+        overflow-x: auto;
+    }
+}

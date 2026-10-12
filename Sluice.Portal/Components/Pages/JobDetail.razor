@@ -1,0 +1,691 @@
+@page "/jobs/{JobId}"
+@rendermode InteractiveServer
+@using System.Globalization
+@using System.Text.Json
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Models
+@using Sluice.Portal.Services
+@using Sluice.Portal.Services.Logging
+@using Sluice.Portal.Services.Pipeline
+@inject IJobService JobService
+@inject IPipelineService PipelineService
+@inject IConnectionService ConnectionService
+@inject IOrchestrationService Orchestration
+@inject JobProgressStore ProgressStore
+@inject Sluice.Portal.Services.Stores.ReportStore Reports
+@inject IJSRuntime Js
+@inject INotificationService NotificationService
+@inject IDialogService DialogService
+@inject IActivityLog ActivityLog
+@inject ILogger<JobDetail> Logger
+@inject NavigationManager Nav
+@inject IStringLocalizer<SharedResource> L
+@implements IAsyncDisposable
+
+<PageTitle>@L["Page.JobDetail.Tab"] @JobId</PageTitle>
+
+<PanelState IsLoading="@_loading" Error="@_error" IsEmpty="@(_job is null && !_loading)" EmptyText="@L["Page.JobDetail.Empty"]">
+    @if (_job is not null && _flow is not null)
+    {
+        var job = _job;
+        <div class="page-stack jd">
+            <nav class="jd-crumb" aria-label="@L["Page.JobDetail.Breadcrumb"]">
+                <a href="/jobs"><FluentIcon Value="@ArrowLeft" Color="Color.Custom" CustomColor="var(--jd-icon)" />@L["Nav.Jobs"]</a>
+                <span aria-hidden="true">/</span>
+                <span class="jd-crumb__current" title="@job.Id">@job.Id</span>
+            </nav>
+
+            <header class="jd-head" data-testid="job-header">
+                <div class="jd-head__titles">
+                    <h1 class="jd-head__title">@JobTypeLabels.Get(L, job.Type) · @_pipelineName</h1>
+                    <div class="jd-head__meta">
+                        <StatusBadge Status="@job.Status.ToString().ToLowerInvariant()" />
+                        @if (JobProgressHelper.IsActive(job))
+                        {
+                            <span class="jd-head__pct jd-num" data-testid="job-percent">@_flow.Percent %</span>
+                        }
+                        <span><span class="jd-muted">@L["Page.JobDetail.Started"]</span> @FormatDateTime(job.StartedAt)</span>
+                        <span><span class="jd-muted">@L["JobFlow.Detail.Duration"]</span> <span class="jd-num" data-testid="job-duration">@JobFlowCanvas.FormatDuration(L, (job.FinishedAt ?? DateTimeOffset.UtcNow) - job.StartedAt)</span></span>
+                        <span class="jd-id">
+                            <span class="jd-muted">ID</span>
+                            <code title="@job.Id">@JobIdLabels.Short(job.Id)</code>
+                            <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small"
+                                          IconStart="@CopyIcon"
+                                          Title="@L["Page.JobDetail.CopyId"]" aria-label="@L["Page.JobDetail.CopyId"]"
+                                          data-testid="copy-job-id" OnClick="CopyIdAsync" />
+                        </span>
+                    </div>
+                </div>
+                <div class="jd-head__actions">
+                    @if (JobProgressHelper.IsActive(job))
+                    {
+                        <FluentButton Appearance="ButtonAppearance.Outline" Class="btn-danger" data-testid="cancel-job" OnClick="@(() => CancelJobAsync(job.Id))">@L["Common.Cancel"]</FluentButton>
+                    }
+                    else if (job.Status is JobStatus.Error or JobStatus.Partial or JobStatus.Blocked)
+                    {
+                        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="retry-job" OnClick="@(() => RetryJobAsync(job.Id))">@L["Common.Retry"]</FluentButton>
+                    }
+                </div>
+            </header>
+
+            @if (job.Status is JobStatus.Error or JobStatus.Partial or JobStatus.Blocked)
+            {
+                var affected = AffectedEntities(job);
+                var cause = Cause(job);
+                <FluentMessageBar Intent="@(job.Status == JobStatus.Error ? MessageBarIntent.Error : MessageBarIntent.Warning)"
+                                  Layout="MessageBarLayout.MultiLine" AllowDismiss="false"
+                                  Title="@L[$"Page.JobDetail.Alert.{job.Status}"]" data-testid="job-alert">
+                    @if (cause is not null)
+                    {
+                        <span class="jd-alert__line">@cause</span>
+                    }
+                    @if (affected.Count > 0)
+                    {
+                        <span class="jd-alert__line">
+                            @L["Page.JobDetail.Alert.Entities", affected.Count] @string.Join(", ", affected.Take(5))@(affected.Count > 5 ? " " + L["Page.JobDetail.Alert.More", affected.Count - 5].Value : "")
+                        </span>
+                    }
+                </FluentMessageBar>
+            }
+
+            <div class="jd-metrics" data-testid="job-metrics">
+                <div class="jd-metric">
+                    <span class="jd-metric__label">@L["Page.JobDetail.Metric.Snapshots"]</span>
+                    <span class="jd-metric__value">@SnapshotsMetric(job, LiveStep(job, JobStepCatalog.Snapshots))</span>
+                    <span class="jd-metric__hint">@(JobSummary.GetString(job, "stoppedAtIncompleteSnapshot") is null ? L["Page.JobDetail.Metric.SnapshotsHint"].Value : L["Page.JobDetail.Metric.SnapshotsStopped"].Value)</span>
+                </div>
+                <div class="jd-metric">
+                    <span class="jd-metric__label">@L["Page.JobDetail.Metric.CsvRows"]</span>
+                    <span class="jd-metric__value">@FormatNumber(JobSummary.GetLong(job, "csvRows") ?? LiveStep(job, JobStepCatalog.Snapshots)?.Rows)</span>
+                    <span class="jd-metric__hint">@L["Page.JobDetail.Metric.CsvRowsHint"]</span>
+                </div>
+                <div class="jd-metric">
+                    <span class="jd-metric__label">@L["Page.JobDetail.Metric.SqlRows"]</span>
+                    <span class="jd-metric__value">@FormatNumber(SqlRows(job) ?? LiveStep(job, JobStepCatalog.Merge)?.Rows)</span>
+                    <span class="jd-metric__hint">@L["Page.JobDetail.Metric.SqlRowsHint"]</span>
+                </div>
+                <div class="jd-metric">
+                    <span class="jd-metric__label">@L["Page.JobDetail.Metric.Divergence"]</span>
+                    <span class="jd-metric__value">@(JobSummary.GetDouble(job, "maxDivergencePct") is { } div ? div.ToString("N2") + " %" : "—")</span>
+                    <span class="jd-metric__hint">@(SummaryBool(job, "reconcilePartial") ? L["Page.JobDetail.Metric.DivergencePartial"].Value : L["Page.JobDetail.Metric.DivergenceHint"].Value)</span>
+                </div>
+            </div>
+
+            <PageSection Title="@L["Page.JobDetail.StageFlow"]">
+                <JobFlowCanvas Flow="_flow" @bind-SelectedKey="_selectedStep" TimeZone="_timeZone"
+                               ParquetLocation="@_parquetLocation" ParquetHref="@_parquetHref" />
+            </PageSection>
+
+            <PageSection Title="@L["Page.JobDetail.Entities"]">
+                @if (job.Type is JobType.Reconcile or JobType.Diff)
+                {
+                    // Reconcile y Diff no rellenan Job.Entities: su resultado por entidad es el
+                    // reporte del job (ReconcileReport / DiffReport).
+                    var isDiff = job.Type == JobType.Diff;
+                    <PanelState IsEmpty="@(_comparison.Count == 0)" EmptyText="@EntitiesEmptyText(job)">
+                        @{
+                            var rows = _comparison
+                                .Where(r => string.IsNullOrWhiteSpace(_entitySearch) || r.Entity.Contains(_entitySearch.Trim(), StringComparison.OrdinalIgnoreCase))
+                                .OrderBy(r => r.Entity, StringComparer.OrdinalIgnoreCase)
+                                .ToList();
+                            var comparePages = Math.Max(1, (int)Math.Ceiling(rows.Count / (double)EntityPageSize));
+                            var comparePage = Math.Min(_entityPage, comparePages);
+                            var comparePaged = rows.Skip((comparePage - 1) * EntityPageSize).Take(EntityPageSize).ToList();
+                        }
+                        <div class="jd-toolbar">
+                            <FluentTextInput @bind-Value="_entitySearch" @bind-Value:after="ResetEntityPage"
+                                             Immediate="true" ImmediateDelay="250"
+                                             Label="@L["Common.Search"]" Placeholder="@L["Page.JobDetail.EntitySearch"]"
+                                             data-testid="entity-search" Style="min-width:240px;" />
+                            <span class="jd-muted">@L["Page.JobDetail.EntityCount", rows.Count, _comparison.Count]</span>
+                        </div>
+                        <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" Items="@comparePaged.AsQueryable()" TGridItem="CompareRow" Style="width:100%;" data-testid="entity-compare">
+                            <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" />
+                            <TemplateColumn Title="@L[isDiff ? "Page.JobDetail.Compare.Source" : "Page.JobDetail.Compare.Parquet"]" Align="DataGridCellAlignment.End">
+                                <span class="jd-num">@context.Source.ToString("N0")</span>
+                            </TemplateColumn>
+                            <TemplateColumn Title="@L[isDiff ? "Page.JobDetail.Compare.Destination" : "Page.JobDetail.Compare.Sql"]" Align="DataGridCellAlignment.End">
+                                <span class="jd-num">@context.Destination.ToString("N0")</span>
+                            </TemplateColumn>
+                            <TemplateColumn Title="@L[isDiff ? "Page.JobDetail.Compare.Delta" : "Page.JobDetail.Compare.Divergence"]" Align="DataGridCellAlignment.End">
+                                <span class="jd-num">@(isDiff ? context.Delta?.ToString("N0") : context.DivergencePct?.ToString("N2") + " %")</span>
+                            </TemplateColumn>
+                        </FluentDataGrid>
+                        @if (comparePages > 1)
+                        {
+                            <PaginationControl Page="comparePage" TotalPages="comparePages" TotalCount="rows.Count" PageChanged="@(p => _entityPage = p)" />
+                        }
+                        <p class="jd-note">@L[isDiff ? "Page.JobDetail.Compare.NoteDiff" : "Page.JobDetail.Compare.NoteReconcile"]</p>
+                    </PanelState>
+                }
+                else
+                {
+                    <PanelState IsEmpty="@(job.Entities.Count == 0)" EmptyText="@EntitiesEmptyText(job)">
+                        @{
+                            var filtered = FilteredEntities(job);
+                            var pages = Math.Max(1, (int)Math.Ceiling(filtered.Count / (double)EntityPageSize));
+                            var page = Math.Min(_entityPage, pages);
+                            var paged = filtered.Skip((page - 1) * EntityPageSize).Take(EntityPageSize).ToList();
+                        }
+                        <div class="jd-toolbar">
+                            <FluentTextInput @bind-Value="_entitySearch" @bind-Value:after="ResetEntityPage"
+                                             Immediate="true" ImmediateDelay="250"
+                                             Label="@L["Common.Search"]" Placeholder="@L["Page.JobDetail.EntitySearch"]"
+                                             data-testid="entity-search" Style="min-width:240px;" />
+                            <span class="jd-muted">@L["Page.JobDetail.EntityCount", filtered.Count, job.Entities.Count]</span>
+                        </div>
+                        <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" Items="@paged.AsQueryable()" TGridItem="JobEntityResult" Style="width:100%;" data-testid="entity-grid">
+                            <PropertyColumn Property="@(e => e.Entity)" Title="@L["Common.Entity"]" />
+                            <TemplateColumn Title="@L["Page.JobDetail.ReadRows"]" Align="DataGridCellAlignment.End">
+                                <span class="jd-num">@context.CsvRows.ToString("N0")</span>
+                            </TemplateColumn>
+                            <TemplateColumn Title="@L["Page.JobDetail.InSqlRows"]" Align="DataGridCellAlignment.End">
+                                <span class="jd-num">@(context.SqlRows?.ToString("N0") ?? "—")</span>
+                            </TemplateColumn>
+                            <TemplateColumn Title="@L["Page.JobDetail.IngestState"]">
+                                @EntityState(IngestState(context))
+                            </TemplateColumn>
+                            <TemplateColumn Title="@L["Page.JobDetail.SqlState"]">
+                                @EntityState(SqlState(context))
+                            </TemplateColumn>
+                        </FluentDataGrid>
+                        @if (pages > 1)
+                        {
+                            <PaginationControl Page="page" TotalPages="pages" TotalCount="filtered.Count" PageChanged="@(p => _entityPage = p)" />
+                        }
+                        <p class="jd-note">@L["Page.JobDetail.EntitiesNote"]</p>
+                    </PanelState>
+                }
+            </PageSection>
+
+            <PageSection Title="@L["Page.JobDetail.Timeline"]">
+                @{
+                    var groups = TimelineGroups(job);
+                }
+                <div class="jd-toolbar">
+                    <div class="jd-seg" role="group" aria-label="@L["Page.JobDetail.TimelineFilter"]">
+                        <button type="button" aria-pressed="@(_onlyIssues ? "false" : "true")" data-testid="timeline-all" @onclick="() => _onlyIssues = false">@L["Page.JobDetail.TimelineAll"]</button>
+                        <button type="button" aria-pressed="@(_onlyIssues ? "true" : "false")" data-testid="timeline-issues" @onclick="() => _onlyIssues = true">@L["Page.JobDetail.TimelineIssues"]</button>
+                    </div>
+                    <span class="jd-muted">@L["Page.JobDetail.TimelineLocalTime"]</span>
+                </div>
+                @if (groups.Count == 0)
+                {
+                    <p class="jd-muted">@L[_onlyIssues ? "Page.JobDetail.TimelineNoIssues" : "Page.JobDetail.TimelineEmpty"]</p>
+                }
+                else
+                {
+                    <ol class="jd-groups" data-testid="timeline">
+                        @foreach (var group in groups)
+                        {
+                            var expanded = _expanded.Contains(group.Key);
+                            <li @key="group.Key" class="jd-group">
+                                <button type="button" class="jd-group__head" aria-expanded="@(expanded ? "true" : "false")" aria-controls="@($"jd-events-{group.Key}")" data-testid="timeline-group-@group.Key" @onclick="() => Toggle(group.Key)">
+                                    <FluentIcon Value="@(expanded ? ChevronDown : ChevronRight)" Color="Color.Custom" CustomColor="var(--jd-icon)" />
+                                    <span class="jd-group__title">@group.Title</span>
+                                    @if (group.Summary is not null)
+                                    {
+                                        <span class="jd-group__summary">@group.Summary</span>
+                                    }
+                                    <span class="jd-group__counts">
+                                        @Plural("Page.JobDetail.EventCount", group.Events.Count)
+                                        @if (group.Warnings > 0)
+                                        {
+                                            <span class="jd-lvl jd-lvl--warning">· @Plural("Page.JobDetail.WarningCount", group.Warnings)</span>
+                                        }
+                                        @if (group.Errors > 0)
+                                        {
+                                            <span class="jd-lvl jd-lvl--error">· @Plural("Page.JobDetail.ErrorCount", group.Errors)</span>
+                                        }
+                                    </span>
+                                </button>
+                                @if (expanded)
+                                {
+                                    <ol class="jd-events" id="@($"jd-events-{group.Key}")">
+                                        @foreach (var ev in group.Events)
+                                        {
+                                            var level = ev.Level.ToString().ToLowerInvariant();
+                                            <li class="jd-event jd-event--@level">
+                                                <time class="jd-num" datetime="@ev.At.ToString("O")" title="@FormatDateTime(ev.At)">@FormatTime(ev.At)</time>
+                                                @if (ev.Level != EventLevel.Info)
+                                                {
+                                                    <span class="jd-lvl jd-lvl--@level">
+                                                        <FluentIcon Value="@(ev.Level == EventLevel.Error ? ErrorIcon : WarningIcon)" Color="Color.Custom" CustomColor="var(--jd-icon)" />@EventLevelLabels.Get(L, ev.Level)
+                                                    </span>
+                                                }
+                                                <span class="jd-event__msg">@ev.Message</span>
+                                            </li>
+                                        }
+                                    </ol>
+                                }
+                            </li>
+                        }
+                    </ol>
+                }
+            </PageSection>
+        </div>
+    }
+</PanelState>
+
+@code {
+    [Parameter] public string JobId { get; set; } = "";
+
+    private const int EntityPageSize = 15;
+    private static readonly Icon ArrowLeft = new Icons.Regular.Size16.ArrowLeft();
+    private static readonly Icon CopyIcon = new Icons.Regular.Size16.Copy();
+    private static readonly Icon ChevronDown = new Icons.Regular.Size16.ChevronDown();
+    private static readonly Icon ChevronRight = new Icons.Regular.Size16.ChevronRight();
+    private static readonly Icon ErrorIcon = new Icons.Filled.Size16.ErrorCircle();
+    private static readonly Icon WarningIcon = new Icons.Filled.Size16.Warning();
+    private static readonly string[] GroupKeys = ["job", "ingest", "sql", "reconcile"];
+
+    private Job? _job;
+    private JobFlowView? _flow;
+    private JobProgress? _lastProgress;
+    private List<CompareRow> _comparison = [];
+    private string _pipelineName = "";
+    private string? _parquetLocation;
+    private string? _parquetHref;
+
+    // Dónde publica el ingest el parquet consolidado: cuenta/contenedor de parquet/pipeline/
+    // (config no secreta de la conexión de origen, como la lee ConnectionSettingsFactory).
+    private string ParquetLocation(Pipeline? pipeline, string pipelineId)
+    {
+        var config = pipeline is null ? null : ConnectionService.Get(pipeline.SourceId)?.Config;
+        string? Value(params string[] keys) =>
+            keys.Select(k => config?.GetValueOrDefault(k)).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+        var prefix = string.Join("/", new[] { Value("account", "storage_account"), Value("parquet_container", "destination_container") }
+            .Where(v => v is not null));
+        return prefix.Length == 0 ? $"{pipelineId}/" : $"{prefix}/{pipelineId}/";
+    }
+    private bool _loading = true;
+    private string? _error;
+    private PageRefreshTimer? _timer;
+    private string? _selectedStep;
+    private TimeZoneInfo? _timeZone;
+    private string? _entitySearch;
+    private int _entityPage = 1;
+    private bool _onlyIssues;
+    private readonly HashSet<string> _expanded = [];
+    private bool _expandedInitialized;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        _timer = new PageRefreshTimer(
+            TimeSpan.FromSeconds(2),
+            RefreshAsync,
+            () => _job is not null && JobProgressHelper.IsActive(_job),
+            onError: ex => Logger.LogWarning(ex, "Refresco del job {JobId} falló; se reintenta.", JobId));
+        _timer.Start();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        // La hora "local" es la del navegador: solo se conoce con el circuito conectado.
+        try
+        {
+            var id = await Js.InvokeAsync<string?>("sluiceUi.timeZone");
+            if (!string.IsNullOrWhiteSpace(id) && TimeZoneInfo.TryFindSystemTimeZoneById(id, out var tz))
+            {
+                _timeZone = tz;
+                StateHasChanged();
+            }
+        }
+        catch (JSException ex)
+        {
+            Logger.LogDebug(ex, "No se pudo leer la zona horaria del navegador.");
+        }
+    }
+
+    private async Task RefreshAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            _error = null;
+            _job = JobService.Get(JobId);
+            if (_job is not null)
+            {
+                if (_pipelineName.Length == 0)
+                {
+                    var pipeline = PipelineService.Get(_job.PipelineId);
+                    _pipelineName = pipeline?.Name ?? _job.PipelineId;
+                    _parquetLocation = ParquetLocation(pipeline, _job.PipelineId);
+                    _parquetHref = $"/parquet?pipeline={Uri.EscapeDataString(_job.PipelineId)}";
+                }
+
+                // Sin progress.json (jobs viejos) el flujo sale solo del Job. Con el job en curso,
+                // un null es casi siempre una lectura fallida puntual (fichero bloqueado o a medio
+                // reemplazar): se conserva el último progreso válido para que el lienzo no parpadee.
+                var progress = ProgressStore.Load(_job.PipelineId, _job.Id);
+                if (progress is null && JobProgressHelper.IsActive(_job))
+                {
+                    progress = _lastProgress;
+                }
+
+                _lastProgress = progress;
+                _flow = JobFlowBuilder.Build(_job, progress, DateTimeOffset.UtcNow);
+                _comparison = LoadComparison(_job);
+                InitExpandedOnce();
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // ---- Cabecera ----
+
+    private async Task CopyIdAsync()
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", JobId);
+            await NotificationService.ShowInfoToastAsync(L["Page.JobDetail.IdCopied"].Value);
+        }
+        catch (JSException)
+        {
+            await NotificationService.ShowErrorToastAsync(L["Page.JobDetail.CopyFailed"].Value);
+        }
+    }
+
+    private DateTimeOffset ToLocal(DateTimeOffset at) =>
+        _timeZone is null ? at.ToLocalTime() : TimeZoneInfo.ConvertTime(at, _timeZone);
+
+    private string FormatDateTime(DateTimeOffset at) => ToLocal(at).ToString("g", CultureInfo.CurrentCulture);
+
+    private string FormatTime(DateTimeOffset at) => ToLocal(at).ToString("HH:mm:ss", CultureInfo.CurrentCulture);
+
+    // ---- Alerta ----
+
+    private string? Cause(Job job) =>
+        JobSummary.GetString(job, "stoppedAtIncompleteSnapshot") is { } incomplete
+            ? L["Page.JobDetail.Alert.Incomplete", incomplete].Value
+            : job.Events.LastOrDefault(e => e.Level == EventLevel.Error)?.Message
+              ?? job.Events.LastOrDefault(e => e.Level == EventLevel.Warning)?.Message;
+
+    private static List<string> AffectedEntities(Job job) =>
+        job.Entities
+            .Where(e => e.Status is not ("ok" or "done"))
+            .Select(e => e.Entity)
+            .OrderBy(e => e, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    // ---- Métricas (Summary llega como JsonElement tras pasar por JSON) ----
+
+    private static object? SummaryValue(Job job, string key) => job.Summary.GetValueOrDefault(key);
+
+    private static bool SummaryBool(Job job, string key) => SummaryValue(job, key) switch
+    {
+        JsonElement { ValueKind: JsonValueKind.True } => true,
+        bool b => b,
+        _ => false,
+    };
+
+    private static string FormatNumber(long? value) => value?.ToString("N0") ?? "—";
+
+    // Mientras la etapa corre su Summary aún no existe: las métricas salen del progress.json
+    // (paso con tiempos propios = registrado por el executor). Al terminar, el Summary manda.
+    private FlowStepView? LiveStep(Job job, string stepKey) =>
+        JobProgressHelper.IsActive(job) && _flow?.Steps.FirstOrDefault(s => s.Key == stepKey) is { StartedAt: not null } step
+            ? step
+            : null;
+
+    private static string SnapshotsMetric(Job job, FlowStepView? live) =>
+        (JobSummary.GetLong(job, "snapshotsProcessed"), JobSummary.GetLong(job, "snapshotsSelected")) switch
+        {
+            ({ } done, { } selected) when selected > 0 => $"{done:N0} / {selected:N0}",
+            ({ } done, _) => done.ToString("N0"),
+            _ when live is { Total: > 0 } => $"{live.Done:N0} / {live.Total:N0}",
+            _ => "—",
+        };
+
+    // Filas en las tablas destino: el Summary del job, o la suma por entidad en jobs viejos.
+    private static long? SqlRows(Job job) =>
+        JobSummary.GetLong(job, "sqlMergedRows")
+        ?? (job.Entities.Any(e => e.SqlRows is not null) ? job.Entities.Sum(e => (long)(e.SqlRows ?? 0)) : null);
+
+    // ---- Entidades ----
+
+    // Un job terminado sin entidades no "puede seguir en curso".
+    private string EntitiesEmptyText(Job job) =>
+        L[JobProgressHelper.IsActive(job) ? "Page.JobDetail.EntitiesEmpty" : "Page.JobDetail.EntitiesEmptyFinished"].Value;
+
+    // Comparación por entidad de Reconcile (parquet vs SQL y divergencia) o Diff (origen, destino
+    // y delta), leída del reporte del job; vacía para el resto de tipos o si aún no existe.
+    private List<CompareRow> LoadComparison(Job job) => job.Type switch
+    {
+        JobType.Reconcile => (Reports.GetReconcileByJob(job.Id)?.Entities ?? [])
+            .Select(e => new CompareRow(e.Entity, e.SourceRows, e.DestinationRows, e.DivergencePct, null))
+            .ToList(),
+        JobType.Diff => (Reports.GetDiffByJob(job.Id)?.Entities ?? [])
+            .Select(e => new CompareRow(e.Entity, e.SourceRows, e.DestinationRows, null, e.Delta))
+            .ToList(),
+        _ => [],
+    };
+
+    private sealed record CompareRow(string Entity, long Source, long Destination, double? DivergencePct, long? Delta);
+
+    private List<JobEntityResult> FilteredEntities(Job job) =>
+        job.Entities
+            .Where(e => string.IsNullOrWhiteSpace(_entitySearch) || e.Entity.Contains(_entitySearch.Trim(), StringComparison.OrdinalIgnoreCase))
+            .OrderBy(e => e.Entity, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private void ResetEntityPage() => _entityPage = 1;
+
+    private FlowStatus StageStatus(string key) =>
+        _flow?.Stages.FirstOrDefault(s => s.Key == key)?.Status ?? FlowStatus.Pending;
+
+    private static bool Reached(FlowStatus s) =>
+        s is FlowStatus.Running or FlowStatus.Done or FlowStatus.NoNewData or FlowStatus.Warning
+            or FlowStatus.Error or FlowStatus.Blocked or FlowStatus.Interrupted;
+
+    // JobEntityResult guarda un único Status: lo sobrescribe la última etapa que tocó la
+    // entidad. Con SqlRows informado, ambas etapas fueron bien; si SQL no corrió, el estado es
+    // de la ingesta. Un fallo sin SqlRows tras SQL es de SQL solo si la ingesta no tuvo errores
+    // de entidad (una entidad que falla en la ingesta no llega a SQL).
+    private string? IngestState(JobEntityResult e)
+    {
+        if (!Reached(StageStatus("ingest")))
+        {
+            return null;
+        }
+
+        return e.SqlRows is not null || IsSqlFailure(e) ? "ok" : e.Status;
+    }
+
+    private string? SqlState(JobEntityResult e)
+    {
+        if (!Reached(StageStatus("sql")))
+        {
+            return null;
+        }
+
+        return e.SqlRows is not null ? "ok" : IsSqlFailure(e) ? e.Status : null;
+    }
+
+    private bool IsSqlFailure(JobEntityResult e) =>
+        e.SqlRows is null && e.Status is not ("ok" or "done")
+        && Reached(StageStatus("sql"))
+        && (e.Status == "skipped" || StageStatus("ingest") is FlowStatus.Done or FlowStatus.NoNewData or FlowStatus.Skipped);
+
+    private RenderFragment EntityState(string? state) => __builder =>
+    {
+        if (state is null)
+        {
+            <span class="jd-muted">—</span>
+        }
+        else if (state == "skipped")
+        {
+            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">@L["JobFlow.Status.Skipped"]</FluentBadge>
+        }
+        else
+        {
+            <StatusBadge Status="@state" />
+        }
+    };
+
+    // ---- Cronología ----
+
+    private sealed record EventGroup(string Key, string Title, string? Summary, List<JobEvent> Events, int Warnings, int Errors);
+
+    private void Toggle(string key)
+    {
+        if (!_expanded.Remove(key))
+        {
+            _expanded.Add(key);
+        }
+    }
+
+    // Abre de entrada la etapa en curso o la que falló; luego manda el usuario.
+    private void InitExpandedOnce()
+    {
+        if (_expandedInitialized || _flow is null)
+        {
+            return;
+        }
+
+        _expandedInitialized = true;
+        foreach (var stage in _flow.Stages.Where(s => s.Status is FlowStatus.Running or FlowStatus.Error or FlowStatus.Blocked or FlowStatus.Interrupted))
+        {
+            _expanded.Add(stage.Key);
+        }
+
+        if (_expanded.Count == 0 && _job?.Status is JobStatus.Error or JobStatus.Partial or JobStatus.Blocked)
+        {
+            _expanded.Add("job");
+        }
+    }
+
+    // Agrupa por la ventana de tiempo de cada etapa (StartedAt..FinishedAt del flujo); lo que
+    // queda fuera (alta y cierre del job, jobs viejos sin tiempos) va al grupo "Trabajo".
+    private List<EventGroup> TimelineGroups(Job job)
+    {
+        var buckets = new Dictionary<string, List<JobEvent>>();
+        foreach (var ev in job.Events.OrderBy(e => e.At))
+        {
+            var stage = _flow!.Stages.FirstOrDefault(s =>
+                s.StartedAt is { } start && ev.At >= start.AddSeconds(-1)
+                && (s.FinishedAt is not { } end || ev.At <= end.AddSeconds(1)));
+            var key = stage?.Key ?? "job";
+            if (!buckets.TryGetValue(key, out var list))
+            {
+                buckets[key] = list = [];
+            }
+
+            list.Add(ev);
+        }
+
+        var groups = new List<EventGroup>();
+        foreach (var key in GroupKeys)
+        {
+            if (!buckets.TryGetValue(key, out var events))
+            {
+                continue;
+            }
+
+            var shown = _onlyIssues ? events.Where(e => e.Level != EventLevel.Info).ToList() : events;
+            if (shown.Count == 0)
+            {
+                continue;
+            }
+
+            var title = key == "job" ? L["Page.JobDetail.TimelineJob"].Value : PipelineStageLabels.GetStageKey(L, key);
+            groups.Add(new EventGroup(key, title, GroupSummary(key), shown,
+                events.Count(e => e.Level == EventLevel.Warning), events.Count(e => e.Level == EventLevel.Error)));
+        }
+
+        return groups;
+    }
+
+    private string Plural(string key, int count) =>
+        count == 1 ? L[key + "One"].Value : L[key, count.ToString("N0")].Value;
+
+    // Resumen del grupo desde el paso principal de la etapa ("202 snapshots procesados").
+    private string? GroupSummary(string key)
+    {
+        var (stepKey, resource) = key switch
+        {
+            "ingest" => (JobStepCatalog.Snapshots, "Page.JobDetail.TimelineSnapshots"),
+            "sql" => (JobStepCatalog.Merge, "Page.JobDetail.TimelineMerged"),
+            "reconcile" => (JobStepCatalog.Compare, "Page.JobDetail.TimelineCompared"),
+            _ => ("", ""),
+        };
+        var step = _flow!.Steps.FirstOrDefault(s => s.Key == stepKey);
+        return step is { Done: > 0 } ? L[resource, step.Done.ToString("N0")].Value : null;
+    }
+
+    // ---- Acciones ----
+
+    private async Task CancelJobAsync(string jobId)
+    {
+        var result = await DialogService.ShowConfirmationAsync(
+            string.Format(L["Common.CancelJobConfirm"].Value, jobId),
+            L["Common.CancelJobTitle"].Value,
+            L["Common.Cancel"].Value,
+            L["Common.Back"].Value);
+        if (result.Cancelled)
+        {
+            return;
+        }
+
+        try
+        {
+            await Orchestration.CancelAsync(jobId);
+            await NotificationService.ShowInfoToastAsync(string.Format(L["Common.JobCancelled"].Value, jobId));
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            await NotificationService.ShowErrorToastAsync(ex.Message);
+        }
+    }
+
+    private async Task RetryJobAsync(string jobId)
+    {
+        var result = await DialogService.ShowConfirmationAsync(
+            string.Format(L["Common.RetryConfirm"].Value, jobId),
+            L["Common.RetryTitle"].Value,
+            L["Common.Retry"].Value,
+            L["Common.Cancel"].Value);
+        if (result.Cancelled)
+        {
+            return;
+        }
+
+        try
+        {
+            var job = await Orchestration.RetryJobAsync(jobId);
+            await NotificationService.ShowSuccessToastAsync(string.Format(L["Common.RetryStarted"].Value, job.Id));
+            ActivityLog.LogUser("pipeline.retry", $"Reintento del job {jobId} (nuevo job {job.Id}).", job.PipelineId, job.Id);
+            // Navega al nuevo job con recarga completa: es el mismo componente @page, así que
+            // sin forceLoad el JobId del parámetro no se refresca y la página quedaría mostrando
+            // el job fallido. forceLoad re-inicializa el componente con el job nuevo.
+            Nav.NavigateTo($"/jobs/{job.Id}", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            await NotificationService.ShowErrorToastAsync(ex.Message);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_timer is not null)
+        {
+            await _timer.DisposeAsync();
+        }
+    }
+}

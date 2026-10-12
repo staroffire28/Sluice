@@ -1,0 +1,44 @@
+@using Microsoft.FluentUI.AspNetCore.Components
+@inject IStringLocalizer<SharedResource> L
+
+<FluentBadge Appearance="@Appearance" Color="@Color">
+    @Label
+</FluentBadge>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Status { get; set; } = "pending";
+
+    private string Label => Status.ToLowerInvariant() switch
+    {
+        "running" => L["Common.Status.Running"].Value,
+        "ok" or "done" => L["Common.Status.OK"].Value,
+        "error" or "failed" => L["Common.Status.Error"].Value,
+        "partial" => L["Common.Status.Partial"].Value,
+        "blocked" or "stalled" => L["Common.Status.Stalled"].Value,
+        "cancelled" or "canceled" => L["Common.Status.Cancelled"].Value,
+        "pending" or "queued" => L["Common.Status.Pending"].Value,
+        "claimed" => L["Common.Status.Claimed"].Value,
+        "idle" => L["Common.Status.Idle"].Value,
+        "retention-retained" => L["Common.Status.RetentionRetained"].Value,
+        "retention-eligible" => L["Common.Status.RetentionEligible"].Value,
+        "retention-protected" => L["Common.Status.RetentionProtected"].Value,
+        _ => Status,
+    };
+
+    // Colores semánticos de Fluent UI v5 (se adaptan al tema claro/oscuro); los estados sin
+    // color propio (pendiente, protegido…) quedan en gris tenue.
+    private BadgeColor? StatusColor => Status.ToLowerInvariant() switch
+    {
+        "running" or "claimed" => BadgeColor.Brand,
+        "ok" or "done" or "retention-retained" => BadgeColor.Success,
+        "error" or "failed" => BadgeColor.Danger,
+        "partial" or "blocked" or "stalled" or "retention-eligible" => BadgeColor.Warning,
+        "cancelled" or "canceled" => BadgeColor.Informative,
+        _ => null,
+    };
+
+    private BadgeColor Color => StatusColor ?? BadgeColor.Informative;
+
+    private BadgeAppearance Appearance => StatusColor is null ? BadgeAppearance.Tint : BadgeAppearance.Filled;
+}

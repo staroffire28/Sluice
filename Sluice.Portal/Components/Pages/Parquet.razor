@@ -1,0 +1,253 @@
+@page "/parquet"
+@rendermode InteractiveServer
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Services
+@using Sluice.Portal.Services.Pipeline
+@using Sluice.Portal.Services.Adls
+@inject IPipelineService PipelineService
+@inject IParquetArtifactService ParquetService
+@inject IDialogService DialogService
+@implements IDisposable
+
+@inject IStringLocalizer<SharedResource> L
+
+<PageTitle>@L["Nav.Parquet"]</PageTitle>
+
+<FluentStack Class="page-stack" Orientation="Orientation.Vertical" VerticalGap="12">
+    <PageHeader Title="@L["Page.Parquet.Title"]" Subtitle="@L["Page.Parquet.Subtitle"]" />
+
+    <PageSection>
+        <div class="toolbar" data-testid="parquet-page" data-pipeline="@_pipelineId">
+            <FluentSelect TOption="string" TValue="string" @bind-Value="_pipelineId" @bind-Value:after="Reload" data-testid="parquet-pipeline" Label="@L["Common.Pipeline"]" Style="min-width:240px;">
+                @foreach (var p in PipelineService.List())
+                {
+                    <FluentOption TValue="string" Value="@p.Id">@p.Name</FluentOption>
+                }
+            </FluentSelect>
+            <FluentTextInput @bind-Value="_search" @bind-Value:after="OnSearchChanged" data-testid="parquet-search"
+                             Label="@L["Common.Search"]" Placeholder="@L["Page.Tables.FilterPlaceholder"]" Style="min-width:220px;" />
+            <FluentButton Appearance="ButtonAppearance.Subtle"
+                          IconStart="@(new Icons.Regular.Size20.ArrowSync())"
+                          OnClick="Reload">
+                @L["Common.Refresh"]
+            </FluentButton>
+        </div>
+
+        @if (_error is not null)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Error">@_error</FluentMessageBar>
+        }
+
+        <PanelState IsEmpty="@(string.IsNullOrWhiteSpace(_pipelineId))" EmptyText="@L["Page.Parquet.SelectPipeline"]">
+            <PanelState IsLoading="@_loading" IsEmpty="@(_allRows.Count == 0)" EmptyText="@L["Page.Parquet.EmptyRows"]">
+            <PanelState IsEmpty="@(_totalCount == 0)" EmptyText="@L["Page.Parquet.NoMatches"]">
+                <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" Items="@_rows.AsQueryable()" TGridItem="ArtifactRow">
+                    <PropertyColumn Property="@(r => r.Path)" Title="@L["Page.Parquet.File"]" />
+                    <PropertyColumn Property="@(r => r.Size)" Title="@L["Page.Parquet.Size"]" />
+                    <PropertyColumn Property="@(r => r.Modified)" Title="@L["Page.Parquet.Modified"]" />
+                    <TemplateColumn Title="@L["Common.Actions"]" Align="DataGridCellAlignment.End">
+                        @* ForceLoad: sin él el router de Blazor busca /api/... como página y muestra "Not found". *@
+                        <FluentAnchorButton Href="@DownloadUrl(context.Path)"
+                                      ForceLoad="true"
+                                      data-testid="@($"parquet-download-{context.Path}")"
+                                      Appearance="ButtonAppearance.Subtle"
+                                      IconStart="@(new Icons.Regular.Size20.ArrowDownload())"
+                                      Title="@L["Common.Download"]" />
+                        <FluentButton Appearance="ButtonAppearance.Subtle"
+                                      IconStart="@(new Icons.Regular.Size20.Delete())"
+                                      Title="@L["Common.Delete"]"
+                                      OnClick="@(() => ConfirmDeleteAsync(context.Path))" />
+                    </TemplateColumn>
+                </FluentDataGrid>
+                <PaginationControl Page="_page" TotalPages="_totalPages" TotalCount="_totalCount" PageChanged="OnPageChanged" />
+            </PanelState>
+            </PanelState>
+        </PanelState>
+    </PageSection>
+</FluentStack>
+
+@code {
+    private string _pipelineId = "";
+    private string _search = "";
+    private bool _loading;
+    private string? _error;
+    private List<ArtifactRow> _allRows = [];
+    private List<ArtifactRow> _rows = [];
+    private int _page = 1;
+    private const int PageSize = 20;
+    private int _totalCount;
+    private int _totalPages = 1;
+
+    // Cambiar de pipeline (o salir de la página) cancela la carga en curso: si no, el
+    // listado lento de ADLS de la selección anterior podía llegar después y pisar el nuevo.
+    private CancellationTokenSource? _loadCts;
+
+    private CancellationToken StartLoad()
+    {
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _loadCts = new CancellationTokenSource();
+        return _loadCts.Token;
+    }
+
+    public void Dispose()
+    {
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+    }
+
+    // ?pipeline=: viene del detalle de un job ("Consolidar y publicar en ADLS" → ver en Parquet).
+    [SupplyParameterFromQuery(Name = "pipeline")]
+    public string? PipelineQuery { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var pipelines = PipelineService.List();
+        var first = pipelines.FirstOrDefault(p => p.Id == PipelineQuery) ?? pipelines.FirstOrDefault();
+        if (first is null)
+        {
+            return;
+        }
+
+        _pipelineId = first.Id;
+
+        // Como en Snapshots: ADLS se lee solo con el circuito y el prerender muestra "cargando"
+        // (persistir el listado para reutilizarlo rompía el circuito pasados los 32 KB).
+        if (!RendererInfo.IsInteractive)
+        {
+            _loading = true;
+            return;
+        }
+
+        await Reload();
+    }
+
+    private async Task Reload()
+    {
+        _error = null;
+        if (string.IsNullOrWhiteSpace(_pipelineId))
+        {
+            _allRows = [];
+            ApplyPaging();
+            return;
+        }
+
+        var ct = StartLoad();
+        try
+        {
+            _loading = _allRows.Count == 0;
+            var artifacts = await ParquetService.ListAsync(_pipelineId, ct);
+            if (ct.IsCancellationRequested)
+            {
+                return;
+            }
+
+            SetRows(artifacts);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // La sustituyó otra carga (o se salió de la página): no hay nada que pintar.
+        }
+        catch (Exception ex)
+        {
+            _allRows = [];
+            _error = ex.Message;
+        }
+        finally
+        {
+            if (!ct.IsCancellationRequested)
+            {
+                _loading = false;
+                ApplyPaging();
+            }
+        }
+    }
+
+    private void SetRows(IEnumerable<ParquetArtifact> artifacts) =>
+        _allRows = artifacts
+            .Select(a => new ArtifactRow
+            {
+                Path = a.Path,
+                Size = FormatSize(a.SizeBytes),
+                Modified = a.LastModified?.ToString("u") ?? "-",
+            })
+            .OrderBy(r => r.Path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    // El listado ya llega entero en memoria (IParquetArtifactService lista todo el
+    // container de una vez); filtrar y paginar aquí es solo de presentación, sin tocar el
+    // servicio. El buscador filtra por la ruta del archivo ({pipeline}/{entidad}.parquet).
+    private void ApplyPaging()
+    {
+        var filtered = string.IsNullOrWhiteSpace(_search)
+            ? _allRows
+            : _allRows.Where(r => r.Path.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+        _totalCount = filtered.Count;
+        _totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+        if (_page > _totalPages)
+        {
+            _page = _totalPages;
+        }
+
+        _rows = filtered.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
+    }
+
+    private void OnSearchChanged()
+    {
+        _page = 1;
+        ApplyPaging();
+    }
+
+    private void OnPageChanged(int page)
+    {
+        _page = page;
+        ApplyPaging();
+    }
+
+    private string DownloadUrl(string path) =>
+        $"/api/pipelines/{Uri.EscapeDataString(_pipelineId)}/parquet/download?path={Uri.EscapeDataString(path)}";
+
+    private async Task ConfirmDeleteAsync(string path)
+    {
+        var result = await DialogService.ShowConfirmationAsync(
+            string.Format(L["Page.Parquet.ConfirmDelete"].Value, path),
+            L["Page.Parquet.ConfirmDeleteTitle"].Value,
+            L["Common.Delete"].Value,
+            L["Common.Cancel"].Value);
+        if (result.Cancelled)
+        {
+            return;
+        }
+
+        try
+        {
+            await ParquetService.DeleteAsync(_pipelineId, path);
+            await Reload();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        double size = bytes;
+        var unit = 0;
+        while (size >= 1024 && unit < units.Length - 1)
+        {
+            size /= 1024;
+            unit++;
+        }
+
+        return $"{size:0.##} {units[unit]}";
+    }
+
+    private sealed class ArtifactRow
+    {
+        public string Path { get; init; } = "";
+        public string Size { get; init; } = "";
+        public string Modified { get; init; } = "";
+    }
+}

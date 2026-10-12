@@ -1,0 +1,401 @@
+/* Panel compacto: cabe sin scroll a 1366x768. Solo tokens de Fluent. */
+.dash {
+    gap: 8px;
+    --dash-icon: currentColor;
+}
+
+.dash-vh {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+.dash-muted {
+    color: var(--colorNeutralForeground3);
+}
+
+.dash-num {
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-bad {
+    color: var(--colorStatusDangerForeground1);
+    font-weight: 600;
+}
+
+.dash-strong {
+    font-weight: 600;
+}
+
+.dash-active {
+    color: var(--colorBrandForeground1);
+    font-weight: 600;
+}
+
+.dash-link {
+    color: var(--colorBrandForegroundLink);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.dash-link:hover {
+    text-decoration: underline;
+}
+
+.dash-link:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
+/* ---- Cabecera: selector + acciones en la misma línea que el título ---- */
+.dash-run {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.dash-run ::deep fluent-field {
+    margin-block: 0;
+}
+
+/* ---- Cifras ---- */
+.dash-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.dash-stat {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 8px 12px;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusXLarge);
+}
+
+.dash-stat__label {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--colorNeutralForeground3);
+}
+
+.dash-stat__value {
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dash-stat--warn {
+    border-color: var(--colorStatusWarningBorder1);
+    background: var(--colorStatusWarningBackground1);
+}
+
+.dash-warn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+    color: var(--colorStatusWarningForeground1);
+}
+
+.dash-warn ::deep svg {
+    flex: none;
+}
+
+/* "Última ejecución": toda la tarjeta enlaza al detalle del job. */
+.dash-stat--link {
+    color: inherit;
+    text-decoration: none;
+    transition: border-color .15s ease, background-color .15s ease;
+}
+
+.dash-stat--link:hover {
+    border-color: var(--colorNeutralStroke1Hover);
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.dash-stat--link:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+}
+
+.dash-stat__run {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* El estado nunca se recorta; si falta sitio, se acorta la hora. */
+.dash-stat__run ::deep fluent-badge {
+    flex: none;
+}
+
+.dash-stat__run > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dash-stat__value--sm {
+    font-size: 15px;
+}
+
+.dash-stat__hint {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--colorNeutralForeground3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ---- Tarjetas ---- */
+.dash-card {
+    min-width: 0;
+    padding: 10px 12px;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusXLarge);
+}
+
+.dash-card__title {
+    margin: 0;
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 600;
+}
+
+/* ---- Job activo ---- */
+/* Una sola línea en escritorio (un nombre de pipeline largo se recorta en vez de añadir una
+   fila); en móvil se parte (ver la media query del final). */
+.dash-job__head {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 4px 12px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.dash-job__head > * {
+    flex: none;
+}
+
+.dash-job__head > .dash-job__name {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dash-job__name {
+    font-weight: 600;
+}
+
+.dash-job__pct {
+    font-weight: 600;
+    color: var(--colorBrandForeground1);
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-job__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+}
+
+/* Una sola fila de "otro job activo" (alto fijo); si hay más, "y N más" va en la misma fila. */
+.dash-others {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 120px auto auto auto auto;
+    align-items: center;
+    gap: 12px;
+    margin-top: 6px;
+    padding-top: 4px;
+    border-top: 1px solid var(--colorNeutralStroke3);
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.dash-others__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dash-minibar {
+    display: block;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--colorNeutralStroke3);
+    overflow: hidden;
+}
+
+.dash-minibar > span {
+    display: block;
+    height: 100%;
+    width: 100%;
+    transform-origin: left center;
+    transform: scaleX(calc(var(--p, 0) / 100));
+    background: var(--colorBrandBackground);
+}
+
+/* ---- Cola y workers ---- */
+.dash-ops {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.dash-table {
+    width: 100%;
+    margin-top: 6px;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-table th,
+.dash-table td {
+    padding: 2px 8px;
+    line-height: 20px;
+    text-align: right;
+    border-bottom: 1px solid var(--colorNeutralStroke3);
+}
+
+.dash-table thead th {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--colorNeutralForeground3);
+}
+
+.dash-table th[scope="row"],
+.dash-table thead th:first-child {
+    text-align: left;
+    font-weight: 600;
+    padding-left: 0;
+}
+
+.dash-table tbody tr:last-child > * {
+    border-bottom: 0;
+}
+
+.dash-workers {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    font-size: 13px;
+}
+
+/* Mismo alto de fila que la tabla de la cola (2+20+2 px + borde): las dos tarjetas miden
+   igual con hasta 4 workers. */
+.dash-workers li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    align-items: center;
+    gap: 10px;
+    height: 25px;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--colorNeutralStroke3);
+}
+
+.dash-workers li:last-child {
+    border-bottom: 0;
+}
+
+.dash-workers li.dash-workers__more {
+    grid-template-columns: minmax(0, 1fr);
+    font-size: 12px;
+}
+
+.dash-workers code {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+    font-size: 12px;
+}
+
+.dash-workers li > span:last-child {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.dash-empty,
+.dash-more {
+    margin: 6px 0 0;
+    font-size: 12px;
+    line-height: 16px;
+}
+
+@media (max-width: 960px) {
+    .dash-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dash-ops {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    /* La cabecera compartida (PageHeader) pone título y acciones en dos columnas: en móvil
+       las acciones aplastaban el título. Aquí se apilan. */
+    .dash ::deep .page-header {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .dash ::deep .page-header__meta {
+        justify-content: flex-start;
+    }
+
+    .dash-run {
+        width: 100%;
+    }
+
+    .dash-run ::deep fluent-select {
+        width: 100% !important;
+    }
+
+    .dash-job__head {
+        flex-wrap: wrap;
+        white-space: normal;
+    }
+
+    /* En móvil hay scroll vertical: la última ejecución puede ocupar dos líneas. */
+    .dash-stat__run {
+        flex-wrap: wrap;
+        gap: 2px 8px;
+        white-space: normal;
+    }
+
+    .dash-job__actions {
+        margin-left: 0;
+    }
+
+    .dash-others {
+        grid-template-columns: minmax(0, 1fr) 60px auto auto;
+    }
+
+    .dash-others > :nth-child(4) {
+        display: none;
+    }
+
+    .dash-others > :nth-child(6) {
+        grid-column: 1 / -1;
+    }
+}

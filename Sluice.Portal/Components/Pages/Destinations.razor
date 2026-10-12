@@ -1,0 +1,370 @@
+@page "/destinations"
+@rendermode InteractiveServer
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Models
+@using Sluice.Portal.Services
+@using Sluice.Portal.Services.Logging
+@inject IConnectionService Connections
+@inject INotificationService NotificationService
+@inject IDialogService DialogService
+@inject IActivityLog ActivityLog
+
+@inject IStringLocalizer<SharedResource> L
+
+<PageTitle>@L["Nav.Destinations"]</PageTitle>
+
+<FluentStack Class="page-stack" Orientation="Orientation.Vertical" VerticalGap="12">
+    <PageHeader Title="@L["Page.Destinations.Title"]" Subtitle="@L["Page.Destinations.Subtitle"]">
+        <Actions>
+            <FluentButton Appearance="ButtonAppearance.Primary" data-testid="add-destination" OnClick="OpenCreate">@L["Page.Destinations.AddDestination"]</FluentButton>
+        </Actions>
+    </PageHeader>
+
+    <PageSection>
+    <ListWithEmptyCta HasItems="@(_allItems.Count > 0)" EmptyText="@L["Page.Destinations.EmptyText"]">
+        <EmptyAction>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OpenCreate">@L["Page.Destinations.AddDestination"]</FluentButton>
+        </EmptyAction>
+        <ListContent>
+            <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true" Items="@_items.AsQueryable()" TGridItem="Connection">
+                <PropertyColumn Property="@(c => c.Name)" Title="@L["Common.Name"]" />
+                <PropertyColumn Property="@(c => c.Type)" Title="@L["Common.Type"]" />
+                <TemplateColumn Title="@L["Page.Destinations.SqlVersion"]">
+                    @FormatSqlVersion(context)
+                </TemplateColumn>
+                <PropertyColumn Property="@(c => c.CreatedAt)" Title="@L["Page.Destinations.Created"]" Format="g" />
+                <TemplateColumn Title="@L["Common.Actions"]">
+                    @if (_testingId == context.Id)
+                    {
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                            <FluentSpinner Style="width:20px;height:20px;" />
+                            <FluentLabel>@L["Common.Testing"]</FluentLabel>
+                        </FluentStack>
+                    }
+                    else
+                    {
+                        <FluentMenu>
+                            <FluentMenuButton Appearance="ButtonAppearance.Outline" data-testid="@($"dst-actions-{context.Id}")" Label="@L["Common.Actions"]" />
+                            <FluentMenuList>
+                                <FluentMenuItem data-testid="@($"dst-test-{context.Id}")" OnClick="@(() => Test(context.Id))">@L["Common.Test"]</FluentMenuItem>
+                                <FluentMenuItem data-testid="@($"dst-edit-{context.Id}")" OnClick="@(() => Edit(context))">@L["Common.Edit"]</FluentMenuItem>
+                                <FluentMenuItem data-testid="@($"dst-delete-{context.Id}")" OnClick="@(() => ConfirmDelete(context))">@L["Common.Delete"]</FluentMenuItem>
+                            </FluentMenuList>
+                        </FluentMenu>
+                    }
+                </TemplateColumn>
+            </FluentDataGrid>
+        </ListContent>
+    </ListWithEmptyCta>
+
+    <PaginationControl Page="_page" TotalPages="_totalPages" TotalCount="_totalCount" PageChanged="OnPageChanged" />
+    </PageSection>
+</FluentStack>
+
+<InlineDialog @bind-Visible="_showEditor" Title="@_editorTitle" Class="dialog-wide">
+    <ChildContent>
+    <div class="dialog-form" @key="_editorKey">
+        <FluentTextInput @bind-Value="_name" data-testid="dst-name" Label="@L["Common.Name"]" Style="width:100%;" />
+        <FluentSelect TOption="string" TValue="string" @bind-Value="_type" Label="@L["Common.Type"]" Style="width:100%;">
+            <FluentOption TValue="string" Value="@("sqlserver")">SQL Server</FluentOption>
+        </FluentSelect>
+
+        @* @key: FluentSelect no repinta la selección si el valor cambia desde código (la detección). *@
+        <FluentSelect @key="_versionKey" TOption="string" TValue="string" @bind-Value="_sqlVersion" data-testid="dst-sql-version" Label="@L["Page.Destinations.SqlVersion"]" Style="width:100%;">
+            @foreach (var option in SqlServerVersionLabels.Options(L))
+            {
+                <FluentOption TValue="string" Value="@option.Value">@option.Label</FluentOption>
+            }
+        </FluentSelect>
+        @* La versión se detecta al probar la conexión; se puede cambiar a mano. *@
+        @if (_detection is null)
+        {
+            <p class="field-hint">@L["Page.Destinations.SqlVersionHint"]</p>
+        }
+        else
+        {
+            <FluentMessageBar data-testid="dst-detect-result" Intent="@(_detection.Ok ? MessageBarIntent.Success : MessageBarIntent.Error)">
+                @(_detection.Ok && _detection.Version is { } detected
+                    ? string.Format(L["Page.Destinations.Detected"].Value, SqlServerVersionLabels.Get(L, detected), _detection.Major)
+                    : _detection.Message)
+            </FluentMessageBar>
+        }
+
+        <p class="dialog-form-subtitle">@L["Page.Destinations.ConnectionSection"]</p>
+        <FluentTextInput @bind-Value="_host" data-testid="dst-host" Label="@L["Page.Destinations.Host"]" Style="width:100%;" />
+        <FluentTextInput @bind-Value="_database" data-testid="dst-database" Label="@L["Page.Destinations.Database"]" Style="width:100%;" />
+
+        <p class="dialog-form-subtitle">@L["Page.Destinations.CredentialsSection"]</p>
+        @* El pipeline crea y altera tablas e índices, hace MERGE/DELETE y TRUNCATE (restablecer); no crea la base. *@
+        <p class="field-hint" data-testid="dst-permissions-hint">@L["Page.Destinations.PermissionsHint"]</p>
+        <div class="dialog-form-grid">
+            <FluentTextInput @bind-Value="_user" data-testid="dst-user" Label="@L["Page.Destinations.User"]" Style="width:100%;" />
+            <FluentTextInput @bind-Value="_password" data-testid="dst-password" Label="@L["Page.Destinations.Password"]" TextInputType="TextInputType.Password" Style="width:100%;" />
+        </div>
+    </div>
+    </ChildContent>
+    <Actions>
+        <FluentButton Appearance="ButtonAppearance.Outline" data-testid="dst-detect" OnClick="DetectVersionAsync" Disabled="_detecting">
+            @(_detecting ? L["Common.Testing"] : L["Page.Destinations.TestConnection"])
+        </FluentButton>
+        <FluentButton data-testid="dst-cancel" OnClick="() => _showEditor = false">@L["Common.Cancel"]</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="dst-save" OnClick="Save">@L["Common.Save"]</FluentButton>
+    </Actions>
+</InlineDialog>
+
+@code {
+    private List<Connection> _allItems = [];
+    private List<Connection> _items = [];
+    private int _page = 1;
+    private const int PageSize = 20;
+    private int _totalCount;
+    private int _totalPages = 1;
+    private bool _showEditor;
+    private string? _testingId;
+    private string _editorTitle = "";
+    // Se renueva en cada apertura: los FluentSelect con opciones a mano conservaban la
+    // selección del registro editado antes (ver el mismo caso en Pipelines.razor).
+    private Guid _editorKey = Guid.NewGuid();
+    private string? _editingId;
+    private string _name = "";
+    private string _type = "sqlserver";
+    private string _sqlVersion = "2022";
+    private string _host = "";
+    private string _database = "SynapseLink";
+    private string _user = "sa";
+    private string _password = "";
+    private bool _detecting;
+    private SqlVersionDetection? _detection;
+    private Guid _versionKey = Guid.NewGuid();
+
+    protected override void OnInitialized() => Load();
+
+    // Prueba la conexión del formulario sin guardarla y ajusta la versión a la detectada.
+    private async Task DetectVersionAsync()
+    {
+        _detecting = true;
+        _detection = null;
+        try
+        {
+            var draft = new Connection
+            {
+                Id = _editingId ?? "conn-dst-draft",
+                Name = _name,
+                Role = ConnectionRole.Destination,
+                Type = _type,
+                Config = new Dictionary<string, string?>
+                {
+                    ["host"] = _host,
+                    ["database"] = _database,
+                    ["user"] = _user,
+                    ["password"] = _password,
+                    [SqlServerVersions.ConfigKey] = _sqlVersion,
+                },
+            };
+            _detection = await Connections.DetectSqlVersionAsync(draft, _editingId);
+            if (_detection.Version is { } detected)
+            {
+                _sqlVersion = ((int)detected).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                _versionKey = Guid.NewGuid();
+            }
+
+            ActivityLog.LogUser("destination.test", $"Test de destino '{_name}' (sin guardar): {_detection.Message}", level: _detection.Ok ? "info" : "warning");
+        }
+        finally
+        {
+            _detecting = false;
+        }
+    }
+
+    private void Load()
+    {
+        _allItems = Connections.List(ConnectionRole.Destination).OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        ApplyPaging();
+    }
+
+    // La lista ya se carga entera en memoria (ConnectionStore.ListAll); paginar aquí es
+    // solo de presentación, sin tocar IConnectionService (mismo patrón que Tables.razor).
+    private void ApplyPaging()
+    {
+        _totalCount = _allItems.Count;
+        _totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+        if (_page > _totalPages)
+        {
+            _page = _totalPages;
+        }
+
+        _items = _allItems.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
+    }
+
+    private void OnPageChanged(int page)
+    {
+        _page = page;
+        ApplyPaging();
+    }
+
+    private void OpenCreate()
+    {
+        _editingId = null;
+        _editorTitle = L["Page.Destinations.NewDestination"].Value;
+        _name = "";
+        _type = "sqlserver";
+        _sqlVersion = "2022";
+        _host = "";
+        _database = "SynapseLink";
+        _user = "sa";
+        _password = "";
+        _detection = null;
+        _editorKey = Guid.NewGuid();
+        _showEditor = true;
+    }
+
+    private void Edit(Connection connection)
+    {
+        _editingId = connection.Id;
+        _editorTitle = L["Page.Destinations.EditDestination"].Value;
+        _name = connection.Name;
+        _type = connection.Type;
+        _sqlVersion = GetConfig(connection, SqlServerVersions.ConfigKey);
+        if (string.IsNullOrWhiteSpace(_sqlVersion))
+        {
+            _sqlVersion = "2022";
+        }
+
+        _host = GetConfig(connection, "host", "server");
+        _database = GetConfig(connection, "database");
+        _user = GetConfig(connection, "user", "username");
+        _password = GetConfig(connection, "password");
+        _detection = null;
+        _editorKey = Guid.NewGuid();
+        _showEditor = true;
+    }
+
+    private void Save()
+    {
+        var config = new Dictionary<string, string?>
+        {
+            ["host"] = _host,
+            ["database"] = _database,
+            ["user"] = _user,
+            ["password"] = _password,
+            [SqlServerVersions.ConfigKey] = _sqlVersion,
+        };
+
+        try
+        {
+            if (_editingId is null)
+            {
+                var slug = Sluice.Portal.Services.Stores.EntityIds.Slugify(_name);
+                if (slug.Length == 0)
+                {
+                    _ = NotificationService.ShowErrorToastAsync(L["Common.NameRequired"].Value);
+                    return;
+                }
+
+                Connections.Create(new Connection
+                {
+                    Id = $"conn-dst-{slug}",
+                    Name = _name,
+                    Role = ConnectionRole.Destination,
+                    Type = _type,
+                    Config = config,
+                });
+            }
+            else
+            {
+                var existing = Connections.Get(_editingId)!;
+                Connections.Update(_editingId, existing with
+                {
+                    Name = _name,
+                    Type = _type,
+                    Config = config,
+                });
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Id duplicado (otro nombre que normaliza igual) o no válido: avisar sin tumbar el circuito.
+            _ = NotificationService.ShowErrorToastAsync(ex.Message);
+            return;
+        }
+
+        _showEditor = false;
+        _ = NotificationService.ShowSuccessToastAsync(L["Common.Saved"].Value);
+        ActivityLog.LogUser("destination.save", $"Conexión de destino '{_name}' {(_editingId is null ? "creada" : "actualizada")}.");
+        Load();
+    }
+
+    private async Task Test(string id)
+    {
+        // Indicador de progreso por fila durante el test (I/O de red). Ver Sources.razor.
+        _testingId = id;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var (ok, msg) = await Connections.TestAsync(id);
+            if (ok)
+            {
+                await NotificationService.ShowSuccessToastAsync(msg);
+            }
+            else
+            {
+                await NotificationService.ShowErrorToastAsync(msg);
+            }
+            ActivityLog.LogUser("destination.test", $"Test de destino {id}: {msg}", level: ok ? "info" : "warning");
+        }
+        finally
+        {
+            // La prueba puede haber corregido la versión guardada: se recarga la columna.
+            Load();
+            _testingId = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ConfirmDelete(Connection connection)
+    {
+        var result = await DialogService.ShowConfirmationAsync(
+            $"{L["Page.Destinations.DeleteConfirm"].Value} {connection.Name}?",
+            L["Page.Destinations.DeleteDestination"].Value,
+            L["Common.Delete"].Value,
+            L["Common.Cancel"].Value);
+        if (result.Cancelled)
+        {
+            return;
+        }
+
+        if (!Connections.Delete(connection.Id, out var error))
+        {
+            await NotificationService.ShowErrorToastAsync(error ?? L["Common.DeleteFailed"].Value);
+            return;
+        }
+
+        await NotificationService.ShowInfoToastAsync(string.Format(L["Common.Deleted"].Value, connection.Name));
+        ActivityLog.LogUser("destination.delete", $"Conexión de destino '{connection.Name}' eliminada.");
+        Load();
+    }
+
+    private string FormatSqlVersion(Connection connection)
+    {
+        var raw = GetConfig(connection, SqlServerVersions.ConfigKey);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            raw = "2022";
+        }
+
+        return SqlServerVersionLabels.Get(L, SqlServerVersions.Parse(raw));
+    }
+
+    private static string GetConfig(Connection connection, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (connection.Config.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return "";
+    }
+}

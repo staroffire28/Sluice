@@ -1,0 +1,50 @@
+@* Diálogo declarativo para los formularios de las páginas. Fluent UI v5 eliminó Hidden de
+   FluentDialog (se abre con ShowAsync/HideAsync); este envoltorio conserva @bind-Visible para
+   que las páginas sigan controlando el diálogo con un bool. *@
+<FluentDialog @ref="_dialog" Modal="true" Class="@Class" OnStateChange="OnStateChangeAsync">
+    <FluentDialogBody>
+        <TitleTemplate>@Title</TitleTemplate>
+        <ChildContent>@ChildContent</ChildContent>
+        <ActionTemplate>@Actions</ActionTemplate>
+    </FluentDialogBody>
+</FluentDialog>
+
+@code {
+    private FluentDialog? _dialog;
+    private bool _shown;
+
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_dialog is null || Visible == _shown)
+        {
+            return;
+        }
+
+        _shown = Visible;
+        if (Visible)
+        {
+            await _dialog.ShowAsync();
+        }
+        else
+        {
+            await _dialog.HideAsync();
+        }
+    }
+
+    // Cierre desde el propio diálogo (Esc): se avisa a la página para que su bool no quede abierto.
+    private async Task OnStateChangeAsync(DialogEventArgs e)
+    {
+        if (e.State == DialogState.Closed && _shown)
+        {
+            _shown = false;
+            await VisibleChanged.InvokeAsync(false);
+        }
+    }
+}
