@@ -225,5 +225,3 @@ Para un smoke local rápido en un solo contenedor existe `docker-compose.monolit
 | `/pipelines` | CRUD pipelines |
 | `/snapshots` | Carpetas ADLS, settled, pendientes, stall |
 | `/reports` | Último reconcile y diff por pipeline |
-
-
