@@ -129,4 +129,12 @@ public static class SqlMergeBuilder
         string keyTableName,
         SqlServerVersion sqlVersion = SqlServerVersion.SqlServer2022) =>
         $"DELETE t FROM {Table(schema, table)} t WHERE NOT EXISTS (SELECT 1 FROM {keyTableName} k WHERE k.[Id] = t.[Id]);";
+
+    // Filas borradas en F&O (DeleteMode.Delete): se borran las que SÍ están en la #keys.
+    public static string BuildDeleteKeys(
+        string schema,
+        string table,
+        string keyTableName,
+        SqlServerVersion sqlVersion = SqlServerVersion.SqlServer2022) =>
+        $"DELETE t FROM {Table(schema, table)} t WHERE EXISTS (SELECT 1 FROM {keyTableName} k WHERE k.[Id] = t.[Id]);";
 }

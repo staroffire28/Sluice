@@ -11,12 +11,13 @@ public interface IParquetStore
     Task DeleteParquetAsync(string blobPath, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ParquetArtifact>> ListParquetAsync(string prefix, CancellationToken cancellationToken = default);
 
-    // Filas del parquet (metadatos del footer). Por defecto lo lee entero; AdlsClient lo
-    // sobrescribe con lectura por rangos para no descargarlo solo para contar.
-    async Task<long> CountParquetRowsAsync(string blobPath, CancellationToken cancellationToken = default)
+    // Filas del parquet (metadatos del footer; con excludeDeleteRows, también la columna IsDelete).
+    // Por defecto lo lee entero; AdlsClient lo sobrescribe con lectura por rangos para no
+    // descargarlo solo para contar.
+    async Task<long> CountParquetRowsAsync(string blobPath, bool excludeDeleteRows = false, CancellationToken cancellationToken = default)
     {
         await using var stream = await OpenParquetReadAsync(blobPath, cancellationToken);
-        return await Pipeline.ParquetMaterializer.CountRowsAsync(stream, cancellationToken);
+        return await Pipeline.ParquetMaterializer.CountRowsAsync(stream, excludeDeleteRows, cancellationToken);
     }
 
     // Artefactos de texto que acompañan al parquet en el mismo container durable

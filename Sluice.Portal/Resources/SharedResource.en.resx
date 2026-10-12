@@ -196,6 +196,10 @@
   <data name="Page.Pipelines.EmptyText" xml:space="preserve"><value>No pipelines configured yet.</value></data>
   <data name="Page.Pipelines.Source" xml:space="preserve"><value>Source</value></data>
   <data name="Page.Pipelines.Destination" xml:space="preserve"><value>Destination</value></data>
+  <data name="Page.Pipelines.DeleteMode" xml:space="preserve"><value>Rows deleted in F&amp;O</value></data>
+  <data name="Page.Pipelines.DeleteMode.Delete" xml:space="preserve"><value>Delete them in SQL too</value></data>
+  <data name="Page.Pipelines.DeleteMode.Ignore" xml:space="preserve"><value>Load them flagged (IsDelete = 1, other columns empty)</value></data>
+  <data name="Page.Pipelines.DeleteModeHint" xml:space="preserve"><value>Synapse Link sends each delete as a row with IsDelete = True and every other column empty. The change applies from the next run; to fix rows already loaded, run Force.</value></data>
   <data name="Page.Pipelines.Toggle" xml:space="preserve"><value>Toggle</value></data>
   <data name="Page.Pipelines.Scheduler" xml:space="preserve"><value>Scheduler</value></data>
   <data name="Page.Pipelines.SchedulerActive" xml:space="preserve"><value>Active</value></data>

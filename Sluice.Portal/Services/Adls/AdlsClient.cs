@@ -81,13 +81,13 @@ public sealed class AdlsClient : IAdlsClient, IParquetStore
     // Contar filas solo necesita el footer: lectura perezosa por rangos (2-3 peticiones pequeñas)
     // en vez de descargar el fichero. Las lecturas de filas siguen con OpenParquetReadAsync:
     // por rangos harían una petición por columna y row group (miles de transacciones de ADLS).
-    public async Task<long> CountParquetRowsAsync(string blobPath, CancellationToken cancellationToken = default)
+    public async Task<long> CountParquetRowsAsync(string blobPath, bool excludeDeleteRows = false, CancellationToken cancellationToken = default)
     {
         var file = ParquetFileSystem().GetFileClient(blobPath);
         await using var stream = await file.OpenReadAsync(
             new DataLakeOpenReadOptions(allowModifications: false) { BufferSize = 256 * 1024 },
             cancellationToken);
-        return await ParquetMaterializer.CountRowsAsync(stream, cancellationToken);
+        return await ParquetMaterializer.CountRowsAsync(stream, excludeDeleteRows, cancellationToken);
     }
 
     public async Task<bool> ParquetExistsAsync(string blobPath, CancellationToken cancellationToken = default)

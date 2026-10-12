@@ -84,6 +84,9 @@
                       Items="@Connections.List(ConnectionRole.Source)" OptionValue="@(c => c.Id)" OptionText="@(c => c.Name)" />
         <FluentSelect TOption="Connection" TValue="string" @bind-Value="_destId" data-testid="pipe-dest" Label="@L["Page.Pipelines.Destination"]" Style="width:100%;"
                       Items="@Connections.List(ConnectionRole.Destination)" OptionValue="@(c => c.Id)" OptionText="@(c => c.Name)" />
+        <FluentSelect TOption="DeleteMode" TValue="string" @bind-Value="_deleteMode" data-testid="pipe-delete-mode" Label="@L["Page.Pipelines.DeleteMode"]" Style="width:100%;"
+                      Items="@(Enum.GetValues<DeleteMode>())" OptionValue="@(m => m.ToString())" OptionText="@(m => L[$"Page.Pipelines.DeleteMode.{m}"].Value)" />
+        <p class="field-hint">@L["Page.Pipelines.DeleteModeHint"]</p>
     </div>
     </ChildContent>
     <Actions>
@@ -132,6 +135,7 @@
     private string _editName = "";
     private string _sourceId = "";
     private string _destId = "";
+    private string _deleteMode = nameof(DeleteMode.Delete);
     private Guid _editorKey = Guid.NewGuid();
     private string? _deleteId;
     private string? _deleteName;
@@ -190,6 +194,7 @@
         _editName = "";
         _sourceId = Connections.List(ConnectionRole.Source).FirstOrDefault()?.Id ?? "";
         _destId = Connections.List(ConnectionRole.Destination).FirstOrDefault()?.Id ?? "";
+        _deleteMode = nameof(DeleteMode.Delete);
         _editorKey = Guid.NewGuid();
         _showEditor = true;
     }
@@ -201,6 +206,7 @@
         _editName = pipeline.Name;
         _sourceId = pipeline.SourceId;
         _destId = pipeline.DestinationId;
+        _deleteMode = pipeline.DeleteMode.ToString();
         _editorKey = Guid.NewGuid();
         _showEditor = true;
     }
@@ -224,6 +230,7 @@
                     Name = _editName,
                     SourceId = _sourceId,
                     DestinationId = _destId,
+                    DeleteMode = Enum.Parse<DeleteMode>(_deleteMode),
                     Enabled = false, // scheduler apagado al crear: primero se corre a mano, luego se activa
                 });
             }
@@ -235,6 +242,7 @@
                     Name = _editName,
                     SourceId = _sourceId,
                     DestinationId = _destId,
+                    DeleteMode = Enum.Parse<DeleteMode>(_deleteMode),
                 });
             }
 

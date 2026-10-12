@@ -15,8 +15,8 @@ Reporte
 ```
 
 - **Ingest** — lee lo nuevo del origen y lo escribe en un Parquet limpio. Solo procesa snapshots que son seguros (más antiguos que el que se está escribiendo en ese momento), los consolida con el Parquet anterior (conservando la última versión de cada fila) y sube el resultado a ADLS como copia duradera.
-- **SQL** — lee ese Parquet desde ADLS y lo hace MERGE (upsert) en SQL Server, creando la tabla si hace falta. Un **Incremental** mergea solo las filas de su propia corrida (el delta) y actualiza una fila solo si su watermark es más nuevo. Mergea el Parquet consolidado completo cuando la tabla destino está vacía o cuando el último job que cargó SQL no terminó esa etapa.
-- **Reconcile** — cuenta las filas en el Parquet vs SQL por tabla. Si una tabla diverge más allá del umbral, el job se marca como **Partial** y se dispara una alerta.
+- **SQL** — lee ese Parquet desde ADLS y lo hace MERGE (upsert) en SQL Server, creando la tabla si hace falta. Un **Incremental** mergea solo las filas de su propia corrida (el delta) y actualiza una fila solo si su watermark es más nuevo. Mergea el Parquet consolidado completo cuando la tabla destino está vacía o cuando el último job que cargó SQL no terminó esa etapa. Las filas borradas en F&O llegan como filas con `IsDelete = True` y el resto de columnas vacías; por defecto se borran también en SQL (ver *Crear un pipeline*).
+- **Reconcile** — cuenta las filas en el Parquet vs SQL por tabla (las filas borradas en F&O no cuentan cuando el pipeline las borra en SQL). Si una tabla diverge más allá del umbral, el job se marca como **Partial** y se dispara una alerta.
 
 > **Por qué una tabla nueva puede no aparecer todavía (Synapse Link).** El portal solo procesa carpetas de snapshot *anteriores* a la que Synapse marca como escrita en `Changelog/changelog.info`, así que nunca lee exportaciones a medio escribir. Una tabla recién habilitada en Power Platform aparece solo cuando su carpeta se cierra y una corrida la ha procesado. Cada cuánto se cierra una carpeta lo define el intervalo configurado en Synapse Link (por ejemplo, una vez al día).
 
@@ -51,7 +51,7 @@ El estado se muestra en todas partes como una insignia de color: **Running/Claim
 
 **Crear una conexión.** Orígenes/Destinos → Agregar → completar los campos → Guardar → Probar. Los secretos se guardan cifrados y se muestran como `***`.
 
-**Crear un pipeline.** Pipelines → Agregar → elegir un origen y un destino → Guardar. Arranca con el scheduler apagado; ejecútalo manualmente primero.
+**Crear un pipeline.** Pipelines → Agregar → elegir un origen y un destino → Guardar. Arranca con el scheduler apagado; ejecútalo manualmente primero. **Filas borradas en F&O** decide qué pasa con los borrados: *Borrarlas también en SQL* (por defecto) o *Cargarlas marcadas* (`IsDelete = 1`, resto de columnas vacías). El cambio se aplica desde la próxima ejecución; para corregir las filas ya cargadas, ejecuta **Forzar**.
 
 **Ejecutar un pipeline.** Desde el menú de ejecución del Dashboard o de Pipelines: **Ejecutar** (Incremental: solo datos nuevos, el habitual), **Forzar** (recarga SQL desde el Parquet consolidado — todas las tablas), **Reconciliar** (solo verifica conteos), **Diff** (solo reporta diferencias). Confirma en el diálogo.
 

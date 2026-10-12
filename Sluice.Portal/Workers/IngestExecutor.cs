@@ -361,7 +361,8 @@ public sealed class IngestExecutor : IIngestExecutor
                 ParquetPath = consolidatedBlobPath,
                 Snapshot = lastSnapshot ?? "",
                 CsvRows = entityCsvRows.GetValueOrDefault(entity),
-                FilteredRows = result.Rows,
+                // Con DeleteMode.Delete las filas de borrado no llegan a SQL: no cuentan como filas.
+                FilteredRows = pipeline.DeleteMode == DeleteMode.Delete ? result.Rows - result.DeleteRows : result.Rows,
                 Watermark = result.MaxWatermark,
                 SourceRowCount = entityCsvRows.GetValueOrDefault(entity),
                 SchemaPath = schemaBlobPath,

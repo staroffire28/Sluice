@@ -2,7 +2,7 @@
 
 ## Glossary
 
-- **Pipeline** — a source (ADLS) plus a destination (SQL), with a name. Its "scheduler" switch controls only automatic runs; it never blocks a manual run.
+- **Pipeline** — a source (ADLS) plus a destination (SQL), with a name. Its "scheduler" switch controls only automatic runs; it never blocks a manual run. Its *Rows deleted in F&O* setting (`DeleteMode`) deletes them in SQL (default) or loads them flagged with `IsDelete = 1`.
 - **Job** — one execution of a pipeline, with a type, a status, per-table results and a timeline.
 - **Job type** — **Incremental** (only new snapshots, the default), **Force** (reload SQL from consolidated parquet — all tables, skips ingest), **Reconcile** (verify counts only), **Diff** (report row deltas), **Table resync** (re-sync one or more tables from the existing Parquet; from Reconcile, Tables or the automatic correction), **Compare values** (compares the Parquet with SQL row by row, by Id; from Reconcile).
 - **Snapshot** — a Synapse Link export folder in ADLS (a point-in-time photo of the data).

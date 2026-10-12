@@ -59,6 +59,18 @@ public interface ISqlMergeExecutor
         SqlServerVersion sqlVersion,
         CancellationToken cancellationToken = default);
 
+    // Borra del destino las filas cuyo Id está en el conjunto (filas borradas en F&O, con
+    // DeleteMode.Delete); devuelve el número de filas eliminadas. Por defecto no hace nada, para
+    // los dobles de test que no ejercitan SQL.
+    Task<int> DeleteKeysAsync(
+        SqlConnection connection,
+        string schema,
+        string entity,
+        CdmEntitySchema cdmSchema,
+        IReadOnlyCollection<object?> keys,
+        SqlServerVersion sqlVersion,
+        CancellationToken cancellationToken = default) => Task.FromResult(0);
+
     Task<CdmEntitySchema> EnsureTableAsync(
         SqlConnection connection,
         string schema,
@@ -265,16 +277,48 @@ public sealed class SqlMergeExecutor : ISqlMergeExecutor
             return 0;
         }
 
+        return await DeleteAgainstKeysAsync(connection, idAttr.SqlType, sourceKeys, sqlVersion,
+            keyTable => SqlMergeBuilder.BuildDeleteOrphans(schema, entity, keyTable, sqlVersion), cancellationToken);
+    }
+
+    public async Task<int> DeleteKeysAsync(
+        SqlConnection connection,
+        string schema,
+        string entity,
+        CdmEntitySchema cdmSchema,
+        IReadOnlyCollection<object?> keys,
+        SqlServerVersion sqlVersion,
+        CancellationToken cancellationToken = default)
+    {
+        var idAttr = cdmSchema.Attributes.FirstOrDefault(a => string.Equals(a.Name, "Id", StringComparison.OrdinalIgnoreCase));
+        if (idAttr is null || keys.Count == 0)
+        {
+            return 0;
+        }
+
+        return await DeleteAgainstKeysAsync(connection, idAttr.SqlType, keys, sqlVersion,
+            keyTable => SqlMergeBuilder.BuildDeleteKeys(schema, entity, keyTable, sqlVersion), cancellationToken);
+    }
+
+    // Sube las claves a una #keys temporal y ejecuta el DELETE que la usa (un solo statement).
+    private static async Task<int> DeleteAgainstKeysAsync(
+        SqlConnection connection,
+        string idSqlType,
+        IReadOnlyCollection<object?> keys,
+        SqlServerVersion sqlVersion,
+        Func<string, string> buildDelete,
+        CancellationToken cancellationToken)
+    {
         // Sin el nombre de la entidad: va sin corchetes y no debe depender de datos externos.
         var keyTable = $"#keys_{Guid.NewGuid():N}";
-        await ExecuteNonQueryAsync(connection, SqlMergeBuilder.BuildKeyTable(keyTable, idAttr.SqlType, sqlVersion), cancellationToken);
+        await ExecuteNonQueryAsync(connection, SqlMergeBuilder.BuildKeyTable(keyTable, idSqlType, sqlVersion), cancellationToken);
 
         var table = new DataTable();
-        table.Columns.Add("Id", MapClrType(idAttr.SqlType));
-        foreach (var key in sourceKeys)
+        table.Columns.Add("Id", MapClrType(idSqlType));
+        foreach (var key in keys)
         {
             var row = table.NewRow();
-            row["Id"] = CoerceForSql(key, idAttr.SqlType) ?? DBNull.Value;
+            row["Id"] = CoerceForSql(key, idSqlType) ?? DBNull.Value;
             table.Rows.Add(row);
         }
 
@@ -287,7 +331,7 @@ public sealed class SqlMergeExecutor : ISqlMergeExecutor
         int deleted;
         await using (var cmd = connection.CreateCommand())
         {
-            cmd.CommandText = SqlMergeBuilder.BuildDeleteOrphans(schema, entity, keyTable, sqlVersion);
+            cmd.CommandText = buildDelete(keyTable);
             deleted = await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
 

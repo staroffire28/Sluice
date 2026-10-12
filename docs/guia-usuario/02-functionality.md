@@ -15,8 +15,8 @@ Report
 ```
 
 - **Ingest** — reads what's new from the source and writes it to a clean Parquet. It only processes snapshots that are safe (older than the one currently being written), consolidates them with the previous Parquet (keeping the latest version of each row), and uploads the result to ADLS as a durable copy.
-- **SQL** — reads that Parquet from ADLS and MERGEs (upserts) it into SQL Server, creating the table if needed. An **Incremental** merges only the rows of its own run (the delta), and updates a row only if its watermark is newer. It merges the full consolidated Parquet instead when the target table is empty or when the last job that loaded SQL did not finish that stage.
-- **Reconcile** — counts rows in the Parquet vs SQL per table. If a table diverges beyond the threshold, the job is marked **Partial** and an alert fires.
+- **SQL** — reads that Parquet from ADLS and MERGEs (upserts) it into SQL Server, creating the table if needed. An **Incremental** merges only the rows of its own run (the delta), and updates a row only if its watermark is newer. It merges the full consolidated Parquet instead when the target table is empty or when the last job that loaded SQL did not finish that stage. Rows deleted in F&O arrive as rows with `IsDelete = True` and the other columns empty; by default they are deleted in SQL too (see *Create a pipeline*).
+- **Reconcile** — counts rows in the Parquet vs SQL per table (rows deleted in F&O are not counted when the pipeline deletes them in SQL). If a table diverges beyond the threshold, the job is marked **Partial** and an alert fires.
 
 > **Why a new table may not appear yet (Synapse Link).** The portal only processes snapshot folders *older* than the one that Synapse marks as being written in `Changelog/changelog.info`, so it never reads half-written exports. A table just enabled in Power Platform appears only after its folder is closed and a run has processed it. How often a folder closes depends on the interval configured in Synapse Link (for example, once a day).
 
@@ -51,7 +51,7 @@ Status is shown everywhere as a colored badge: **Running/Claimed** (accent), **O
 
 **Create a connection.** Sources/Destinations → Add → fill the fields → Save → Test. Secrets are stored encrypted and shown as `***`.
 
-**Create a pipeline.** Pipelines → Add → pick a source and a destination → Save. It starts with the scheduler off; run it manually first.
+**Create a pipeline.** Pipelines → Add → pick a source and a destination → Save. It starts with the scheduler off; run it manually first. **Rows deleted in F&O** sets what happens to deletes: *Delete them in SQL too* (default) or *Load them flagged* (`IsDelete = 1`, other columns empty). A change applies from the next run; to fix rows already loaded, run **Force**.
 
 **Run a pipeline.** From the run menu on Dashboard or Pipelines: **Run** (Incremental: only new data, the usual one), **Force** (reload SQL from consolidated Parquet — all tables), **Reconcile** (verify counts only), **Diff** (report differences only). Confirm in the dialog.
 
