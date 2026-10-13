@@ -17,6 +17,8 @@ public sealed class DemoBootstrapService : BackgroundService
     public const string DestinationId = "conn-demo-sql";
     public const string PipelineId = "pipe-demo";
     public const string Database = "SluiceDemo";
+    private const string SqlHost = "sql";
+    private const string SqlUser = "sa";
 
     private static readonly TimeSpan SqlWait = TimeSpan.FromMinutes(5);
 
@@ -93,8 +95,8 @@ public sealed class DemoBootstrapService : BackgroundService
     {
         var master = new SqlConnectionStringBuilder
         {
-            DataSource = _options.DemoSqlHost,
-            UserID = _options.DemoSqlUser,
+            DataSource = SqlHost,
+            UserID = SqlUser,
             Password = _options.DemoSqlPassword,
             InitialCatalog = "master",
             TrustServerCertificate = true,
@@ -145,9 +147,9 @@ public sealed class DemoBootstrapService : BackgroundService
                 Type = "sqlserver",
                 Config = new()
                 {
-                    ["host"] = _options.DemoSqlHost,
+                    ["host"] = SqlHost,
                     ["database"] = Database,
-                    ["user"] = _options.DemoSqlUser,
+                    ["user"] = SqlUser,
                     ["password"] = _options.DemoSqlPassword,
                     ["trust_server_certificate"] = "true",
                 },

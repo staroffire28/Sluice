@@ -137,7 +137,7 @@ Edited in the portal, saved to the volume, applied without restart.
 | `CHANGELOG_STALL_HOURS` | Hours without changelog update before alerting. | 16 |
 | `LOCAL_SOURCE_ROOT` | Demo and tests only: enables the *Local (UAT)* source type, which reads local folders instead of ADLS. **Never used in production**; only `docker-compose.demo.yml` sets it. | — |
 | `DEMO_MODE` | Demo mode (`docker-compose.demo.yml`): generates synthetic F&O data in `LOCAL_SOURCE_ROOT` and creates the demo database, connections and pipeline. Needs `LOCAL_SOURCE_ROOT` and `DEMO_SQL_PASSWORD`. **Never in production.** | `false` |
-| `DEMO_SQL_HOST` / `DEMO_SQL_USER` / `DEMO_SQL_PASSWORD` | Demo SQL Server. | `sql` / `sa` / — |
+| `DEMO_SQL_PASSWORD` | Password of the demo SQL Server `sa` user. | — |
 | `DEMO_SNAPSHOT_MINUTES` | Minutes between synthetic snapshots in demo mode. | 5 |
 
 Alerts are configured in **Settings** (`/settings`): enable alerts and paste your Azure Logic App HTTP trigger URL. If you don't have the Logic App yet, **Settings → Email alerts (Logic App) → Download package** gives you a ready-to-deploy one that sends each alert as an Office 365 email (follow its `README.md`).

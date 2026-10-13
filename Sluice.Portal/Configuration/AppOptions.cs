@@ -39,10 +39,8 @@ public sealed class AppOptions
 
     // Modo demo (DEMO_MODE, docker-compose.demo.yml): genera datos sintéticos de F&O en
     // LOCAL_SOURCE_ROOT y crea la base, las conexiones y el pipeline contra el SQL Server de la
-    // demo (DEMO_SQL_*). Nunca en producción.
+    // demo (DEMO_SQL_PASSWORD). Nunca en producción.
     public bool DemoMode { get; set; }
-    public string DemoSqlHost { get; set; } = "sql";
-    public string DemoSqlUser { get; set; } = "sa";
     public string? DemoSqlPassword { get; set; }
     public int DemoSnapshotMinutes { get; set; } = 5;
 

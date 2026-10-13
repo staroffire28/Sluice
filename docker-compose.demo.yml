@@ -47,7 +47,6 @@ services:
       DATA_DIR: /data
       AUTH_MODE: none
       DEMO_MODE: "true"
-      DEMO_SQL_HOST: sql
       DEMO_SQL_PASSWORD: *demo-sql-password
       DEMO_SNAPSHOT_MINUTES: ${DEMO_SNAPSHOT_MINUTES:-5}
       LOCAL_SOURCE_ROOT: /demo
