@@ -14,6 +14,9 @@ public interface IJobService
     Job Create(Job job);
     Job? Update(string id, Job job);
     void AppendEvent(string jobId, EventLevel level, string message);
+
+    // Con el código de error conocido (KnownErrors). Por defecto lo descarta, para los dobles de test.
+    void AppendEvent(string jobId, EventLevel level, string message, string? code) => AppendEvent(jobId, level, message);
 }
 
 public sealed class JobService : IJobService
@@ -100,13 +103,16 @@ public sealed class JobService : IJobService
         return updated;
     }
 
-    public void AppendEvent(string jobId, EventLevel level, string message)
+    public void AppendEvent(string jobId, EventLevel level, string message) => AppendEvent(jobId, level, message, null);
+
+    public void AppendEvent(string jobId, EventLevel level, string message, string? code)
     {
         var newEvent = new JobEvent
         {
             At = DateTimeOffset.UtcNow,
             Level = level,
             Message = message,
+            Code = code,
         };
 
         // Leer + agregar + guardar bajo un único lock (JobStore.MutateAtomic): ninguna otra

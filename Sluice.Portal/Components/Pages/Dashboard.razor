@@ -509,7 +509,7 @@
         {
             var src = await Connections.TestAsync(pipeline.SourceId);
             var dst = await Connections.TestAsync(pipeline.DestinationId);
-            var summary = $"{L["Page.Dashboard.Source"].Value}: {(src.Ok ? L["Page.Dashboard.Ok"].Value : src.Message)} | {L["Page.Dashboard.Destination"].Value}: {(dst.Ok ? L["Page.Dashboard.Ok"].Value : dst.Message)}";
+            var summary = $"{L["Page.Dashboard.Source"].Value}: {(src.Ok ? L["Page.Dashboard.Ok"].Value : KnownErrors.Describe(L, src.Code, src.Message))} | {L["Page.Dashboard.Destination"].Value}: {(dst.Ok ? L["Page.Dashboard.Ok"].Value : KnownErrors.Describe(L, dst.Code, dst.Message))}";
             if (src.Ok && dst.Ok)
             {
                 await NotificationService.ShowSuccessToastAsync(summary);

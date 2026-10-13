@@ -252,14 +252,14 @@
         await InvokeAsync(StateHasChanged);
         try
         {
-            var (ok, msg) = await Connections.TestAsync(id);
+            var (ok, msg, code) = await Connections.TestAsync(id);
             if (ok)
             {
                 await NotificationService.ShowSuccessToastAsync(msg);
             }
             else
             {
-                await NotificationService.ShowErrorToastAsync(msg);
+                await NotificationService.ShowErrorToastAsync(KnownErrors.Describe(L, code, msg));
             }
             ActivityLog.LogUser("source.test", $"Test de origen {id}: {msg}", level: ok ? "info" : "warning");
         }

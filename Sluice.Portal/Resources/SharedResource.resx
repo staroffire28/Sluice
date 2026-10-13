@@ -605,6 +605,7 @@
   <data name="Page.JobDetail.InSqlRows" xml:space="preserve"><value>En SQL</value></data>
   <data name="Page.JobDetail.IngestState" xml:space="preserve"><value>Ingesta</value></data>
   <data name="Page.JobDetail.SqlState" xml:space="preserve"><value>SQL</value></data>
+  <data name="Page.JobDetail.EntityError" xml:space="preserve"><value>Error</value></data>
   <data name="Page.JobDetail.EntitiesNote" xml:space="preserve"><value>Leídas = todas las versiones; En SQL = filas de la tabla destino.</value></data>
   <data name="Page.JobDetail.TimelineFilter" xml:space="preserve"><value>Filtrar eventos</value></data>
   <data name="Page.JobDetail.TimelineAll" xml:space="preserve"><value>Todo</value></data>
@@ -635,4 +636,48 @@
   <data name="Page.Dashboard.ChangelogStalledShort" xml:space="preserve"><value>Changelog estancado</value></data>
   <data name="Common.Status.Idle" xml:space="preserve"><value>Libre</value></data>
   <data name="Page.Dashboard.MoreActiveJobs" xml:space="preserve"><value>y {0} más</value></data>
+  <data name="Error.sql.login.Title" xml:space="preserve"><value>No se pudo iniciar sesión en SQL Server</value></data>
+  <data name="Error.sql.login.Cause" xml:space="preserve"><value>El usuario o la contraseña del destino no son válidos, o el login está deshabilitado.</value></data>
+  <data name="Error.sql.login.Fix" xml:space="preserve"><value>Revisa el usuario y la contraseña en Destinos y pulsa Probar conexión. Con autenticación de SQL, comprueba que el servidor la tenga habilitada.</value></data>
+  <data name="Error.sql.database.Title" xml:space="preserve"><value>No existe la base de datos de destino</value></data>
+  <data name="Error.sql.database.Cause" xml:space="preserve"><value>La base indicada no existe o el usuario no tiene acceso a ella.</value></data>
+  <data name="Error.sql.database.Fix" xml:space="preserve"><value>Crea la base de datos (Sluice no la crea) o corrige su nombre en Destinos, y da acceso al usuario.</value></data>
+  <data name="Error.sql.network.Title" xml:space="preserve"><value>No se puede llegar al servidor SQL</value></data>
+  <data name="Error.sql.network.Cause" xml:space="preserve"><value>El nombre del servidor no se resuelve, el puerto está cerrado o un firewall bloquea la conexión.</value></data>
+  <data name="Error.sql.network.Fix" xml:space="preserve"><value>Comprueba el host y el puerto en Destinos, que el servidor acepte conexiones TCP y que ningún firewall bloquee el puerto (1433 por defecto).</value></data>
+  <data name="Error.sql.timeout.Title" xml:space="preserve"><value>SQL Server tardó demasiado en responder</value></data>
+  <data name="Error.sql.timeout.Cause" xml:space="preserve"><value>La conexión o una consulta superó el tiempo de espera; suele deberse a una red lenta o a un servidor saturado o bloqueado.</value></data>
+  <data name="Error.sql.timeout.Fix" xml:space="preserve"><value>Revisa la carga del servidor y si hay bloqueos, y usa Reintentar.</value></data>
+  <data name="Error.sql.deadlock.Title" xml:space="preserve"><value>Interbloqueo en SQL Server</value></data>
+  <data name="Error.sql.deadlock.Cause" xml:space="preserve"><value>Otra sesión bloqueaba las mismas filas y SQL Server canceló esta operación para resolverlo.</value></data>
+  <data name="Error.sql.deadlock.Fix" xml:space="preserve"><value>Suele ser puntual: usa Reintentar. Si se repite, revisa qué otros procesos escriben a la vez en esas tablas.</value></data>
+  <data name="Error.sql.logFull.Title" xml:space="preserve"><value>El log de transacciones del destino está lleno</value></data>
+  <data name="Error.sql.logFull.Cause" xml:space="preserve"><value>La base de datos no tiene espacio en el log para registrar la carga.</value></data>
+  <data name="Error.sql.logFull.Fix" xml:space="preserve"><value>Amplía el log o el disco, o haz una copia del log si la base usa el modelo de recuperación completo, y usa Reintentar.</value></data>
+  <data name="Error.sql.duplicateKey.Title" xml:space="preserve"><value>Id duplicado en la tabla de destino</value></data>
+  <data name="Error.sql.duplicateKey.Cause" xml:space="preserve"><value>La tabla ya tiene una fila con ese Id.</value></data>
+  <data name="Error.sql.duplicateKey.Fix" xml:space="preserve"><value>Re-sincroniza la tabla desde Tablas (modo Reload) para dejarla igual que el Parquet.</value></data>
+  <data name="Error.sql.truncated.Title" xml:space="preserve"><value>Un valor no cabe en la columna de destino</value></data>
+  <data name="Error.sql.truncated.Cause" xml:space="preserve"><value>Un dato es más largo que su columna en SQL, normalmente porque el tipo de la columna se cambió a mano.</value></data>
+  <data name="Error.sql.truncated.Fix" xml:space="preserve"><value>Restaura el tipo de la columna (o borra la tabla para que Sluice la cree de nuevo) y ejecuta Forzar.</value></data>
+  <data name="Error.sql.mergeDuplicateSource.Title" xml:space="preserve"><value>El MERGE recibió el mismo Id dos veces</value></data>
+  <data name="Error.sql.mergeDuplicateSource.Cause" xml:space="preserve"><value>El Parquet consolidado de la tabla trae más de una fila con el mismo Id (error 8672).</value></data>
+  <data name="Error.sql.mergeDuplicateSource.Fix" xml:space="preserve"><value>Restablece el pipeline (Pipelines → Restablecer) y ejecútalo para reconstruir el Parquet.</value></data>
+  <data name="Error.adls.forbidden.Title" xml:space="preserve"><value>Sin permiso en el almacenamiento ADLS</value></data>
+  <data name="Error.adls.forbidden.Cause" xml:space="preserve"><value>La identidad de la conexión no tiene permiso sobre el contenedor.</value></data>
+  <data name="Error.adls.forbidden.Fix" xml:space="preserve"><value>Asigna a la identidad de la conexión el rol Storage Blob Data Contributor sobre los contenedores de Synapse Link y de Parquet (Reader no basta: Sluice escribe el Parquet y purga los CSV ya procesados). Los cambios de rol pueden tardar unos minutos.</value></data>
+  <data name="Error.adls.notFound.Title" xml:space="preserve"><value>No se encuentra el contenedor o la ruta en ADLS</value></data>
+  <data name="Error.adls.notFound.Cause" xml:space="preserve"><value>El contenedor o la carpeta indicada no existe en la cuenta de almacenamiento.</value></data>
+  <data name="Error.adls.notFound.Fix" xml:space="preserve"><value>Revisa en Orígenes el nombre de la cuenta y de los contenedores de Synapse Link y de Parquet.</value></data>
+  <data name="Error.adls.auth.Title" xml:space="preserve"><value>Las credenciales de Azure no son válidas</value></data>
+  <data name="Error.adls.auth.Cause" xml:space="preserve"><value>Entra ID rechazó la conexión: el secreto caducó o es incorrecto, o el tenant o el client id no coinciden.</value></data>
+  <data name="Error.adls.auth.Fix" xml:space="preserve"><value>Genera un secreto nuevo en la app registration y actualízalo en Orígenes; comprueba también el tenant y el client id.</value></data>
+  <data name="Error.adls.host.Title" xml:space="preserve"><value>No se encuentra la cuenta de almacenamiento</value></data>
+  <data name="Error.adls.host.Cause" xml:space="preserve"><value>El nombre de la cuenta de ADLS no se resuelve en la red.</value></data>
+  <data name="Error.adls.host.Fix" xml:space="preserve"><value>Revisa el nombre de la cuenta en Orígenes y que el equipo tenga salida hacia *.dfs.core.windows.net (o hacia su endpoint privado).</value></data>
+  <data name="Error.Diagnosis.Fix" xml:space="preserve"><value>Qué hacer</value></data>
+  <data name="Error.Diagnosis.OpenDestinations" xml:space="preserve"><value>Abrir Destinos</value></data>
+  <data name="Error.Diagnosis.OpenSources" xml:space="preserve"><value>Abrir Orígenes</value></data>
+  <data name="Error.Diagnosis.Raw" xml:space="preserve"><value>Mensaje original</value></data>
+  <data name="Error.Diagnosis.Help" xml:space="preserve"><value>Errores frecuentes</value></data>
 </root>

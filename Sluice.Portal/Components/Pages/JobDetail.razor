@@ -71,13 +71,18 @@
             @if (job.Status is JobStatus.Error or JobStatus.Partial or JobStatus.Blocked)
             {
                 var affected = AffectedEntities(job);
-                var cause = Cause(job);
+                var incomplete = JobSummary.GetString(job, "stoppedAtIncompleteSnapshot");
+                var diagnosis = incomplete is null ? JobDiagnosis.Pick(job) : null;
                 <FluentMessageBar Intent="@(job.Status == JobStatus.Error ? MessageBarIntent.Error : MessageBarIntent.Warning)"
                                   Layout="MessageBarLayout.MultiLine" AllowDismiss="false"
                                   Title="@L[$"Page.JobDetail.Alert.{job.Status}"]" data-testid="job-alert">
-                    @if (cause is not null)
+                    @if (incomplete is not null)
                     {
-                        <span class="jd-alert__line">@cause</span>
+                        <span class="jd-alert__line">@L["Page.JobDetail.Alert.Incomplete", incomplete]</span>
+                    }
+                    else if (diagnosis is not null)
+                    {
+                        <span class="jd-alert__line"><ErrorDiagnosis Code="@diagnosis.Code" Message="@diagnosis.Message" ShowLinks="true" /></span>
                     }
                     @if (affected.Count > 0)
                     {
@@ -187,6 +192,12 @@
                             </TemplateColumn>
                             <TemplateColumn Title="@L["Page.JobDetail.SqlState"]">
                                 @EntityState(SqlState(context))
+                            </TemplateColumn>
+                            <TemplateColumn Title="@L["Page.JobDetail.EntityError"]">
+                                @if (KnownErrors.IsKnown(context.Code))
+                                {
+                                    <span title="@context.Message" data-testid="entity-error-@context.Entity">@KnownErrors.Title(L, context.Code!)</span>
+                                }
                             </TemplateColumn>
                         </FluentDataGrid>
                         @if (pages > 1)
@@ -408,12 +419,6 @@
     private string FormatTime(DateTimeOffset at) => ToLocal(at).ToString("HH:mm:ss", CultureInfo.CurrentCulture);
 
     // ---- Alerta ----
-
-    private string? Cause(Job job) =>
-        JobSummary.GetString(job, "stoppedAtIncompleteSnapshot") is { } incomplete
-            ? L["Page.JobDetail.Alert.Incomplete", incomplete].Value
-            : job.Events.LastOrDefault(e => e.Level == EventLevel.Error)?.Message
-              ?? job.Events.LastOrDefault(e => e.Level == EventLevel.Warning)?.Message;
 
     private static List<string> AffectedEntities(Job job) =>
         job.Entities

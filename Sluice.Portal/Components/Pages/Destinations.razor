@@ -84,9 +84,14 @@
         else
         {
             <FluentMessageBar data-testid="dst-detect-result" Intent="@(_detection.Ok ? MessageBarIntent.Success : MessageBarIntent.Error)">
-                @(_detection.Ok && _detection.Version is { } detected
-                    ? string.Format(L["Page.Destinations.Detected"].Value, SqlServerVersionLabels.Get(L, detected), _detection.Major)
-                    : _detection.Message)
+                @if (_detection.Ok && _detection.Version is { } detected)
+                {
+                    @string.Format(L["Page.Destinations.Detected"].Value, SqlServerVersionLabels.Get(L, detected), _detection.Major)
+                }
+                else
+                {
+                    <ErrorDiagnosis Code="@_detection.Code" Message="@_detection.Message" />
+                }
             </FluentMessageBar>
         }
 
@@ -301,14 +306,14 @@
         await InvokeAsync(StateHasChanged);
         try
         {
-            var (ok, msg) = await Connections.TestAsync(id);
+            var (ok, msg, code) = await Connections.TestAsync(id);
             if (ok)
             {
                 await NotificationService.ShowSuccessToastAsync(msg);
             }
             else
             {
-                await NotificationService.ShowErrorToastAsync(msg);
+                await NotificationService.ShowErrorToastAsync(KnownErrors.Describe(L, code, msg));
             }
             ActivityLog.LogUser("destination.test", $"Test de destino {id}: {msg}", level: ok ? "info" : "warning");
         }

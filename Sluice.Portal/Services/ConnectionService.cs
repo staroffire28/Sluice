@@ -13,14 +13,25 @@ public interface IConnectionService
     Connection Create(Connection connection);
     Connection? Update(string id, Connection connection);
     bool Delete(string id, out string? error);
-    Task<(bool Ok, string Message)> TestAsync(string id, CancellationToken cancellationToken = default);
+    Task<ConnectionTestResult> TestAsync(string id, CancellationToken cancellationToken = default);
 
     // Prueba un destino SQL sin guardarlo (el diálogo de Destinos) y devuelve la versión detectada.
     // existingId: al editar, los secretos que llegan vacíos o enmascarados se toman de la guardada.
     Task<SqlVersionDetection> DetectSqlVersionAsync(Connection draft, string? existingId, CancellationToken cancellationToken = default);
 }
 
-public sealed record SqlVersionDetection(bool Ok, string Message, SqlServerVersion? Version = null, int? Major = null);
+// Code: error conocido (KnownErrors) cuando falla; null si no se reconoce.
+public sealed record SqlVersionDetection(bool Ok, string Message, SqlServerVersion? Version = null, int? Major = null, string? Code = null);
+
+public sealed record ConnectionTestResult(bool Ok, string Message, string? Code = null)
+{
+    // Para los llamadores que solo usan (ok, mensaje).
+    public void Deconstruct(out bool ok, out string message)
+    {
+        ok = Ok;
+        message = Message;
+    }
+}
 
 public sealed class ConnectionService : IConnectionService
 {
@@ -124,36 +135,43 @@ public sealed class ConnectionService : IConnectionService
         return _store.Delete(id);
     }
 
-    public Task<(bool Ok, string Message)> TestAsync(string id, CancellationToken cancellationToken = default)
+    public Task<ConnectionTestResult> TestAsync(string id, CancellationToken cancellationToken = default)
     {
         var connection = _store.GetById(id);
         if (connection is null)
         {
-            return Task.FromResult((false, "Connection not found."));
+            return Task.FromResult(new ConnectionTestResult(false, "Connection not found."));
         }
 
         return connection.Type.ToLowerInvariant() switch
         {
-            "adls" or AdlsClientFactory.LocalType => _adlsFactory.TestAsync(id, cancellationToken),
+            "adls" or AdlsClientFactory.LocalType => TestAdlsAsync(id, cancellationToken),
             "sqlserver" => TestSqlAsync(connection, cancellationToken),
-            _ => Task.FromResult((false, $"Unknown connection type: {connection.Type}")),
+            _ => Task.FromResult(new ConnectionTestResult(false, $"Unknown connection type: {connection.Type}")),
         };
+    }
+
+    // Los mensajes de ADLS y de Entra ID no se traducen: el código se reconoce por el texto.
+    private async Task<ConnectionTestResult> TestAdlsAsync(string id, CancellationToken cancellationToken)
+    {
+        var (ok, message) = await _adlsFactory.TestAsync(id, cancellationToken);
+        return new ConnectionTestResult(ok, message, ok ? null : KnownErrors.CodeFromText(message));
     }
 
     // Probar un destino SQL detecta la versión del servidor y, si no coincide con la guardada, la
     // actualiza: el T-SQL que genera el pipeline depende de ella.
-    private async Task<(bool Ok, string Message)> TestSqlAsync(Connection connection, CancellationToken cancellationToken)
+    private async Task<ConnectionTestResult> TestSqlAsync(Connection connection, CancellationToken cancellationToken)
     {
         var detection = await DetectAsync(connection, cancellationToken);
         if (!detection.Ok || detection.Version is not { } detected)
         {
-            return (false, detection.Message);
+            return new ConnectionTestResult(false, detection.Message, detection.Code);
         }
 
         var configured = ConnectionSettingsFactory.GetSqlVersion(connection);
         if (detected == configured)
         {
-            return (true, detection.Message);
+            return new ConnectionTestResult(true, detection.Message);
         }
 
         var config = new Dictionary<string, string?>(connection.Config, StringComparer.OrdinalIgnoreCase)
@@ -161,7 +179,7 @@ public sealed class ConnectionService : IConnectionService
             [SqlServerVersions.ConfigKey] = ((int)detected).ToString(System.Globalization.CultureInfo.InvariantCulture),
         };
         _store.Save(connection with { Config = config });
-        return (true, $"{detection.Message} Versión del destino actualizada (antes: {SqlServerVersions.DisplayName(configured)}).");
+        return new ConnectionTestResult(true, $"{detection.Message} Versión del destino actualizada (antes: {SqlServerVersions.DisplayName(configured)}).");
     }
 
     public Task<SqlVersionDetection> DetectSqlVersionAsync(Connection draft, string? existingId, CancellationToken cancellationToken = default)
@@ -183,7 +201,7 @@ public sealed class ConnectionService : IConnectionService
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            return new SqlVersionDetection(false, ex.Message);
+            return new SqlVersionDetection(false, ex.Message, Code: KnownErrors.CodeFrom(ex));
         }
     }
 }

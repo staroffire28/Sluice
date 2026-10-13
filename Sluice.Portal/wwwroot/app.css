@@ -609,3 +609,20 @@ body:not([data-theme="dark"]) .fluent-messagebar.intent-warning {
 body[data-theme="dark"] fluent-message-bar {
     color: var(--colorNeutralForeground1);
 }
+
+/* Diagnóstico de errores conocidos (ErrorDiagnosis) */
+.err-diag {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-wrap: anywhere;
+}
+
+.err-diag__title {
+    font-weight: 600;
+}
+
+.err-diag__raw code {
+    font-size: 12px;
+    white-space: pre-wrap;
+}

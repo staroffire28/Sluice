@@ -278,17 +278,19 @@ public sealed class SqlExecutor : ISqlExecutor
                 // error SQL) NO debe tumbar toda la etapa ni terminar en silencio: se marca
                 // 'error', se registra, y el resto de entidades continúa.
                 failedEntities++;
+                var code = KnownErrors.CodeFrom(ex);
                 entityResults.Add(new JobEntityResult
                 {
                     Entity = entry.Entity,
                     CsvRows = entry.CsvRows,
                     Status = "error",
                     Message = $"{ex.GetType().Name}: {ex.Message}",
+                    Code = code,
                 });
                 // Stack completo al log del container para poder diagnosticar el origen real
                 // (p. ej. un "Access to the path is denied" transitorio de Windows).
                 _logger.LogError(ex, "SQL stage failed for entity {Entity}", entry.Entity);
-                _jobs.AppendEvent(task.JobId, EventLevel.Error, $"{entry.Entity}: SQL stage failed — {ex.GetType().Name}: {ex.Message}");
+                _jobs.AppendEvent(task.JobId, EventLevel.Error, $"{entry.Entity}: SQL stage failed — {ex.GetType().Name}: {ex.Message}", code);
             }
         }
 

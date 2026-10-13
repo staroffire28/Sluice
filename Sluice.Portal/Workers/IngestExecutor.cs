@@ -142,6 +142,8 @@ public sealed class IngestExecutor : IIngestExecutor
         // así una entidad que falla en un snapshot y tiene éxito en otro no pierde el rastro del
         // fallo (ver partiallyFailedEntities más abajo).
         var entityFailures = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        // Primer error conocido (KnownErrors) de cada entidad que falla.
+        var entityCodes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var totalCsvRows = 0;
         var snapshotsProcessed = 0;
         SnapshotIntegrity? incomplete = null;
@@ -269,9 +271,15 @@ public sealed class IngestExecutor : IIngestExecutor
                     }
 
                     failuresForEntity.Add($"snapshot {snapshot}: {ex.GetType().Name}: {ex.Message}");
+                    var code = KnownErrors.CodeFrom(ex);
+                    if (code is not null)
+                    {
+                        entityCodes.TryAdd(entity, code);
+                    }
+
                     _logger.LogError(ex, "Ingest stage failed for entity {Entity} in snapshot {Snapshot}", entity, snapshot);
                     _jobs.AppendEvent(task.JobId, EventLevel.Error,
-                        $"{entity}: ingest failed for snapshot {snapshot} — {ex.GetType().Name}: {ex.Message}");
+                        $"{entity}: ingest failed for snapshot {snapshot} — {ex.GetType().Name}: {ex.Message}", code);
                 }
             }
 
@@ -475,6 +483,7 @@ public sealed class IngestExecutor : IIngestExecutor
                 CsvRows = entityCsvRows.GetValueOrDefault(entity),
                 Status = "error",
                 Message = string.Join("; ", entityFailures[entity]),
+                Code = entityCodes.GetValueOrDefault(entity),
             }))
             .ToList();
 
