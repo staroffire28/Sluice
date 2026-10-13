@@ -631,3 +631,9 @@ body[data-theme="dark"] fluent-message-bar {
     font-size: 12px;
     white-space: pre-wrap;
 }
+
+/* Tablas: último dato más antiguo que el umbral de Ajustes (StaleTableDays) */
+.table-stale {
+    color: var(--colorPaletteDarkOrangeForeground1, #bc4b09);
+    font-weight: 600;
+}

@@ -30,6 +30,7 @@ public sealed class IngestExecutor : IIngestExecutor
     private readonly AppOptions _options;
     private readonly ILogger<IngestExecutor> _logger;
     private readonly JobProgressStore? _progressStore;
+    private readonly AlertService? _alerts;
 
     public IngestExecutor(
         IJobService jobs,
@@ -40,7 +41,8 @@ public sealed class IngestExecutor : IIngestExecutor
         IngestManifestStore manifestStore,
         IOptions<AppOptions> options,
         ILogger<IngestExecutor> logger,
-        JobProgressStore? progress = null)
+        JobProgressStore? progress = null,
+        AlertService? alerts = null)
     {
         _jobs = jobs;
         _pipelines = pipelines;
@@ -51,6 +53,7 @@ public sealed class IngestExecutor : IIngestExecutor
         _options = options.Value;
         _logger = logger;
         _progressStore = progress;
+        _alerts = alerts;
     }
 
     public async Task ExecuteAsync(PipelineTask task, CancellationToken cancellationToken = default)
@@ -305,6 +308,7 @@ public sealed class IngestExecutor : IIngestExecutor
             var schema = entitySchemas[entity];
             var consolidatedBlobPath = IngestManifestStore.GetConsolidatedBlobPath(task.PipelineId, entity);
             var schemaBlobPath = IngestManifestStore.GetConsolidatedSchemaBlobPath(task.PipelineId, entity);
+            await ReportSchemaChangesAsync(task.JobId, pipeline.Name, entity, schemaBlobPath, schema, parquetStore, cancellationToken);
 
             // Fuentes newest-first: transitorios (último snapshot primero); en incremental,
             // además el consolidado previo como base. En Force se reconstruye solo desde los
@@ -550,5 +554,53 @@ public sealed class IngestExecutor : IIngestExecutor
                 ? EventLevel.Warning
                 : EventLevel.Info;
         _jobs.AppendEvent(task.JobId, completionLevel, completionNote);
+    }
+
+    // Cambios de esquema respecto al consolidado anterior (el schema.json que se va a sobrescribir):
+    // avisos en el job y, si cambia un tipo, alerta. Leer el anterior no debe tumbar la ingesta.
+    private async Task ReportSchemaChangesAsync(
+        string jobId, string pipelineName, string entity, string schemaBlobPath, CdmEntitySchema schema,
+        IParquetStore parquetStore, CancellationToken cancellationToken)
+    {
+        CdmEntitySchema? previous;
+        try
+        {
+            var json = await parquetStore.ReadTextAsync(schemaBlobPath, cancellationToken);
+            previous = json is null ? null : JsonSerializer.Deserialize<CdmEntitySchema>(json, JsonDefaults.Options);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "No se pudo leer el esquema anterior de {Entity}.", entity);
+            return;
+        }
+
+        if (previous is null)
+        {
+            return;
+        }
+
+        var diff = SchemaDiff.Compare(previous, schema);
+        if (diff.Added.Count > 0)
+        {
+            _jobs.AppendEvent(jobId, EventLevel.Info,
+                $"{entity}: columnas nuevas en el origen: {string.Join(", ", diff.Added)} (se añaden en SQL).", SchemaDiff.ColumnsAddedCode);
+        }
+
+        if (diff.Removed.Count > 0)
+        {
+            _jobs.AppendEvent(jobId, EventLevel.Warning,
+                $"{entity}: columnas que ya no llegan del origen: {string.Join(", ", diff.Removed)} (en SQL conservan su último valor).", SchemaDiff.ColumnsRemovedCode);
+        }
+
+        if (diff.TypeChanged.Count > 0)
+        {
+            var detail = string.Join(", ", diff.TypeChanged.Select(c => $"{c.Column} {c.Before} → {c.After}"));
+            _jobs.AppendEvent(jobId, EventLevel.Warning,
+                $"{entity}: cambio de tipo en el origen: {detail}. SQL mantiene el tipo anterior; revisa la tabla.", SchemaDiff.TypeChangedCode);
+            if (_alerts is not null)
+            {
+                await _alerts.SendAsync($"Pipeline {pipelineName}: cambio de tipo en {entity} ({detail}).", cancellationToken);
+            }
+        }
     }
 }

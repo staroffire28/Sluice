@@ -14,7 +14,7 @@ SQL Server
 Reporte
 ```
 
-- **Ingest** — lee lo nuevo del origen y lo escribe en un Parquet limpio. Solo procesa snapshots que son seguros (más antiguos que el que se está escribiendo en ese momento), los consolida con el Parquet anterior (conservando la última versión de cada fila) y sube el resultado a ADLS como copia duradera.
+- **Ingest** — lee lo nuevo del origen y lo escribe en un Parquet limpio. Compara las columnas de cada tabla con la ejecución anterior: las nuevas se añaden en SQL, y las eliminadas o los cambios de tipo se avisan en el job (un cambio de tipo también envía una alerta). Solo procesa snapshots que son seguros (más antiguos que el que se está escribiendo en ese momento), los consolida con el Parquet anterior (conservando la última versión de cada fila) y sube el resultado a ADLS como copia duradera.
 - **SQL** — lee ese Parquet desde ADLS y lo hace MERGE (upsert) en SQL Server, creando la tabla si hace falta. Un **Incremental** mergea solo las filas de su propia corrida (el delta) y actualiza una fila solo si su watermark es más nuevo (o igual con un `versionnumber` mayor). Mergea el Parquet consolidado completo cuando la tabla destino está vacía o cuando el último job que cargó SQL no terminó esa etapa. Las filas borradas en F&O llegan como filas con `IsDelete = True` y el resto de columnas vacías; por defecto se borran también en SQL (ver *Crear un pipeline*).
 - **Reconcile** — cuenta las filas en el Parquet vs SQL por tabla (las filas borradas en F&O no cuentan cuando el pipeline las borra en SQL). Si una tabla diverge más allá del umbral, el job se marca como **Partial** y se dispara una alerta.
 
