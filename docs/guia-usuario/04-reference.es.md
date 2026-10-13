@@ -75,7 +75,7 @@ Un janitor limita el crecimiento del volumen. El **job es la unidad de retenció
 
 ### Snapshots origen (container Synapse Link en ADLS)
 
-Un segundo janitor purga carpetas CSV **ya procesadas** en el container origen de Synapse Link. El parquet consolidado en el container dedicado es el artefacto de recovery.
+Un segundo janitor purga carpetas CSV **ya procesadas** en el container origen de Synapse Link. El parquet consolidado (en su container dedicado o en el disco del portal) es el artefacto de recovery.
 
 - **Siempre se conservan**: las últimas 14 snapshots procesadas (piso K), snapshots pendientes o en export, `Changelog/` y metadatos CDM.
 - **Perilla**: `SourceSnapshotRetentionDays` en `/settings` (por defecto 30). `0` o negativo desactiva la purga.
