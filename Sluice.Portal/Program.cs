@@ -55,6 +55,13 @@ if (appOptions.IsOpenAccess && !string.IsNullOrWhiteSpace(appOptions.UiApiKey))
         "AUTH_MODE=none y UI_API_KEY no pueden ir juntos: quita la clave para el acceso abierto o AUTH_MODE para exigirla.");
 }
 
+// El modo demo escribe sus datos sintéticos en LOCAL_SOURCE_ROOT y crea su base en el SQL de la demo.
+if (appOptions.DemoMode && (!appOptions.IsLocalSourceEnabled || string.IsNullOrWhiteSpace(appOptions.DemoSqlPassword)))
+{
+    throw new InvalidOperationException(
+        "DEMO_MODE necesita LOCAL_SOURCE_ROOT y DEMO_SQL_PASSWORD (usa docker-compose.demo.yml).");
+}
+
 // Fail-closed fuera de desarrollo: sin claves, el portal quedaría abierto. Solo un AUTH_MODE=none
 // explícito lo permite (acceso abierto a propósito, se avisa abajo). En desarrollo se permite.
 if (!builder.Environment.IsDevelopment() && !appOptions.IsOpenAccess)
@@ -155,6 +162,10 @@ builder.Services.AddHostedService<WorkerHostService>();
 builder.Services.AddHostedService<PipelineSchedulerService>();
 builder.Services.AddHostedService<RetentionSweepService>();
 builder.Services.AddHostedService<SnapshotRetentionSweepService>();
+if (appOptions.DemoMode)
+{
+    builder.Services.AddHostedService<Sluice.Portal.Services.Demo.DemoBootstrapService>();
+}
 
 builder.Services.AddSingleton<SessionTokenService>();
 builder.Services.AddSingleton<LoginThrottle>();

@@ -46,6 +46,11 @@ public static class AppOptionsConfiguration
             WorkerId = Get(configuration, "WORKER_ID"),
             TranslateEnums = GetBool(configuration, "TRANSLATE_ENUMS", false),
             LocalSourceRoot = Get(configuration, "LOCAL_SOURCE_ROOT"),
+            DemoMode = GetBool(configuration, "DEMO_MODE", false),
+            DemoSqlHost = Get(configuration, "DEMO_SQL_HOST") ?? "sql",
+            DemoSqlUser = Get(configuration, "DEMO_SQL_USER") ?? "sa",
+            DemoSqlPassword = Get(configuration, "DEMO_SQL_PASSWORD"),
+            DemoSnapshotMinutes = Math.Max(1, GetInt(configuration, "DEMO_SNAPSHOT_MINUTES", 5)),
             KnownProxies = SplitList(configuration, "KNOWN_PROXIES")
                 .Select(item => System.Net.IPAddress.TryParse(item, out var address) ? address : throw Invalid("KNOWN_PROXIES", item))
                 .ToList(),

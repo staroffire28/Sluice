@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 @inject IStringLocalizer<SharedResource> L
 @inject Sluice.Portal.Services.Auth.IAuthService Auth
+@inject Microsoft.Extensions.Options.IOptions<Sluice.Portal.Configuration.AppOptions> AppOptions
 
 <a href="#main-content" class="skip-link">@L["Common.SkipToContent"]</a>
 
@@ -24,6 +25,10 @@
                 @if (!Auth.IsUiAuthEnabled)
                 {
                     <span class="open-access-badge" title="@L["Auth.OpenAccessTitle"]" data-testid="open-access-badge">@L["Auth.OpenAccess"]</span>
+                }
+                @if (AppOptions.Value.DemoMode)
+                {
+                    <span class="open-access-badge demo-badge" title="@L["App.DemoTitle"]" data-testid="demo-badge">@L["App.Demo"]</span>
                 }
             </FluentStack>
             <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px" Width="auto">
