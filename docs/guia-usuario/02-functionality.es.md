@@ -14,7 +14,7 @@ SQL Server
 Reporte
 ```
 
-- **Ingest** — lee lo nuevo del origen y lo escribe en un Parquet limpio. Solo procesa snapshots que son seguros (más antiguos que el que se está escribiendo en ese momento), los consolida con el Parquet anterior (conservando la última versión de cada fila) y sube el resultado a ADLS como copia duradera.
+- **Ingest** — lee lo nuevo del origen y lo escribe en un Parquet limpio. Compara las columnas de cada tabla con la ejecución anterior: las nuevas se añaden en SQL, y las eliminadas o los cambios de tipo se avisan en el job (un cambio de tipo también envía una alerta). Solo procesa snapshots que son seguros (más antiguos que el que se está escribiendo en ese momento), los consolida con el Parquet anterior (conservando la última versión de cada fila) y sube el resultado a ADLS como copia duradera.
 - **SQL** — lee ese Parquet desde ADLS y lo hace MERGE (upsert) en SQL Server, creando la tabla si hace falta. Un **Incremental** mergea solo las filas de su propia corrida (el delta) y actualiza una fila solo si su watermark es más nuevo (o igual con un `versionnumber` mayor). Mergea el Parquet consolidado completo cuando la tabla destino está vacía o cuando el último job que cargó SQL no terminó esa etapa. Las filas borradas en F&O llegan como filas con `IsDelete = True` y el resto de columnas vacías; por defecto se borran también en SQL (ver *Crear un pipeline*).
 - **Reconcile** — cuenta las filas en el Parquet vs SQL por tabla (las filas borradas en F&O no cuentan cuando el pipeline las borra en SQL). Si una tabla diverge más allá del umbral, el job se marca como **Partial** y se dispara una alerta.
 
@@ -31,7 +31,7 @@ El trabajo fluye por una **cola basada en archivos**: cada tarea es un archivo J
 | Panel | `/` | Salud, cola, workers; lanzar y cancelar corridas. |
 | Jobs | `/jobs` | Historial de corridas (filtros de pipeline, estado y fechas Desde/Hasta); abrir detalle; descargar reporte PDF/JSON; **Exportar CSV** con los filtros aplicados. La columna *Trabajo* muestra el id corto (el sufijo final); el id completo aparece al pasar el ratón, en el detalle y en el CSV. |
 | Detalle del job | `/jobs/{id}` | Progreso en vivo: etapas, resultados por tabla, línea de tiempo. |
-| Tablas | `/tables` | Conteos de filas, watermarks y estado de carga por tabla; **Re-sincronizar** cualquier tabla desde su Parquet. |
+| Tablas | `/tables` | Conteos de filas, watermarks, último dato (resaltado tras los *Días sin datos*, ver Ajustes) y estado de carga por tabla; **Re-sincronizar** cualquier tabla desde su Parquet. |
 | Orígenes | `/sources` | Conexiones de origen ADLS (crear, probar, editar, eliminar). |
 | Destinos | `/destinations` | Conexiones de destino SQL Server. |
 | Pipelines | `/pipelines` | Crear/editar pipelines, programarlos, ejecutarlos. |

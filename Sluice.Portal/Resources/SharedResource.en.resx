@@ -683,4 +683,8 @@
   <data name="Error.Diagnosis.Help" xml:space="preserve"><value>Common errors</value></data>
   <data name="App.Demo" xml:space="preserve"><value>Demo</value></data>
   <data name="App.DemoTitle" xml:space="preserve"><value>Demo mode: synthetic Dynamics 365 F&amp;O data and its own SQL Server. Not for production.</value></data>
+  <data name="Page.Tables.LastData" xml:space="preserve"><value>Last data</value></data>
+  <data name="Page.Tables.LastDataStale" xml:space="preserve"><value>{0} days without new data: check whether the table is still in the Synapse Link profile.</value></data>
+  <data name="Page.Settings.StaleTableDays" xml:space="preserve"><value>Days without data to flag a table</value></data>
+  <data name="Page.Settings.StaleTableDays.Hint" xml:space="preserve"><value>In Tables, "Last data" is highlighted when the last load with rows is older. 0 or negative disables it.</value></data>
 </root>

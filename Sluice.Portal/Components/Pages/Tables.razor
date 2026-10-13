@@ -8,6 +8,7 @@
 @inject IPipelineService PipelineService
 @inject ReportStore Reports
 @inject TablePauseStore PauseStore
+@inject SettingsStore Settings
 @inject INotificationService NotificationService
 @inject IActivityLog ActivityLog
 @inject NavigationManager Nav
@@ -36,11 +37,24 @@
     <PanelState IsEmpty="@(string.IsNullOrWhiteSpace(_pipelineId))" EmptyText="@L["Page.Tables.SelectPipeline"]">
         <PanelState IsEmpty="@(_allRows.Count == 0)" EmptyText="@L["Page.Tables.NoTables"]">
             <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true"
-                            GridTemplateColumns="minmax(160px, 1.6fr) 0.8fr 1.4fr 0.9fr 0.8fr 1fr minmax(170px, 1fr)"
+                            GridTemplateColumns="minmax(160px, 1.6fr) 0.8fr 1.4fr 1.2fr 0.9fr 0.8fr 1fr minmax(170px, 1fr)"
                             Items="@_rows.AsQueryable()" TGridItem="TableRow">
                 <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" />
                 <PropertyColumn Property="@(r => r.RowCount)" Title="@L["Common.Rows"]" />
                 <PropertyColumn Property="@(r => r.Watermark)" Title="@L["Page.Tables.Watermark"]" />
+                <TemplateColumn Title="@L["Page.Tables.LastData"]">
+                    @if (context.LastLoad is { } lastLoad)
+                    {
+                        var days = (int)(DateTimeOffset.UtcNow - lastLoad).TotalDays;
+                        var stale = _staleTableDays > 0 && days >= _staleTableDays;
+                        <span class="@(stale ? "table-stale" : null)" data-testid="last-data-@context.Entity" data-stale="@(stale ? "true" : "false")"
+                              title="@(stale ? L["Page.Tables.LastDataStale", days].Value : null)">@lastLoad.ToString("u")</span>
+                    }
+                    else
+                    {
+                        <span>-</span>
+                    }
+                </TemplateColumn>
                 <TemplateColumn Title="@L["Page.Tables.Divergence"]">
                     @if (context.DivergencePct is { } pct)
                     {
@@ -137,6 +151,7 @@
             ?? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         var reportIsPartial = latestReport?.IsPartial ?? false;
         var paused = PauseStore.GetPaused(_pipelineId);
+        _staleTableDays = Settings.Get().StaleTableDays;
 
         _allRows = state.Tables
             .Where(kv => string.IsNullOrWhiteSpace(_search)
@@ -146,6 +161,7 @@
                 Entity = kv.Key,
                 RowCount = kv.Value.RowCount,
                 Watermark = kv.Value.Watermark?.ToString("u") ?? "-",
+                LastLoad = kv.Value.LastLoad,
                 Status = kv.Value.Status,
                 DivergencePct = divergence.TryGetValue(kv.Key, out var pct) ? pct : null,
                 ReportIsPartial = reportIsPartial,
@@ -191,11 +207,14 @@
         Load();
     }
 
+    private int _staleTableDays;
+
     private sealed class TableRow
     {
         public string Entity { get; init; } = "";
         public long RowCount { get; init; }
         public string Watermark { get; init; } = "";
+        public DateTimeOffset? LastLoad { get; init; }
         public string Status { get; init; } = "ok";
         public double? DivergencePct { get; init; }
         public bool ReportIsPartial { get; init; }

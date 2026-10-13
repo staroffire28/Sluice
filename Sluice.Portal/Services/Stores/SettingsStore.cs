@@ -22,6 +22,11 @@ public sealed record AppSettings
     // (últimos K por pipeline) es constante en RetentionService.
     public int RetentionDays { get; init; } = 90;
 
+    // Tablas: la columna "Último dato" se resalta si la última carga con filas es más antigua que
+    // estos días (una tabla que dejó de llegar, p. ej. quitada del perfil de Synapse Link). 0 o
+    // negativo lo desactiva.
+    public int StaleTableDays { get; init; } = 7;
+
     // Antigüedad (días) de carpetas snapshot CSV ya procesadas en el container origen
     // de Synapse Link. 0 o negativo desactiva la purga. El piso K es constante en
     // SnapshotRetentionService.

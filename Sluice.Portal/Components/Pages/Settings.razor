@@ -27,6 +27,8 @@
         <div class="dialog-form" style="max-width:560px;">
             <FluentNumberInput TValue="int" @bind-Value="_retentionDays" Label="@L["Page.Settings.RetentionDays"]" Style="width:100%;" />
             <p class="field-hint">@L["Page.Settings.RetentionDays.Hint"]</p>
+            <FluentNumberInput TValue="int" @bind-Value="_staleTableDays" Label="@L["Page.Settings.StaleTableDays"]" Style="width:100%;" data-testid="settings-stale-days" />
+            <p class="field-hint">@L["Page.Settings.StaleTableDays.Hint"]</p>
             <FluentNumberInput TValue="int" @bind-Value="_sourceSnapshotRetentionDays" Label="@L["Page.Settings.SourceSnapshotRetentionDays"]" Style="width:100%;" />
             <p class="field-hint">@L["Page.Settings.SourceSnapshotRetentionDays.Hint"]</p>
             <FluentSwitch @bind-Value="_sourceSnapshotRetentionDryRun" Label="@L["Page.Settings.SourceSnapshotRetentionDryRun"]" />
@@ -114,6 +116,7 @@
     private bool _autoRemediate;
     private int _retentionDays = 90;
     private int _sourceSnapshotRetentionDays = 30;
+    private int _staleTableDays = 7;
     private bool _sourceSnapshotRetentionDryRun;
     private bool _sourceSnapshotRetentionRequireParquet = true;
     private bool _alertEnabled;
@@ -135,6 +138,7 @@
         _divergencePct = settings.ReconDivergencePct;
         _autoRemediate = settings.AutoRemediate;
         _retentionDays = settings.RetentionDays;
+        _staleTableDays = settings.StaleTableDays;
         _sourceSnapshotRetentionDays = settings.SourceSnapshotRetentionDays;
         _sourceSnapshotRetentionDryRun = settings.SourceSnapshotRetentionDryRun;
         _sourceSnapshotRetentionRequireParquet = settings.SourceSnapshotRetentionRequireParquet;
@@ -160,6 +164,7 @@
             ReconDivergencePct = _divergencePct,
             AutoRemediate = _autoRemediate,
             RetentionDays = _retentionDays,
+            StaleTableDays = _staleTableDays,
             SourceSnapshotRetentionDays = _sourceSnapshotRetentionDays,
             SourceSnapshotRetentionDryRun = _sourceSnapshotRetentionDryRun,
             SourceSnapshotRetentionRequireParquet = _sourceSnapshotRetentionRequireParquet,

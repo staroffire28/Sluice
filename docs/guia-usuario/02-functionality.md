@@ -14,7 +14,7 @@ SQL Server
 Report
 ```
 
-- **Ingest** — reads what's new from the source and writes it to a clean Parquet. It only processes snapshots that are safe (older than the one currently being written), consolidates them with the previous Parquet (keeping the latest version of each row), and uploads the result to ADLS as a durable copy.
+- **Ingest** — reads what's new from the source and writes it to a clean Parquet. It compares each table's columns with the previous run: new columns are added in SQL, and removed columns or type changes are reported in the job (type changes also send an alert). It only processes snapshots that are safe (older than the one currently being written), consolidates them with the previous Parquet (keeping the latest version of each row), and uploads the result to ADLS as a durable copy.
 - **SQL** — reads that Parquet from ADLS and MERGEs (upserts) it into SQL Server, creating the table if needed. An **Incremental** merges only the rows of its own run (the delta), and updates a row only if its watermark is newer (or equal with a higher `versionnumber`). It merges the full consolidated Parquet instead when the target table is empty or when the last job that loaded SQL did not finish that stage. Rows deleted in F&O arrive as rows with `IsDelete = True` and the other columns empty; by default they are deleted in SQL too (see *Create a pipeline*).
 - **Reconcile** — counts rows in the Parquet vs SQL per table (rows deleted in F&O are not counted when the pipeline deletes them in SQL). If a table diverges beyond the threshold, the job is marked **Partial** and an alert fires.
 
@@ -31,7 +31,7 @@ Work flows through a **file-based queue**: each task is a JSON file whose folder
 | Dashboard | `/` | Health, queue, workers; launch and cancel runs. |
 | Jobs | `/jobs` | Run history (pipeline, status and From/To date filters); open detail; download PDF/JSON report; **Export CSV** with the applied filters. The *Job* column shows the short id (the final suffix); the full id appears on hover, in the detail and in the CSV. |
 | Job detail | `/jobs/{id}` | Live progress: stages, per-table results, timeline. |
-| Tables | `/tables` | Row counts, watermarks and load status per table; **Re-sync** any table from its Parquet. |
+| Tables | `/tables` | Row counts, watermarks, last data (highlighted after *Days without data*, see Settings) and load status per table; **Re-sync** any table from its Parquet. |
 | Sources | `/sources` | ADLS source connections (create, test, edit, delete). |
 | Destinations | `/destinations` | SQL Server destination connections. |
 | Pipelines | `/pipelines` | Create/edit pipelines, schedule them, run them. |
