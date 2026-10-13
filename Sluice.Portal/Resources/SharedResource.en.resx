@@ -687,4 +687,9 @@
   <data name="Page.Tables.LastDataStale" xml:space="preserve"><value>{0} days without new data: check whether the table is still in the Synapse Link profile.</value></data>
   <data name="Page.Settings.StaleTableDays" xml:space="preserve"><value>Days without data to flag a table</value></data>
   <data name="Page.Settings.StaleTableDays.Hint" xml:space="preserve"><value>In Tables, "Last data" is highlighted when the last load with rows is older. 0 or negative disables it.</value></data>
+  <data name="Page.Sources.ParquetStorage" xml:space="preserve"><value>Where to keep the Parquet</value></data>
+  <data name="Page.Sources.ParquetStorage.Adls" xml:space="preserve"><value>ADLS container</value></data>
+  <data name="Page.Sources.ParquetStorage.Portal" xml:space="preserve"><value>Portal disk (DATA_DIR)</value></data>
+  <data name="Page.Sources.ParquetStorageHint" xml:space="preserve"><value>On the portal disk you need no Parquet container or write access to ADLS, but it takes space on the DATA_DIR volume. When you change it, Sluice copies the consolidated Parquet to the new place without deleting the old one.</value></data>
+  <data name="Page.Sources.ParquetCopied" xml:space="preserve"><value>Consolidated Parquet copied to the new place: {0} table(s).</value></data>
 </root>

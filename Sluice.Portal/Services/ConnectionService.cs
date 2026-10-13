@@ -12,6 +12,10 @@ public interface IConnectionService
     Connection? Get(string id);
     Connection Create(Connection connection);
     Connection? Update(string id, Connection connection);
+
+    // Como Update; si un origen cambia dónde guarda el Parquet (parquet_storage), copia antes al
+    // sitio nuevo los consolidados de sus pipelines. CopiedTables: cuántos se copiaron.
+    Task<(Connection? Connection, int CopiedTables)> UpdateAsync(string id, Connection connection, CancellationToken cancellationToken = default);
     bool Delete(string id, out string? error);
     Task<ConnectionTestResult> TestAsync(string id, CancellationToken cancellationToken = default);
 
@@ -95,6 +99,75 @@ public sealed class ConnectionService : IConnectionService
         };
         _store.Save(merged);
         return SecretMasker.Mask(merged);
+    }
+
+    // Tras la purga de los CSV de Synapse Link, el Parquet consolidado puede ser la única copia de la
+    // historia: al cambiar de sitio se copia (sin borrar el original) y, si la copia falla, la
+    // conexión vuelve a la configuración anterior.
+    public async Task<(Connection? Connection, int CopiedTables)> UpdateAsync(string id, Connection connection, CancellationToken cancellationToken = default)
+    {
+        var before = _store.GetById(id);
+        var updated = Update(id, connection);
+        if (before is null || updated is null || before.Role != ConnectionRole.Source)
+        {
+            return (updated, 0);
+        }
+
+        var from = ParquetStorageOf(before);
+        var to = ParquetStorageOf(_store.GetById(id)!);
+        if (from == to)
+        {
+            return (updated, 0);
+        }
+
+        try
+        {
+            return (updated, await CopyConsolidatedParquetAsync(id, from, to, cancellationToken));
+        }
+        catch
+        {
+            _store.Save(before);
+            throw;
+        }
+    }
+
+    private static string ParquetStorageOf(Connection connection) =>
+        string.Equals(connection.Config.GetValueOrDefault(AdlsClientFactory.ParquetStorageKey), AdlsClientFactory.PortalParquetStorage, StringComparison.OrdinalIgnoreCase)
+            ? AdlsClientFactory.PortalParquetStorage
+            : AdlsClientFactory.AdlsParquetStorage;
+
+    // Solo los consolidados ({pipeline}/{entidad}.parquet y su .schema.json): los Parquet de cada
+    // job son copias de trabajo que se regeneran.
+    private async Task<int> CopyConsolidatedParquetAsync(string sourceId, string from, string to, CancellationToken cancellationToken)
+    {
+        var source = await _adlsFactory.CreateParquetStoreAsync(sourceId, from, cancellationToken);
+        var target = await _adlsFactory.CreateParquetStoreAsync(sourceId, to, cancellationToken);
+        var copied = 0;
+        foreach (var pipeline in _pipelines.ListAll().Where(p => p.SourceId == sourceId))
+        {
+            foreach (var artifact in await source.ListParquetAsync($"{pipeline.Id}/", cancellationToken))
+            {
+                if (artifact.Path.Split('/').Length != 2)
+                {
+                    continue;
+                }
+
+                await using (var stream = await source.OpenParquetReadAsync(artifact.Path, cancellationToken))
+                {
+                    await target.UploadParquetAsync(artifact.Path, stream, cancellationToken);
+                }
+
+                var schemaPath = artifact.Path[..^".parquet".Length] + ".schema.json";
+                if (await source.ReadTextAsync(schemaPath, cancellationToken) is { } schema)
+                {
+                    await target.UploadTextAsync(schemaPath, schema, cancellationToken);
+                }
+
+                copied++;
+            }
+        }
+
+        return copied;
     }
 
     private static Dictionary<string, string?> MergeConfig(

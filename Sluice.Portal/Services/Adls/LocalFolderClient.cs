@@ -17,7 +17,7 @@ public sealed class LocalFolderClient : IAdlsClient, IParquetStore
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     private readonly string _source;
-    private readonly string? _parquet;
+    private readonly LocalParquetStore? _parquetStore;
 
     public LocalFolderClient(string root, string container, string? parquetContainer)
     {
@@ -28,7 +28,9 @@ public sealed class LocalFolderClient : IAdlsClient, IParquetStore
 
         var fullRoot = Path.GetFullPath(root);
         _source = Confine(fullRoot, container, allowBase: false);
-        _parquet = string.IsNullOrWhiteSpace(parquetContainer) ? null : Confine(fullRoot, parquetContainer, allowBase: false);
+        _parquetStore = string.IsNullOrWhiteSpace(parquetContainer)
+            ? null
+            : new LocalParquetStore(Confine(fullRoot, parquetContainer, allowBase: false));
     }
 
     // Ruta absoluta de 'relative' dentro de 'baseDir'; falla si '..' o una ruta absoluta la sacan fuera.
@@ -43,65 +45,31 @@ public sealed class LocalFolderClient : IAdlsClient, IParquetStore
 
     private string SourcePath(string relative) => Confine(_source, relative);
 
-    private string ParquetPath(string relative) =>
-        Confine(_parquet ?? throw new InvalidOperationException(
-            "Local parquet folder is not configured. Set 'parquet_container' on the local connection."), relative);
+    private LocalParquetStore Parquet => _parquetStore ?? throw new InvalidOperationException(
+        "Local parquet folder is not configured. Set 'parquet_container' on the local connection.");
 
     // --- IParquetStore ---
 
-    public async Task UploadParquetAsync(string blobPath, Stream content, CancellationToken cancellationToken = default)
-    {
-        if (content.CanSeek)
-        {
-            content.Position = 0;
-        }
-
-        var path = ParquetPath(blobPath);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await using var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
-        await content.CopyToAsync(file, cancellationToken);
-    }
+    public Task UploadParquetAsync(string blobPath, Stream content, CancellationToken cancellationToken = default) =>
+        Parquet.UploadParquetAsync(blobPath, content, cancellationToken);
 
     public Task<Stream> OpenParquetReadAsync(string blobPath, CancellationToken cancellationToken = default) =>
-        Task.FromResult<Stream>(new FileStream(ParquetPath(blobPath), FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true));
+        Parquet.OpenParquetReadAsync(blobPath, cancellationToken);
 
     public Task<bool> ParquetExistsAsync(string blobPath, CancellationToken cancellationToken = default) =>
-        Task.FromResult(File.Exists(ParquetPath(blobPath)));
+        Parquet.ParquetExistsAsync(blobPath, cancellationToken);
 
-    public Task DeleteParquetAsync(string blobPath, CancellationToken cancellationToken = default)
-    {
-        File.Delete(ParquetPath(blobPath));
-        return Task.CompletedTask;
-    }
+    public Task DeleteParquetAsync(string blobPath, CancellationToken cancellationToken = default) =>
+        Parquet.DeleteParquetAsync(blobPath, cancellationToken);
 
-    public Task<IReadOnlyList<ParquetArtifact>> ListParquetAsync(string prefix, CancellationToken cancellationToken = default)
-    {
-        var dir = ParquetPath(prefix);
-        if (!Directory.Exists(dir))
-        {
-            return Task.FromResult<IReadOnlyList<ParquetArtifact>>([]);
-        }
+    public Task<IReadOnlyList<ParquetArtifact>> ListParquetAsync(string prefix, CancellationToken cancellationToken = default) =>
+        Parquet.ListParquetAsync(prefix, cancellationToken);
 
-        IReadOnlyList<ParquetArtifact> artifacts = Directory.EnumerateFiles(dir, "*.parquet", SearchOption.AllDirectories)
-            .Select(f => new FileInfo(f))
-            .Select(f => new ParquetArtifact(Relative(_parquet!, f.FullName), f.Length, f.LastWriteTimeUtc))
-            .OrderBy(a => a.Path, StringComparer.Ordinal)
-            .ToList();
-        return Task.FromResult(artifacts);
-    }
+    public Task UploadTextAsync(string blobPath, string content, CancellationToken cancellationToken = default) =>
+        Parquet.UploadTextAsync(blobPath, content, cancellationToken);
 
-    public async Task UploadTextAsync(string blobPath, string content, CancellationToken cancellationToken = default)
-    {
-        var path = ParquetPath(blobPath);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await File.WriteAllTextAsync(path, content, Encoding.UTF8, cancellationToken);
-    }
-
-    public async Task<string?> ReadTextAsync(string blobPath, CancellationToken cancellationToken = default)
-    {
-        var path = ParquetPath(blobPath);
-        return File.Exists(path) ? await File.ReadAllTextAsync(path, Encoding.UTF8, cancellationToken) : null;
-    }
+    public Task<string?> ReadTextAsync(string blobPath, CancellationToken cancellationToken = default) =>
+        Parquet.ReadTextAsync(blobPath, cancellationToken);
 
     // --- IAdlsClient ---
 

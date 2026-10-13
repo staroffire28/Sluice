@@ -79,7 +79,18 @@
             <FluentTextInput @bind-Value="_account" data-testid="src-account" Label="@L["Page.Sources.StorageAccount"]" Style="width:100%;" />
         }
         <FluentTextInput @bind-Value="_container" data-testid="src-container" Label="@L["Page.Sources.Container"]" Style="width:100%;" />
-        <FluentTextInput @bind-Value="_parquetContainer" data-testid="src-parquet-container" Label="@L["Page.Sources.ParquetContainer"]" Style="width:100%;" />
+        @if (_type != AdlsClientFactory.LocalType)
+        {
+            <FluentSelect TOption="string" TValue="string" @bind-Value="_parquetStorage" data-testid="src-parquet-storage" Label="@L["Page.Sources.ParquetStorage"]" Style="width:100%;">
+                <FluentOption TValue="string" Value="@AdlsClientFactory.AdlsParquetStorage">@L["Page.Sources.ParquetStorage.Adls"]</FluentOption>
+                <FluentOption TValue="string" Value="@AdlsClientFactory.PortalParquetStorage">@L["Page.Sources.ParquetStorage.Portal"]</FluentOption>
+            </FluentSelect>
+            <p class="field-hint">@L["Page.Sources.ParquetStorageHint"]</p>
+        }
+        @if (_type == AdlsClientFactory.LocalType || _parquetStorage != AdlsClientFactory.PortalParquetStorage)
+        {
+            <FluentTextInput @bind-Value="_parquetContainer" data-testid="src-parquet-container" Label="@L["Page.Sources.ParquetContainer"]" Style="width:100%;" />
+        }
 
         @if (_type != AdlsClientFactory.LocalType)
         {
@@ -118,6 +129,7 @@
     private string _account = "";
     private string _container = "";
     private string _parquetContainer = "";
+    private string _parquetStorage = AdlsClientFactory.AdlsParquetStorage;
     private string _tenantId = "";
     private string _clientId = "";
     private string _clientSecret = "";
@@ -159,6 +171,7 @@
         _account = "";
         _container = "";
         _parquetContainer = "";
+        _parquetStorage = AdlsClientFactory.AdlsParquetStorage;
         _tenantId = "";
         _clientId = "";
         _clientSecret = "";
@@ -175,6 +188,9 @@
         _account = GetConfig(connection, "account", "storage_account");
         _container = GetConfig(connection, "container");
         _parquetContainer = GetConfig(connection, "parquet_container", "destination_container");
+        _parquetStorage = GetConfig(connection, AdlsClientFactory.ParquetStorageKey) == AdlsClientFactory.PortalParquetStorage
+            ? AdlsClientFactory.PortalParquetStorage
+            : AdlsClientFactory.AdlsParquetStorage;
         _tenantId = GetConfig(connection, "tenant_id");
         _clientId = GetConfig(connection, "client_id");
         _clientSecret = GetConfig(connection, "client_secret");
@@ -182,8 +198,9 @@
         _showEditor = true;
     }
 
-    private void Save()
+    private async Task Save()
     {
+        var copied = 0;
         var config = new Dictionary<string, string?>
         {
             ["container"] = _container,
@@ -195,6 +212,7 @@
         if (_type != AdlsClientFactory.LocalType)
         {
             config["account"] = _account;
+            config[AdlsClientFactory.ParquetStorageKey] = _parquetStorage;
             config["tenant_id"] = _tenantId;
             config["client_id"] = _clientId;
             config["client_secret"] = _clientSecret;
@@ -223,7 +241,7 @@
             else
             {
                 var existing = Connections.Get(_editingId)!;
-                Connections.Update(_editingId, existing with
+                (_, copied) = await Connections.UpdateAsync(_editingId, existing with
                 {
                     Name = _name,
                     Type = _type,
@@ -231,15 +249,20 @@
                 });
             }
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Id duplicado (otro nombre que normaliza igual) o no válido: avisar sin tumbar el circuito.
+            // Id duplicado o no válido, o la copia del Parquet al cambiar de sitio falló (la conexión
+            // vuelve a como estaba): avisar sin tumbar el circuito.
             _ = NotificationService.ShowErrorToastAsync(ex.Message);
             return;
         }
 
         _showEditor = false;
         _ = NotificationService.ShowSuccessToastAsync(L["Common.Saved"].Value);
+        if (copied > 0)
+        {
+            _ = NotificationService.ShowInfoToastAsync(L["Page.Sources.ParquetCopied", copied].Value);
+        }
         ActivityLog.LogUser("source.save", $"Conexión de origen '{_name}' {(_editingId is null ? "creada" : "actualizada")}.");
         Load();
     }
