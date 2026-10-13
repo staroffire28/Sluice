@@ -49,10 +49,14 @@ public sealed class AdlsClientFactory : IAdlsClientFactory
         _connections.GetUnmasked(connectionId)
             ?? throw new InvalidOperationException($"Source connection '{connectionId}' not found.");
 
+    // Un origen local siempre guarda el Parquet en su carpeta, sea cual sea parquet_storage.
+    public static bool KeepsParquetOnPortal(Connection connection) =>
+        !string.Equals(connection.Type, LocalType, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(connection.Config.GetValueOrDefault(ParquetStorageKey), PortalParquetStorage, StringComparison.OrdinalIgnoreCase);
+
     private IParquetStore ParquetStore(Connection connection)
     {
-        if (!string.Equals(connection.Type, LocalType, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(connection.Config.GetValueOrDefault(ParquetStorageKey), PortalParquetStorage, StringComparison.OrdinalIgnoreCase))
+        if (KeepsParquetOnPortal(connection))
         {
             return new LocalParquetStore(Path.Combine(_options.DataDir, "parquet"));
         }

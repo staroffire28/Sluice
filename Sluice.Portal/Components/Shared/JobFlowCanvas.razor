@@ -108,7 +108,7 @@
                     <div>
                         <p class="jfc-detail__eyebrow">@PipelineStageLabels.GetStageKey(L, detail.StageKey) · @L["JobFlow.StepOf", detailStage.Steps.ToList().IndexOf(detail) + 1, detailStage.Steps.Count]</p>
                         <h3 class="jfc-detail__title" id="jfc-detail-title">@StepLabel(detail.Key)</h3>
-                        <p class="jfc-detail__hint">@L[$"JobFlow.Step.{detail.Key}.Hint"]</p>
+                        <p class="jfc-detail__hint">@Text($"JobFlow.Step.{detail.Key}.Hint")</p>
                     </div>
                 </div>
                 <p class="jfc-detail__status">
@@ -147,7 +147,7 @@
                     @if (ParquetLocation is not null && detail.Key is JobStepCatalog.Consolidate or JobStepCatalog.Compare)
                     {
                         <div class="jfc-detail__wide" data-testid="flow-detail-parquet">
-                            <dt>@L[detail.Key == JobStepCatalog.Consolidate ? "JobFlow.Detail.PublishedTo" : "JobFlow.Detail.ComparedParquet"]</dt>
+                            <dt>@Text(detail.Key == JobStepCatalog.Consolidate ? "JobFlow.Detail.PublishedTo" : "JobFlow.Detail.ComparedParquet")</dt>
                             <dd>
                                 <code>@ParquetLocation</code>
                                 @if (ParquetHref is not null)
@@ -185,9 +185,12 @@
     [Parameter] public TimeZoneInfo? TimeZone { get; set; }
 
     // Dónde publica el ingest el parquet consolidado (cuenta/contenedor/pipeline/) y enlace a la
-    // página Parquet: se muestran en el detalle de "Consolidar y publicar en ADLS" y "Comparar".
+    // página Parquet: se muestran en el detalle de "Consolidar y publicar" y "Comparar".
     [Parameter] public string? ParquetLocation { get; set; }
     [Parameter] public string? ParquetHref { get; set; }
+
+    // El origen guarda el Parquet en el disco del portal (parquet_storage = portal), no en ADLS.
+    [Parameter] public bool ParquetOnPortal { get; set; }
 
     private Dictionary<string, FlowStatus>? _previous;
     private string? _announcement;
@@ -350,7 +353,14 @@
 
     private string StatusText(FlowStatus status) => L[$"JobFlow.Status.{status}"].Value;
 
-    private string StepLabel(string key) => L[$"JobFlow.Step.{key}"].Value;
+    private string StepLabel(string key) => Text($"JobFlow.Step.{key}");
+
+    // Con el Parquet en el disco del portal, los textos que dicen "ADLS" tienen variante {key}.Portal.
+    private string Text(string key)
+    {
+        var portal = ParquetOnPortal ? L[key + ".Portal"] : null;
+        return portal is { ResourceNotFound: false } ? portal.Value : L[key].Value;
+    }
 
     private string UnitText(StepUnit unit) => unit switch
     {

@@ -5,6 +5,7 @@
 @using Sluice.Portal.Components.Shared
 @using Sluice.Portal.Models
 @using Sluice.Portal.Services
+@using Sluice.Portal.Services.Adls
 @using Sluice.Portal.Services.Logging
 @using Sluice.Portal.Services.Pipeline
 @inject IJobService JobService
@@ -118,7 +119,7 @@
 
             <PageSection Title="@L["Page.JobDetail.StageFlow"]">
                 <JobFlowCanvas Flow="_flow" @bind-SelectedKey="_selectedStep" TimeZone="_timeZone"
-                               ParquetLocation="@_parquetLocation" ParquetHref="@_parquetHref" />
+                               ParquetLocation="@_parquetLocation" ParquetHref="@_parquetHref" ParquetOnPortal="_parquetOnPortal" />
             </PageSection>
 
             <PageSection Title="@L["Page.JobDetail.Entities"]">
@@ -297,12 +298,19 @@
     private string _pipelineName = "";
     private string? _parquetLocation;
     private string? _parquetHref;
+    private bool _parquetOnPortal;
 
     // Dónde publica el ingest el parquet consolidado: cuenta/contenedor de parquet/pipeline/
-    // (config no secreta de la conexión de origen, como la lee ConnectionSettingsFactory).
-    private string ParquetLocation(Pipeline? pipeline, string pipelineId)
+    // (config no secreta de la conexión de origen, como la lee ConnectionSettingsFactory), o
+    // DATA_DIR/parquet/pipeline/ si el origen lo guarda en el disco del portal.
+    private static string ParquetLocation(Connection? source, string pipelineId)
     {
-        var config = pipeline is null ? null : ConnectionService.Get(pipeline.SourceId)?.Config;
+        if (source is not null && AdlsClientFactory.KeepsParquetOnPortal(source))
+        {
+            return $"DATA_DIR/parquet/{pipelineId}/";
+        }
+
+        var config = source?.Config;
         string? Value(params string[] keys) =>
             keys.Select(k => config?.GetValueOrDefault(k)).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
         var prefix = string.Join("/", new[] { Value("account", "storage_account"), Value("parquet_container", "destination_container") }
@@ -366,7 +374,9 @@
                 {
                     var pipeline = PipelineService.Get(_job.PipelineId);
                     _pipelineName = pipeline?.Name ?? _job.PipelineId;
-                    _parquetLocation = ParquetLocation(pipeline, _job.PipelineId);
+                    var source = pipeline is null ? null : ConnectionService.Get(pipeline.SourceId);
+                    _parquetOnPortal = source is not null && AdlsClientFactory.KeepsParquetOnPortal(source);
+                    _parquetLocation = ParquetLocation(source, _job.PipelineId);
                     _parquetHref = $"/parquet?pipeline={Uri.EscapeDataString(_job.PipelineId)}";
                 }
 

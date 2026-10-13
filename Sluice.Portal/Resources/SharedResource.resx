@@ -520,7 +520,9 @@
   <data name="JobFlow.Step.snapshots" xml:space="preserve"><value>Validar y leer CSV</value></data>
   <data name="JobFlow.Step.snapshots.Hint" xml:space="preserve"><value>Valida cada snapshot y transcodifica sus CSV a parquet transitorio.</value></data>
   <data name="JobFlow.Step.consolidate" xml:space="preserve"><value>Consolidar y publicar en ADLS</value></data>
+  <data name="JobFlow.Step.consolidate.Portal" xml:space="preserve"><value>Consolidar y guardar en el disco del portal</value></data>
   <data name="JobFlow.Step.consolidate.Hint" xml:space="preserve"><value>Une y deduplica las versiones de cada entidad y publica en ADLS su parquet consolidado ({pipeline}/{entidad}.parquet) y su schema. Es el parquet que luego compara la conciliación.</value></data>
+  <data name="JobFlow.Step.consolidate.Hint.Portal" xml:space="preserve"><value>Une y deduplica las versiones de cada entidad y guarda en el disco del portal (DATA_DIR/parquet) su parquet consolidado ({pipeline}/{entidad}.parquet) y su schema. Es el parquet que luego compara la conciliación.</value></data>
   <data name="JobFlow.Step.register" xml:space="preserve"><value>Registrar watermark</value></data>
   <data name="JobFlow.Step.register.Hint" xml:space="preserve"><value>Marca los snapshots procesados y escribe el manifest.</value></data>
   <data name="JobFlow.Step.prepare" xml:space="preserve"><value>Preparar destino</value></data>
@@ -529,6 +531,7 @@
   <data name="JobFlow.Step.merge.Hint" xml:space="preserve"><value>Por cada entidad: crea o evoluciona la tabla, carga en lotes, elimina huérfanas (en recarga) y cuenta las filas.</value></data>
   <data name="JobFlow.Step.compare" xml:space="preserve"><value>Comparar parquet y SQL</value></data>
   <data name="JobFlow.Step.compare.Hint" xml:space="preserve"><value>Compara, entidad a entidad, las filas del parquet publicado en ADLS (paso «Consolidar y publicar en ADLS») con las de SQL.</value></data>
+  <data name="JobFlow.Step.compare.Hint.Portal" xml:space="preserve"><value>Compara, entidad a entidad, las filas del parquet guardado en el disco del portal (paso «Consolidar y guardar en el disco del portal») con las de SQL.</value></data>
   <data name="JobFlow.Step.report" xml:space="preserve"><value>Informe y alertas</value></data>
   <data name="JobFlow.Step.report.Hint" xml:space="preserve"><value>Genera el informe del trabajo y envía las alertas que correspondan.</value></data>
   <data name="JobFlow.Status.Pending" xml:space="preserve"><value>Pendiente</value></data>
@@ -564,7 +567,9 @@
   <data name="JobFlow.Fact.SqlRows" xml:space="preserve"><value>Filas en SQL</value></data>
   <data name="JobFlow.Fact.PublishedParquet" xml:space="preserve"><value>Parquet publicados</value></data>
   <data name="JobFlow.Detail.PublishedTo" xml:space="preserve"><value>Publicado en ADLS</value></data>
+  <data name="JobFlow.Detail.PublishedTo.Portal" xml:space="preserve"><value>Guardado en el disco del portal</value></data>
   <data name="JobFlow.Detail.ComparedParquet" xml:space="preserve"><value>Parquet comparado (ADLS)</value></data>
+  <data name="JobFlow.Detail.ComparedParquet.Portal" xml:space="preserve"><value>Parquet comparado (disco del portal)</value></data>
   <data name="JobFlow.Detail.OpenParquet" xml:space="preserve"><value>Ver en Parquet</value></data>
   <data name="JobFlow.Fact.Divergence" xml:space="preserve"><value>Divergencia</value></data>
   <data name="JobFlow.Fact.FailedEntities" xml:space="preserve"><value>Entidades con error</value></data>

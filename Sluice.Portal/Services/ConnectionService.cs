@@ -128,10 +128,8 @@ public sealed class ConnectionService : IConnectionService
         return (SecretMasker.Mask(merged), copied);
     }
 
-    // Como el factory: un origen local siempre guarda el Parquet en su carpeta.
     private static string ParquetStorageOf(Connection connection) =>
-        !string.Equals(connection.Type, AdlsClientFactory.LocalType, StringComparison.OrdinalIgnoreCase)
-        && string.Equals(connection.Config.GetValueOrDefault(AdlsClientFactory.ParquetStorageKey), AdlsClientFactory.PortalParquetStorage, StringComparison.OrdinalIgnoreCase)
+        AdlsClientFactory.KeepsParquetOnPortal(connection)
             ? AdlsClientFactory.PortalParquetStorage
             : AdlsClientFactory.AdlsParquetStorage;
 

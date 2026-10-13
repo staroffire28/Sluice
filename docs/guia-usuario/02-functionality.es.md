@@ -55,7 +55,7 @@ El estado se muestra en todas partes como una insignia de color: **Running/Claim
 
 **Ejecutar un pipeline.** Desde el menú de ejecución del Dashboard o de Pipelines: **Ejecutar** (Incremental: solo datos nuevos, el habitual), **Forzar** (recarga SQL desde el Parquet consolidado — todas las tablas), **Reconciliar** (solo verifica conteos), **Diff** (solo reporta diferencias). Confirma en el diálogo.
 
-**Seguir / cancelar una corrida.** Abre el detalle del job para ver etapas, tablas y línea de tiempo en vivo; su lienzo muestra también el paso en que el Parquet consolidado se publica en ADLS (*Consolidar y publicar en ADLS*). **Cancelar** solo está disponible mientras el job está corriendo.
+**Seguir / cancelar una corrida.** Abre el detalle del job para ver etapas, tablas y línea de tiempo en vivo; su lienzo muestra también el paso en que se guarda el Parquet consolidado: *Consolidar y publicar en ADLS*, o *Consolidar y guardar en el disco del portal* si el origen guarda el Parquet en el disco del portal. **Cancelar** solo está disponible mientras el job está corriendo.
 
 **Reintentar un job.** Desde el menú del job en Jobs, o **Reintentar** en el detalle del job, para jobs en Error, Partial o Stalled. Crea un job nuevo; el original queda en el historial.
 
