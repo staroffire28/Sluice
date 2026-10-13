@@ -1,0 +1,65 @@
+# DEMO ONLY - never for production.
+# Sluice with synthetic Dynamics 365 Finance and Operations data, its own SQL Server and open
+# access (no key), so you can try it without an F&O environment or an Azure storage account.
+#
+#   docker compose -f docker-compose.demo.yml up --build
+#   then open http://localhost:58480
+#
+# The portal creates the SluiceDemo database, a source with synthetic Synapse Link snapshots,
+# a SQL destination and the "Demo F&O" pipeline, and runs the first load. Every
+# DEMO_SNAPSHOT_MINUTES (5 by default) it closes a new snapshot with inserts, updates and deletes,
+# and the scheduler processes it.
+#
+# Running it accepts the SQL Server Developer Edition license (ACCEPT_EULA). SQL Server is only
+# reachable from the portal container; the portal only on this machine (127.0.0.1).
+# Remove everything: docker compose -f docker-compose.demo.yml down -v
+
+# Demo-only SQL password, shared by both services. Override it with DEMO_SQL_PASSWORD.
+x-demo-sql-password: &demo-sql-password ${DEMO_SQL_PASSWORD:-Sluice_Demo_0nly!}
+
+services:
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: *demo-sql-password
+      MSSQL_MEMORY_LIMIT_MB: "2048"
+    volumes:
+      - demo-sql:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q \"SELECT 1\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    mem_limit: 2560m
+
+  portal:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux
+    image: sluice-portal:linux
+    ports:
+      - "127.0.0.1:${DEMO_HTTP_PORT:-58480}:58472"
+    environment:
+      ASPNETCORE_URLS: http://+:58472
+      EXECUTION_MODE: local
+      DATA_DIR: /data
+      AUTH_MODE: none
+      DEMO_MODE: "true"
+      DEMO_SQL_PASSWORD: *demo-sql-password
+      DEMO_SNAPSHOT_MINUTES: ${DEMO_SNAPSHOT_MINUTES:-5}
+      LOCAL_SOURCE_ROOT: /demo
+      TRANSLATE_ENUMS: "true"
+    volumes:
+      - demo-data:/data
+      - demo-source:/demo
+    depends_on:
+      sql:
+        condition: service_healthy
+    mem_limit: 2g
+
+volumes:
+  demo-data:
+  demo-source:
+  demo-sql:

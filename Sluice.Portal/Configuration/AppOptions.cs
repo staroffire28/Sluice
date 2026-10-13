@@ -37,6 +37,13 @@ public sealed class AppOptions
 
     public bool IsLocalSourceEnabled => !string.IsNullOrWhiteSpace(LocalSourceRoot);
 
+    // Modo demo (DEMO_MODE, docker-compose.demo.yml): genera datos sintéticos de F&O en
+    // LOCAL_SOURCE_ROOT y crea la base, las conexiones y el pipeline contra el SQL Server de la
+    // demo (DEMO_SQL_PASSWORD). Nunca en producción.
+    public bool DemoMode { get; set; }
+    public string? DemoSqlPassword { get; set; }
+    public int DemoSnapshotMinutes { get; set; } = 5;
+
     // Proxies/redes de confianza para X-Forwarded-For/Proto (KNOWN_PROXIES, KNOWN_NETWORKS).
     // Vacías = se acepta de cualquier origen (comportamiento previo, se avisa al arrancar).
     public IReadOnlyList<System.Net.IPAddress> KnownProxies { get; set; } = [];

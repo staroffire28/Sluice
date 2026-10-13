@@ -23,7 +23,8 @@ COPY --from=build /app/publish .
 # Sin root: el usuario "app" (UID 1654) viene en las imágenes de .NET. /data es donde compose
 # monta DATA_DIR (/app/data, el valor por defecto sin DATA_DIR): un volumen nuevo hereda este
 # propietario; uno existente creado como root necesita un chown una vez (guía de instalación).
-RUN mkdir -p /data /app/data && chown app:app /data /app/data
+# /demo: datos sintéticos del modo demo (docker-compose.demo.yml, LOCAL_SOURCE_ROOT).
+RUN mkdir -p /data /app/data /demo && chown app:app /data /app/data /demo
 USER app
 ENV ASPNETCORE_URLS=http://+:58472
 EXPOSE 58472

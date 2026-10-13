@@ -29,6 +29,23 @@ The portal is light; the heavy systems (SQL Server, ADLS) are external. These fi
 
 Azure/SQL credentials are **not** set here — you configure them in the portal after it starts.
 
+## Try it: demo mode
+
+To see Sluice working without an F&O environment, an Azure storage account or your own SQL Server, run the demo on a machine with Docker (Linux containers):
+
+```bash
+docker compose -f docker-compose.demo.yml up --build
+```
+
+Then open `http://localhost:58480` and press **Enter**. The demo:
+
+- Starts its own SQL Server (Developer Edition; running it accepts its license) and creates the `SluiceDemo` database.
+- Writes **synthetic** Synapse Link data for three F&O tables (`custtable`, `vendtable`, `generaljournalaccountentry`), with enum metadata.
+- Creates the source, the destination and the **Demo F&O** pipeline, and runs the first load.
+- Every 5 minutes closes a new snapshot with inserts, updates and deletes; the scheduler processes it, so you can watch Incremental, the deletes and Reconcile. Between snapshots the scheduler may also run an Incremental with nothing new; that is expected.
+
+The header shows **Demo** and **Open access**. It is **not for production**: no key, a fixed SQL password unless you set `DEMO_SQL_PASSWORD`, and test data. The portal is published only on this machine (`127.0.0.1`), and SQL Server only to the portal. Remove it with `docker compose -f docker-compose.demo.yml down -v`. Change the port with `DEMO_HTTP_PORT` and the cadence with `DEMO_SNAPSHOT_MINUTES`.
+
 ## Install (distributed)
 
 Distributed mode runs one orchestrator (`api`) plus three workers (`ingest`, `sql`, `reconcile`), all sharing the named volume `pipeline-data`.
@@ -118,7 +135,10 @@ Edited in the portal, saved to the volume, applied without restart.
 | `KNOWN_PROXIES` / `KNOWN_NETWORKS` | Comma-separated IPs and CIDR networks of the trusted reverse proxy for `X-Forwarded-For`/`Proto`. Without them any source is accepted and the client IP used by the login throttle can be spoofed (a warning is logged at startup); an invalid value stops startup. | empty |
 | `HEARTBEAT_MAX_FAILURES` | Heartbeat failures before releasing a task. | 3 |
 | `CHANGELOG_STALL_HOURS` | Hours without changelog update before alerting. | 16 |
-| `LOCAL_SOURCE_ROOT` | For UAT tests only: enables the *Local (UAT)* source type, which reads local folders. **Never used in production**; it is not in the compose files or `.env.example`. | — |
+| `LOCAL_SOURCE_ROOT` | Demo and tests only: enables the *Local (UAT)* source type, which reads local folders instead of ADLS. **Never used in production**; only `docker-compose.demo.yml` sets it. | — |
+| `DEMO_MODE` | Demo mode (`docker-compose.demo.yml`): generates synthetic F&O data in `LOCAL_SOURCE_ROOT` and creates the demo database, connections and pipeline. Needs `LOCAL_SOURCE_ROOT` and `DEMO_SQL_PASSWORD`. **Never in production.** | `false` |
+| `DEMO_SQL_PASSWORD` | Password of the demo SQL Server `sa` user. | — |
+| `DEMO_SNAPSHOT_MINUTES` | Minutes between synthetic snapshots in demo mode. | 5 |
 
 Alerts are configured in **Settings** (`/settings`): enable alerts and paste your Azure Logic App HTTP trigger URL. If you don't have the Logic App yet, **Settings → Email alerts (Logic App) → Download package** gives you a ready-to-deploy one that sends each alert as an Office 365 email (follow its `README.md`).
 

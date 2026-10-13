@@ -680,4 +680,6 @@
   <data name="Error.Diagnosis.OpenSources" xml:space="preserve"><value>Abrir Orígenes</value></data>
   <data name="Error.Diagnosis.Raw" xml:space="preserve"><value>Mensaje original</value></data>
   <data name="Error.Diagnosis.Help" xml:space="preserve"><value>Errores frecuentes</value></data>
+  <data name="App.Demo" xml:space="preserve"><value>Demo</value></data>
+  <data name="App.DemoTitle" xml:space="preserve"><value>Modo demo: datos sintéticos de Dynamics 365 F&amp;O y un SQL Server propio. No usar en producción.</value></data>
 </root>

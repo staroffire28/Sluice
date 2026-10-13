@@ -23,6 +23,16 @@ Control and observability portal for **Dynamics 365 Finance and Operations** dat
 - Reconcile reports with PDF export, and webhook alerts.
 - English and Spanish interface.
 
+## Try it
+
+No F&O environment or Azure storage needed: the demo brings synthetic Dynamics 365 F&O data, its own SQL Server and a ready-made pipeline that picks up a new snapshot every 5 minutes.
+
+```bash
+docker compose -f docker-compose.demo.yml up --build
+```
+
+Open <http://localhost:58480> and press **Enter**. It is for trying Sluice only, never for production: see [demo mode](docs/guia-usuario/03-installation.md#try-it-demo-mode).
+
 ## Quick start
 
 Requires Docker Engine 24+.
