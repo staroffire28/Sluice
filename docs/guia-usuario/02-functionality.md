@@ -31,7 +31,7 @@ Work flows through a **file-based queue**: each task is a JSON file whose folder
 | Dashboard | `/` | Health, queue, workers; launch and cancel runs. |
 | Jobs | `/jobs` | Run history (pipeline, status and From/To date filters); open detail; download PDF/JSON report; **Export CSV** with the applied filters. The *Job* column shows the short id (the final suffix); the full id appears on hover, in the detail and in the CSV. |
 | Job detail | `/jobs/{id}` | Live progress: stages, per-table results, timeline. |
-| Tables | `/tables` | Row counts, watermarks and load status per table; **Re-sync** any table from its Parquet. |
+| Tables | `/tables` | Row counts, watermarks, last data (highlighted after *Days without data*, see Settings) and load status per table; **Re-sync** any table from its Parquet. |
 | Sources | `/sources` | ADLS source connections (create, test, edit, delete). |
 | Destinations | `/destinations` | SQL Server destination connections. |
 | Pipelines | `/pipelines` | Create/edit pipelines, schedule them, run them. |
