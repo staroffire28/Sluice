@@ -86,64 +86,69 @@ public sealed class ConnectionService : IConnectionService
             return null;
         }
 
-        // Si la edición cambia el tipo, la configuración anterior es de otro tipo (p. ej. la cuenta y
-        // el client_secret de Azure en un origen que pasa a local) y no se arrastra.
         var existing = _store.GetById(id)!;
-        var sameType = string.Equals(existing.Type, connection.Type, StringComparison.OrdinalIgnoreCase);
-        var merged = connection with
-        {
-            Id = id,
-            Config = sameType
-                ? MergeConfig(existing.Config, connection.Config)
-                : new Dictionary<string, string?>(connection.Config, StringComparer.OrdinalIgnoreCase),
-        };
+        var merged = Merge(existing, connection);
         _store.Save(merged);
         return SecretMasker.Mask(merged);
     }
 
+    // Si la edición cambia el tipo, la configuración anterior es de otro tipo (p. ej. la cuenta y
+    // el client_secret de Azure en un origen que pasa a local) y no se arrastra.
+    private static Connection Merge(Connection existing, Connection connection) =>
+        connection with
+        {
+            Id = existing.Id,
+            Config = SameType(existing, connection)
+                ? MergeConfig(existing.Config, connection.Config)
+                : new Dictionary<string, string?>(connection.Config, StringComparer.OrdinalIgnoreCase),
+        };
+
+    private static bool SameType(Connection a, Connection b) =>
+        string.Equals(a.Type, b.Type, StringComparison.OrdinalIgnoreCase);
+
     // Tras la purga de los CSV de Synapse Link, el Parquet consolidado puede ser la única copia de la
-    // historia: al cambiar de sitio se copia (sin borrar el original) y, si la copia falla, la
-    // conexión vuelve a la configuración anterior.
+    // historia: al cambiar de sitio se copia (sin borrar el original) antes de guardar la conexión y,
+    // si la copia falla, no se guarda nada. Un cambio de tipo no mueve el Parquet.
     public async Task<(Connection? Connection, int CopiedTables)> UpdateAsync(string id, Connection connection, CancellationToken cancellationToken = default)
     {
-        var before = _store.GetById(id);
-        var updated = Update(id, connection);
-        if (before is null || updated is null || before.Role != ConnectionRole.Source)
+        var existing = _store.GetById(id);
+        if (existing is null)
         {
-            return (updated, 0);
+            return (null, 0);
         }
 
-        var from = ParquetStorageOf(before);
-        var to = ParquetStorageOf(_store.GetById(id)!);
-        if (from == to)
-        {
-            return (updated, 0);
-        }
-
-        try
-        {
-            return (updated, await CopyConsolidatedParquetAsync(id, from, to, cancellationToken));
-        }
-        catch
-        {
-            _store.Save(before);
-            throw;
-        }
+        var merged = Merge(existing, connection);
+        var copied = existing.Role == ConnectionRole.Source
+            && SameType(existing, merged)
+            && ParquetStorageOf(existing) != ParquetStorageOf(merged)
+            && HasParquet(existing)
+                ? await CopyConsolidatedParquetAsync(existing, merged, cancellationToken)
+                : 0;
+        _store.Save(merged);
+        return (SecretMasker.Mask(merged), copied);
     }
 
+    // Como el factory: un origen local siempre guarda el Parquet en su carpeta.
     private static string ParquetStorageOf(Connection connection) =>
-        string.Equals(connection.Config.GetValueOrDefault(AdlsClientFactory.ParquetStorageKey), AdlsClientFactory.PortalParquetStorage, StringComparison.OrdinalIgnoreCase)
+        !string.Equals(connection.Type, AdlsClientFactory.LocalType, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(connection.Config.GetValueOrDefault(AdlsClientFactory.ParquetStorageKey), AdlsClientFactory.PortalParquetStorage, StringComparison.OrdinalIgnoreCase)
             ? AdlsClientFactory.PortalParquetStorage
             : AdlsClientFactory.AdlsParquetStorage;
 
+    // En ADLS sin container de Parquet no hay nada que copiar.
+    private static bool HasParquet(Connection connection) =>
+        ParquetStorageOf(connection) == AdlsClientFactory.PortalParquetStorage
+        || !string.IsNullOrWhiteSpace(connection.Config.GetValueOrDefault("parquet_container"))
+        || !string.IsNullOrWhiteSpace(connection.Config.GetValueOrDefault("destination_container"));
+
     // Solo los consolidados ({pipeline}/{entidad}.parquet y su .schema.json): los Parquet de cada
     // job son copias de trabajo que se regeneran.
-    private async Task<int> CopyConsolidatedParquetAsync(string sourceId, string from, string to, CancellationToken cancellationToken)
+    private async Task<int> CopyConsolidatedParquetAsync(Connection from, Connection to, CancellationToken cancellationToken)
     {
-        var source = await _adlsFactory.CreateParquetStoreAsync(sourceId, from, cancellationToken);
-        var target = await _adlsFactory.CreateParquetStoreAsync(sourceId, to, cancellationToken);
+        var source = await _adlsFactory.CreateParquetStoreAsync(from, cancellationToken);
+        var target = await _adlsFactory.CreateParquetStoreAsync(to, cancellationToken);
         var copied = 0;
-        foreach (var pipeline in _pipelines.ListAll().Where(p => p.SourceId == sourceId))
+        foreach (var pipeline in _pipelines.ListAll().Where(p => p.SourceId == from.Id))
         {
             foreach (var artifact in await source.ListParquetAsync($"{pipeline.Id}/", cancellationToken))
             {
