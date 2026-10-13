@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using Azure;
 using Azure.Identity;
 using Microsoft.Data.SqlClient;
@@ -6,9 +7,10 @@ using Microsoft.Extensions.Localization;
 namespace Sluice.Portal.Services;
 
 // Errores frecuentes con causa y remedio. Se clasifican por un código estable (número de
-// SqlException, estado HTTP / ErrorCode de ADLS, AADSTS de Entra ID) y no por el texto: SQL Server
-// devuelve sus mensajes en el idioma del servidor. El texto solo es respaldo para jobs guardados
-// antes de existir el código y para la prueba de ADLS (sus mensajes no se traducen).
+// SqlException, estado HTTP / ErrorCode de ADLS, AADSTS de Entra ID, SocketError de DNS) y no por el
+// texto: SQL Server devuelve sus mensajes en el idioma del servidor. El texto es una red de seguridad
+// cuando no hay código: jobs guardados antes de existir el código, la prueba de ADLS y excepciones
+// sin código reconocible.
 public static class KnownErrors
 {
     public const string SqlLogin = "sql.login";
@@ -46,11 +48,17 @@ public static class KnownErrors
                     ?? FromSqlNumber(sql.Number),
                 AuthenticationFailedException => AdlsAuth,
                 RequestFailedException request => FromHttp(request.Status, request.ErrorCode),
+                SocketException { SocketErrorCode: SocketError.HostNotFound } => AdlsHost,
                 _ => null,
             };
             if (code is not null)
             {
                 return code;
+            }
+
+            if (current is SqlException)
+            {
+                break;
             }
         }
 
