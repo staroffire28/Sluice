@@ -23,6 +23,7 @@ public sealed class PipelineSchedulerService : BackgroundService
     private readonly IActivityLog _activity;
     private readonly OrphanedJobWatchdog _watchdog;
     private readonly Dictionary<string, DateTimeOffset> _stallAlertsSent = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _lagAlertsSent = new(StringComparer.OrdinalIgnoreCase);
 
     public PipelineSchedulerService(
         IOptions<AppOptions> options,
@@ -127,6 +128,7 @@ public sealed class PipelineSchedulerService : BackgroundService
             try
             {
                 var catalog = await _snapshots.GetCatalogAsync(pipeline.Id, ct);
+                await CheckPipelineLagAsync(pipeline, catalog, ct);
                 if (catalog.Blocked)
                 {
                     _logger.LogDebug(
@@ -156,6 +158,49 @@ public sealed class PipelineSchedulerService : BackgroundService
                 await _alerts.SendAsync($"Scheduler failed for {pipeline.Id}: {ex.Message}", ct);
             }
         }
+    }
+
+    // Pipeline atrasado: el lago tiene un snapshot cerrado sin procesar desde hace más de
+    // PipelineLagAlertHours. Cubre lo que el aviso de changelog no ve: Synapse exporta bien, pero el
+    // pipeline no avanza (jobs que fallan, el scheduler no consigue lanzarlos). Se mide desde que el
+    // snapshot se cerró (el inicio de la carpeta siguiente), no desde su nombre, para no avisar solo
+    // por el intervalo de carpetas. Usa el catálogo del ciclo, así que no se evalúa con un job en
+    // curso, y no cuenta la carga inicial (nada procesado aún). Una alerta por episodio, en memoria
+    // como la del changelog: se rearma al ponerse al día.
+    private async Task CheckPipelineLagAsync(Models.Pipeline pipeline, SnapshotCatalogResult catalog, CancellationToken ct)
+    {
+        var hours = _settings.Get().PipelineLagAlertHours;
+        var now = DateTimeOffset.UtcNow;
+        var closedAt = hours <= 0 || catalog.LastProcessedSnapshot is null ? null : OldestPendingClosedAt(catalog);
+        if (closedAt is not { } since || now - since < TimeSpan.FromHours(hours))
+        {
+            _lagAlertsSent.Remove(pipeline.Id);
+            return;
+        }
+
+        if (!_lagAlertsSent.Add(pipeline.Id))
+        {
+            return;
+        }
+
+        var message = $"Pipeline {pipeline.Name} atrasado: {catalog.PendingSnapshots.Count} snapshot(s) cerrado(s) sin procesar; " +
+            $"el más antiguo ({catalog.PendingSnapshots.Min(StringComparer.Ordinal)}) espera desde hace {(now - since).TotalHours:0} h (umbral {hours} h).";
+        _activity.LogSystem("pipeline.lag", message, pipeline.Id, level: "warning");
+        await _alerts.SendAsync(message, ct);
+    }
+
+    // Cuándo se cerró el snapshot pendiente más antiguo: cuando empezó la carpeta siguiente.
+    private static DateTimeOffset? OldestPendingClosedAt(SnapshotCatalogResult catalog)
+    {
+        if (catalog.PendingSnapshots.Count == 0)
+        {
+            return null;
+        }
+
+        var folders = catalog.Snapshots.Select(s => s.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
+        var oldest = catalog.PendingSnapshots.Min(StringComparer.Ordinal)!;
+        var next = folders.FirstOrDefault(f => string.CompareOrdinal(f, oldest) > 0);
+        return next is not null && SnapshotFolderTime.TryParse(next, out var closedAt) ? closedAt : null;
     }
 
     private async Task CheckChangelogStallsAsync(CancellationToken ct)

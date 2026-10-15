@@ -469,6 +469,8 @@
   <data name="Page.Settings.Validation.Divergence" xml:space="preserve"><value>The divergence threshold must be between 0 and 100%.</value></data>
   <data name="Page.Settings.Validation.WebhookHttps" xml:space="preserve"><value>The webhook URL must be a full https:// address.</value></data>
   <data name="Page.Settings.Alerts.Enabled" xml:space="preserve"><value>Enable alerts</value></data>
+  <data name="Page.Settings.PipelineLagAlertHours" xml:space="preserve"><value>Hours behind before alerting</value></data>
+  <data name="Page.Settings.PipelineLagAlertHours.Hint" xml:space="preserve"><value>Alerts when a closed snapshot has waited longer than these hours on a pipeline with the scheduler on (once per episode, and again if it falls behind again). The initial load doesn't count. 0 or negative disables it.</value></data>
   <data name="Page.Settings.Alerts.WebhookUrl" xml:space="preserve"><value>Webhook URL</value></data>
   <data name="Page.Settings.Alerts.WebhookStored" xml:space="preserve"><value>Configured (hidden). Type another one to replace it.</value></data>
   <data name="Page.Settings.Alerts.Test" xml:space="preserve"><value>Send test</value></data>

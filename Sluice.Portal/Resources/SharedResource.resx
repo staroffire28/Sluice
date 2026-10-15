@@ -468,6 +468,8 @@
   <data name="Page.Settings.Validation.Divergence" xml:space="preserve"><value>El umbral de divergencia debe estar entre 0 y 100 %.</value></data>
   <data name="Page.Settings.Validation.WebhookHttps" xml:space="preserve"><value>La URL del webhook debe ser una dirección https:// completa.</value></data>
   <data name="Page.Settings.Alerts.Enabled" xml:space="preserve"><value>Activar alertas</value></data>
+  <data name="Page.Settings.PipelineLagAlertHours" xml:space="preserve"><value>Horas de atraso para alertar</value></data>
+  <data name="Page.Settings.PipelineLagAlertHours.Hint" xml:space="preserve"><value>Alerta cuando un snapshot cerrado lleva más de estas horas sin procesarse en un pipeline con scheduler (una vez por episodio, y otra vez cuando vuelva a atrasarse). No cuenta la carga inicial. 0 o negativo la desactiva.</value></data>
   <data name="Page.Settings.Alerts.WebhookUrl" xml:space="preserve"><value>URL del webhook</value></data>
   <data name="Page.Settings.Alerts.WebhookStored" xml:space="preserve"><value>Configurada (oculta). Escribe otra para reemplazarla.</value></data>
   <data name="Page.Settings.Alerts.Test" xml:space="preserve"><value>Enviar prueba</value></data>
