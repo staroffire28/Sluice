@@ -733,6 +733,24 @@
   <data name="Page.Settings.StaleTableDays.Hint" xml:space="preserve"><value>En Tablas, «Último dato» se resalta cuando la última carga con filas es más antigua. 0 o negativo lo desactiva.</value></data>
   <data name="Page.Settings.ParquetVersionDays" xml:space="preserve"><value>Días de versiones del parquet</value></data>
   <data name="Page.Settings.ParquetVersionDays.Hint" xml:space="preserve"><value>Cuántos días se guardan las copias anteriores del parquet consolidado de cada tabla, para restaurarlas desde la página Parquet. Siempre se conserva al menos la más reciente. 0 o negativo las desactiva.</value></data>
+  <data name="FirstSteps.Title" xml:space="preserve"><value>Primeros pasos</value></data>
+  <data name="FirstSteps.Hint" xml:space="preserve"><value>Configura Sluice en unos minutos. Esta lista desaparece cuando la primera ejecución carga tablas.</value></data>
+  <data name="FirstSteps.Source" xml:space="preserve"><value>Conecta el origen</value></data>
+  <data name="FirstSteps.Source.Hint" xml:space="preserve"><value>La cuenta ADLS de Synapse Link; prueba la conexión antes de guardar.</value></data>
+  <data name="FirstSteps.Source.Action" xml:space="preserve"><value>Añadir origen</value></data>
+  <data name="FirstSteps.Destination" xml:space="preserve"><value>Conecta el destino</value></data>
+  <data name="FirstSteps.Destination.Hint" xml:space="preserve"><value>El SQL Server donde se cargan las tablas.</value></data>
+  <data name="FirstSteps.Destination.Action" xml:space="preserve"><value>Añadir destino</value></data>
+  <data name="FirstSteps.Pipeline" xml:space="preserve"><value>Crea un pipeline</value></data>
+  <data name="FirstSteps.Pipeline.Hint" xml:space="preserve"><value>Une el origen con el destino.</value></data>
+  <data name="FirstSteps.Pipeline.Action" xml:space="preserve"><value>Crear pipeline</value></data>
+  <data name="FirstSteps.Tables" xml:space="preserve"><value>Elige tablas y columnas (opcional)</value></data>
+  <data name="FirstSteps.Tables.Hint" xml:space="preserve"><value>Si no eliges, se cargan todas.</value></data>
+  <data name="FirstSteps.Tables.Action" xml:space="preserve"><value>Abrir catálogo</value></data>
+  <data name="FirstSteps.Run" xml:space="preserve"><value>Ejecuta el pipeline</value></data>
+  <data name="FirstSteps.Run.Hint" xml:space="preserve"><value>Pipelines → Acciones → Ejecutar. Después puedes activar el scheduler.</value></data>
+  <data name="FirstSteps.Run.Action" xml:space="preserve"><value>Ir a Pipelines</value></data>
+  <data name="Page.Sources.TestConnection" xml:space="preserve"><value>Probar conexión</value></data>
   <data name="Page.Sources.ParquetStorage" xml:space="preserve"><value>Dónde guardar el Parquet</value></data>
   <data name="Page.Sources.ParquetStorage.Adls" xml:space="preserve"><value>Contenedor de ADLS</value></data>
   <data name="Page.Sources.ParquetStorage.Portal" xml:space="preserve"><value>Disco del portal (DATA_DIR)</value></data>

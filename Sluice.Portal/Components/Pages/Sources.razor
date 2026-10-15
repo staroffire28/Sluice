@@ -63,6 +63,20 @@
 <InlineDialog @bind-Visible="_showEditor" Title="@_editorTitle" Class="dialog-wide">
     <ChildContent>
     <div class="dialog-form" @key="_editorKey">
+        @* Resultado de Probar conexión arriba, visible sin desplazar el formulario (como en Destinos). *@
+        @if (_draftTest is { } result)
+        {
+            <FluentMessageBar data-testid="src-test-result" Intent="@(result.Ok ? MessageBarIntent.Success : MessageBarIntent.Error)">
+                @if (result.Ok)
+                {
+                    @result.Message
+                }
+                else
+                {
+                    <ErrorDiagnosis Code="@result.Code" Message="@result.Message" />
+                }
+            </FluentMessageBar>
+        }
         <FluentTextInput @bind-Value="_name" data-testid="src-name" Label="@L["Common.Name"]" Style="width:100%;" />
         <FluentSelect TOption="string" TValue="string" @bind-Value="_type" data-testid="src-type" Label="@L["Common.Type"]" Style="width:100%;">
             <FluentOption TValue="string" Value="@("adls")">ADLS Gen2</FluentOption>
@@ -105,6 +119,9 @@
     </div>
     </ChildContent>
     <Actions>
+        <FluentButton Appearance="ButtonAppearance.Outline" data-testid="src-test-draft" OnClick="TestDraftAsync" Disabled="_testingDraft">
+            @(_testingDraft ? L["Common.Testing"] : L["Page.Sources.TestConnection"])
+        </FluentButton>
         <FluentButton data-testid="src-cancel" OnClick="() => _showEditor = false">@L["Common.Cancel"]</FluentButton>
         <FluentButton Appearance="ButtonAppearance.Primary" data-testid="src-save" OnClick="Save">@L["Common.Save"]</FluentButton>
     </Actions>
@@ -119,6 +136,8 @@
     private int _totalPages = 1;
     private bool _showEditor;
     private string? _testingId;
+    private bool _testingDraft;
+    private ConnectionTestResult? _draftTest;
     private string _editorTitle = "";
     // Se renueva en cada apertura: los FluentSelect con opciones a mano conservaban la
     // selección del registro editado antes (ver el mismo caso en Pipelines.razor).
@@ -176,6 +195,7 @@
         _clientId = "";
         _clientSecret = "";
         _editorKey = Guid.NewGuid();
+        _draftTest = null;
         _showEditor = true;
     }
 
@@ -195,12 +215,12 @@
         _clientId = GetConfig(connection, "client_id");
         _clientSecret = GetConfig(connection, "client_secret");
         _editorKey = Guid.NewGuid();
+        _draftTest = null;
         _showEditor = true;
     }
 
-    private async Task Save()
+    private Dictionary<string, string?> FormConfig()
     {
-        var copied = 0;
         var config = new Dictionary<string, string?>
         {
             ["container"] = _container,
@@ -217,6 +237,38 @@
             config["client_id"] = _clientId;
             config["client_secret"] = _clientSecret;
         }
+
+        return config;
+    }
+
+    // Prueba el origen del formulario sin guardarlo: la cuenta, el contenedor y el changelog.
+    private async Task TestDraftAsync()
+    {
+        _testingDraft = true;
+        _draftTest = null;
+        try
+        {
+            var draft = new Connection
+            {
+                Id = _editingId ?? "conn-src-draft",
+                Name = _name,
+                Role = ConnectionRole.Source,
+                Type = _type,
+                Config = FormConfig(),
+            };
+            _draftTest = await Connections.TestSourceDraftAsync(draft, _editingId);
+            ActivityLog.LogUser("source.test", $"Test de origen '{_name}' (sin guardar): {_draftTest.Message}", level: _draftTest.Ok ? "info" : "warning");
+        }
+        finally
+        {
+            _testingDraft = false;
+        }
+    }
+
+    private async Task Save()
+    {
+        var copied = 0;
+        var config = FormConfig();
 
         try
         {

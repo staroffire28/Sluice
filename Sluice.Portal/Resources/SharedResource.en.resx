@@ -734,6 +734,24 @@
   <data name="Page.Settings.StaleTableDays.Hint" xml:space="preserve"><value>In Tables, "Last data" is highlighted when the last load with rows is older. 0 or negative disables it.</value></data>
   <data name="Page.Settings.ParquetVersionDays" xml:space="preserve"><value>Days of Parquet versions</value></data>
   <data name="Page.Settings.ParquetVersionDays.Hint" xml:space="preserve"><value>How many days earlier copies of each table's consolidated Parquet are kept, so they can be restored from the Parquet page. The most recent one is always kept. 0 or negative disables them.</value></data>
+  <data name="FirstSteps.Title" xml:space="preserve"><value>First steps</value></data>
+  <data name="FirstSteps.Hint" xml:space="preserve"><value>Set up Sluice in a few minutes. This list goes away once the first run loads tables.</value></data>
+  <data name="FirstSteps.Source" xml:space="preserve"><value>Connect the source</value></data>
+  <data name="FirstSteps.Source.Hint" xml:space="preserve"><value>The Synapse Link ADLS account; test the connection before saving.</value></data>
+  <data name="FirstSteps.Source.Action" xml:space="preserve"><value>Add source</value></data>
+  <data name="FirstSteps.Destination" xml:space="preserve"><value>Connect the destination</value></data>
+  <data name="FirstSteps.Destination.Hint" xml:space="preserve"><value>The SQL Server the tables are loaded into.</value></data>
+  <data name="FirstSteps.Destination.Action" xml:space="preserve"><value>Add destination</value></data>
+  <data name="FirstSteps.Pipeline" xml:space="preserve"><value>Create a pipeline</value></data>
+  <data name="FirstSteps.Pipeline.Hint" xml:space="preserve"><value>Links the source to the destination.</value></data>
+  <data name="FirstSteps.Pipeline.Action" xml:space="preserve"><value>Create pipeline</value></data>
+  <data name="FirstSteps.Tables" xml:space="preserve"><value>Choose tables and columns (optional)</value></data>
+  <data name="FirstSteps.Tables.Hint" xml:space="preserve"><value>If you don't, all of them are loaded.</value></data>
+  <data name="FirstSteps.Tables.Action" xml:space="preserve"><value>Open catalog</value></data>
+  <data name="FirstSteps.Run" xml:space="preserve"><value>Run the pipeline</value></data>
+  <data name="FirstSteps.Run.Hint" xml:space="preserve"><value>Pipelines → Actions → Run. Then you can turn on the scheduler.</value></data>
+  <data name="FirstSteps.Run.Action" xml:space="preserve"><value>Go to Pipelines</value></data>
+  <data name="Page.Sources.TestConnection" xml:space="preserve"><value>Test connection</value></data>
   <data name="Page.Sources.ParquetStorage" xml:space="preserve"><value>Where to keep the Parquet</value></data>
   <data name="Page.Sources.ParquetStorage.Adls" xml:space="preserve"><value>ADLS container</value></data>
   <data name="Page.Sources.ParquetStorage.Portal" xml:space="preserve"><value>Portal disk (DATA_DIR)</value></data>

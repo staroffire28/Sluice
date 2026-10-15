@@ -22,6 +22,10 @@ public interface IConnectionService
     // Prueba un destino SQL sin guardarlo (el diálogo de Destinos) y devuelve la versión detectada.
     // existingId: al editar, los secretos que llegan vacíos o enmascarados se toman de la guardada.
     Task<SqlVersionDetection> DetectSqlVersionAsync(Connection draft, string? existingId, CancellationToken cancellationToken = default);
+
+    // Prueba un origen del formulario sin guardarlo (los secretos vacíos o enmascarados se toman
+    // del guardado con existingId).
+    Task<ConnectionTestResult> TestSourceDraftAsync(Connection draft, string? existingId, CancellationToken cancellationToken = default);
 }
 
 // Code: error conocido (KnownErrors) cuando falla; null si no se reconoce.
@@ -256,6 +260,16 @@ public sealed class ConnectionService : IConnectionService
         };
         _store.Save(connection with { Config = config });
         return new ConnectionTestResult(true, $"{detection.Message} Versión del destino actualizada (antes: {SqlServerVersions.DisplayName(configured)}).");
+    }
+
+    public async Task<ConnectionTestResult> TestSourceDraftAsync(Connection draft, string? existingId, CancellationToken cancellationToken = default)
+    {
+        var existing = existingId is null ? null : _store.GetById(existingId);
+        var connection = existing is not null && string.Equals(existing.Type, draft.Type, StringComparison.OrdinalIgnoreCase)
+            ? draft with { Config = MergeConfig(existing.Config, draft.Config) }
+            : draft;
+        var (ok, message) = await _adlsFactory.TestAsync(connection, cancellationToken);
+        return new ConnectionTestResult(ok, message, ok ? null : KnownErrors.CodeFromText(message));
     }
 
     public Task<SqlVersionDetection> DetectSqlVersionAsync(Connection draft, string? existingId, CancellationToken cancellationToken = default)

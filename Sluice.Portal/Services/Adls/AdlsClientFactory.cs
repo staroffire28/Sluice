@@ -15,6 +15,11 @@ public interface IAdlsClientFactory
     Task<IParquetStore> CreateParquetStoreAsync(Connection connection, CancellationToken cancellationToken = default) =>
         CreateParquetStoreAsync(connection.Id, cancellationToken);
     Task<(bool Ok, string Message)> TestAsync(string connectionId, CancellationToken cancellationToken = default);
+
+    // Prueba una conexión aún sin guardar (botón del formulario de orígenes). Por defecto, la
+    // guardada con ese id, para los dobles de test.
+    Task<(bool Ok, string Message)> TestAsync(Connection connection, CancellationToken cancellationToken = default) =>
+        TestAsync(connection.Id, cancellationToken);
 }
 
 public sealed class AdlsClientFactory : IAdlsClientFactory
@@ -91,11 +96,17 @@ public sealed class AdlsClientFactory : IAdlsClientFactory
         return new AdlsClient(settings);
     }
 
-    public async Task<(bool Ok, string Message)> TestAsync(string connectionId, CancellationToken cancellationToken = default)
+    public Task<(bool Ok, string Message)> TestAsync(string connectionId, CancellationToken cancellationToken = default) =>
+        TestClientAsync(() => Build(Resolve(connectionId)), cancellationToken);
+
+    public Task<(bool Ok, string Message)> TestAsync(Connection connection, CancellationToken cancellationToken = default) =>
+        TestClientAsync(() => Build(_connections.Unprotect(connection)), cancellationToken);
+
+    private static async Task<(bool Ok, string Message)> TestClientAsync(Func<IAdlsClient> create, CancellationToken cancellationToken)
     {
         try
         {
-            var client = await CreateAsync(connectionId, cancellationToken);
+            var client = create();
             await client.TestAsync(cancellationToken);
             var settled = await client.GetSettledSnapshotAsync(cancellationToken);
             return (true, settled is null
