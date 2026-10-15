@@ -125,6 +125,7 @@ builder.Services.AddSingleton<PipelineStore>();
 builder.Services.AddSingleton<JobStore>();
 builder.Services.AddSingleton<PipelineStateStore>();
 builder.Services.AddSingleton<TablePauseStore>();
+builder.Services.AddSingleton<ColumnSelectionStore>();
 builder.Services.AddSingleton<ReportStore>();
 builder.Services.AddSingleton<SettingsStore>();
 
@@ -137,6 +138,7 @@ builder.Services.AddSingleton<IngestManifestStore>();
 builder.Services.AddSingleton<JobProgressStore>();
 builder.Services.AddSingleton<IParquetArtifactService, ParquetArtifactService>();
 builder.Services.AddSingleton<IPipelineResetService, PipelineResetService>();
+builder.Services.AddSingleton<TableCatalogService>();
 builder.Services.AddSingleton<IConnectionService, ConnectionService>();
 builder.Services.AddSingleton<IPipelineService, PipelineService>();
 builder.Services.AddSingleton<IJobService, JobService>();

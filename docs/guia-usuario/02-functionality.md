@@ -35,6 +35,7 @@ Work flows through a **file-based queue**: each task is a JSON file whose folder
 | Sources | `/sources` | ADLS source connections (create, test, edit, delete). |
 | Destinations | `/destinations` | SQL Server destination connections. |
 | Pipelines | `/pipelines` | Create/edit pipelines, schedule them, run them. |
+| Table catalog | `/catalog` | Which lake tables and columns are loaded into SQL (from Pipelines → **Tables and columns**). |
 | Snapshots | `/snapshots` | ADLS snapshot folders, changelog state, backlog. |
 | Reconcile | `/reconcile` | Diverging tables and their remediation. |
 | Parquet | `/parquet` | Materialized Parquet files, in ADLS or on the portal disk (download, delete, **Versions** of each table's consolidated file). |
@@ -52,6 +53,8 @@ Status is shown everywhere as a colored badge: **Running/Claimed** (accent), **O
 **Create a connection.** Sources/Destinations → Add → fill the fields → Save → Test. Secrets are stored encrypted and shown as `***`.
 
 **Create a pipeline.** Pipelines → Add → pick a source and a destination → Save. It starts with the scheduler off; run it manually first. **Rows deleted in F&O** sets what happens to deletes: *Delete them in SQL too* (default) or *Load them flagged* (`IsDelete = 1`, other columns empty). A change applies from the next run; to fix rows already loaded, run **Force**.
+
+**Choose tables and columns.** When you create a pipeline, a notice offers **Choose tables**; later, Pipelines → row menu → **Tables and columns**. The catalog lists the lake's tables (the schemas of the latest closed snapshot and of the root, plus the tables already loaded) without starting a job. The **Load** switch excludes a table: it is neither ingested nor loaded (it is the same setting as the table's sync in Tables). New tables that show up in the lake are loaded automatically. **Columns** opens the table's column list: unchecked columns are not loaded into SQL, but the Parquet keeps them all, so they can be included again; when you do, the portal offers to re-sync the table to fill them in. `Id`, `SinkModifiedOn`, `versionnumber` and `IsDelete` are required. An excluded column that was already in the SQL table is not dropped (so reports that use it don't break): it keeps its last value, stays empty in new rows, and the job says so. Compare values doesn't compare excluded columns either. With `TRANSLATE_ENUMS`, the label column (`_$label`) of an excluded column is emptied instead of keeping its last value.
 
 **Run a pipeline.** From the run menu on Dashboard or Pipelines: **Run** (Incremental: only new data, the usual one), **Force** (reload SQL from consolidated Parquet — all tables), **Reconcile** (verify counts only), **Diff** (report differences only). Confirm in the dialog.
 

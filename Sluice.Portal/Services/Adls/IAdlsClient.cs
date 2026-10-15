@@ -17,6 +17,13 @@ public interface IAdlsClient
     Task<IReadOnlyList<string>> ListEntitiesAsync(string snapshot, CancellationToken cancellationToken = default);
     Task<CdmEntitySchema> GetEntitySchemaAsync(string entity, string snapshot, string? settledSnapshot, CancellationToken cancellationToken = default);
 
+    // Tablas con esquema ({entity}-model.json) en la carpeta CDM de un snapshot, o de la raíz del
+    // container con snapshot null. Base del catálogo de tablas sin lanzar un job (TableCatalogService
+    // lo une a las carpetas del snapshot y a las tablas ya cargadas). Por defecto vacía, para los
+    // dobles de test.
+    Task<IReadOnlyList<string>> ListSchemaEntitiesAsync(string? snapshot, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<string>>([]);
+
     // CSVs de la entidad en orden de nombre, en streaming
     // (una línea a la vez, un archivo abierto a la vez) para no materializar CSVs grandes
     // completos en memoria — ver IngestExecutor, que la usa para escribir el parquet transitorio.

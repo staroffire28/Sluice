@@ -215,6 +215,9 @@
   <data name="Page.Pipelines.DeletePrefix" xml:space="preserve"><value>¿Eliminar el pipeline</value></data>
   <data name="Page.Pipelines.WipeState" xml:space="preserve"><value>Borrar también el estado del pipeline</value></data>
   <data name="Page.Pipelines.Reset" xml:space="preserve"><value>Restablecer</value></data>
+  <data name="Page.Pipelines.TablesAndColumns" xml:space="preserve"><value>Tablas y columnas</value></data>
+  <data name="Page.Pipelines.ChooseTables" xml:space="preserve"><value>Pipeline creado. Elige qué tablas y columnas cargar antes de la primera ejecución; si no, se cargan todas.</value></data>
+  <data name="Page.Pipelines.ChooseTablesAction" xml:space="preserve"><value>Elegir tablas</value></data>
   <data name="Page.Pipelines.ResetTitle" xml:space="preserve"><value>Restablecer pipeline</value></data>
   <data name="Page.Pipelines.ResetPrefix" xml:space="preserve"><value>¿Restablecer el pipeline</value></data>
   <data name="Page.Pipelines.ResetWarning" xml:space="preserve"><value>Se borrarán el registro de snapshots procesados, el estado de cada tabla y los ficheros Parquet consolidados de este pipeline en ADLS. El borrado en ADLS no se puede deshacer.</value></data>
@@ -302,6 +305,27 @@
   <data name="Page.Parquet.ConfirmRestoreTitle" xml:space="preserve"><value>Restaurar versión</value></data>
   <data name="Page.Parquet.ConfirmRestore" xml:space="preserve"><value>¿Restaurar la versión de {0} guardada el {1}? La copia actual pasa a ser una versión más y la tabla se recarga en SQL desde la restaurada.</value></data>
   <data name="Page.Parquet.Restored" xml:space="preserve"><value>Versión de {0} restaurada; se está recargando la tabla en SQL.</value></data>
+  <data name="Page.Catalog.Title" xml:space="preserve"><value>Catálogo de tablas</value></data>
+  <data name="Page.Catalog.Subtitle" xml:space="preserve"><value>Qué tablas y columnas del lago se cargan en SQL</value></data>
+  <data name="Page.Catalog.Hint" xml:space="preserve"><value>Una tabla excluida no se ingiere ni se carga; las tablas nuevas que aparezcan en el lago se cargan solas. Es el mismo ajuste que la sincronización de cada tabla en Tablas.</value></data>
+  <data name="Page.Catalog.IncludeAll" xml:space="preserve"><value>Incluir todas</value></data>
+  <data name="Page.Catalog.ExcludeAll" xml:space="preserve"><value>Excluir todas</value></data>
+  <data name="Page.Catalog.Empty" xml:space="preserve"><value>No hay tablas en el lago ni cargadas para este pipeline.</value></data>
+  <data name="Page.Catalog.Summary" xml:space="preserve"><value>{0} de {1} tablas se cargan</value></data>
+  <data name="Page.Catalog.Table" xml:space="preserve"><value>Tabla</value></data>
+  <data name="Page.Catalog.State" xml:space="preserve"><value>Estado</value></data>
+  <data name="Page.Catalog.Loaded" xml:space="preserve"><value>Cargada · {0} filas</value></data>
+  <data name="Page.Catalog.NotLoaded" xml:space="preserve"><value>Sin cargar</value></data>
+  <data name="Page.Catalog.Load" xml:space="preserve"><value>Cargar</value></data>
+  <data name="Page.Catalog.Columns" xml:space="preserve"><value>Columnas</value></data>
+  <data name="Page.Catalog.ColumnsExcluded" xml:space="preserve"><value>{0} excluida(s)</value></data>
+  <data name="Page.Catalog.AllColumns" xml:space="preserve"><value>Todas</value></data>
+  <data name="Page.Catalog.ColumnsTitle" xml:space="preserve"><value>Columnas de {0}</value></data>
+  <data name="Page.Catalog.ColumnsHint" xml:space="preserve"><value>Las columnas desmarcadas no se cargan en SQL. El Parquet las conserva, así que puedes volver a incluirlas cuando quieras. Si una ya existe en la tabla SQL, se queda con su último valor y vacía en las filas nuevas. Las columnas nuevas del origen se cargan solas.</value></data>
+  <data name="Page.Catalog.Required" xml:space="preserve"><value>obligatoria</value></data>
+  <data name="Page.Catalog.ResyncOffer" xml:space="preserve"><value>Vuelven a cargarse: {0}. SQL solo las rellena al re-sincronizar la tabla.</value></data>
+  <data name="Page.Catalog.ResyncNow" xml:space="preserve"><value>Re-sincronizar ahora</value></data>
+  <data name="Page.Catalog.Later" xml:space="preserve"><value>Más tarde</value></data>
   <data name="Page.Reports.SelectPipeline" xml:space="preserve"><value>Selecciona un pipeline para ver sus últimos reportes de reconcile y diff.</value></data>
   <data name="Page.Reports.Reconcile" xml:space="preserve"><value>Reconcile</value></data>
   <data name="Page.Reports.NoReconcile" xml:space="preserve"><value>Aún no hay reporte de reconcile. Ejecuta un job Reconcile desde Pipelines.</value></data>

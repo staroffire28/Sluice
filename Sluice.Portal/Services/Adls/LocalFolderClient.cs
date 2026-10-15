@@ -133,6 +133,18 @@ public sealed class LocalFolderClient : IAdlsClient, IParquetStore
         return Task.FromResult(entities);
     }
 
+    public Task<IReadOnlyList<string>> ListSchemaEntitiesAsync(string? snapshot, CancellationToken cancellationToken = default)
+    {
+        var folder = SourcePath(string.IsNullOrWhiteSpace(snapshot) ? CdmFolder : $"{snapshot}/{CdmFolder}");
+        IReadOnlyList<string> entities = Directory.Exists(folder)
+            ? Directory.EnumerateFiles(folder, "*-model.json")
+                .Select(f => Path.GetFileName(f)[..^"-model.json".Length])
+                .OrderBy(e => e, StringComparer.OrdinalIgnoreCase)
+                .ToList()
+            : [];
+        return Task.FromResult(entities);
+    }
+
     public async Task<CdmEntitySchema> GetEntitySchemaAsync(
         string entity,
         string snapshot,

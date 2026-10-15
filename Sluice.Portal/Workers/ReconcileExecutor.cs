@@ -4,6 +4,7 @@ using Sluice.Portal.Models;
 using Sluice.Portal.Services;
 using Sluice.Portal.Services.Adls;
 using Sluice.Portal.Services.Pipeline;
+using Sluice.Portal.Services.Stores;
 
 namespace Sluice.Portal.Workers;
 
@@ -23,6 +24,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
     private readonly ISqlMergeExecutor _mergeExecutor;
     private readonly AlertService _alerts;
     private readonly JobProgressStore? _progressStore;
+    private readonly ColumnSelectionStore? _columns;
 
     public ReconcileExecutor(
         IJobService jobs,
@@ -33,8 +35,10 @@ public sealed class ReconcileExecutor : IReconcileExecutor
         ISqlConnectionFactory sqlFactory,
         ISqlMergeExecutor mergeExecutor,
         AlertService alerts,
-        JobProgressStore? progress = null)
+        JobProgressStore? progress = null,
+        ColumnSelectionStore? columns = null)
     {
+        _columns = columns;
         _jobs = jobs;
         _pipelines = pipelines;
         _reconcile = reconcile;
@@ -328,6 +332,9 @@ public sealed class ReconcileExecutor : IReconcileExecutor
 
             var schema = JsonSerializer.Deserialize<CdmEntitySchema>(schemaJson, JsonDefaults.Options)
                 ?? throw new InvalidOperationException($"Schema no válido para {entity}.");
+
+            // Las columnas excluidas no se cargan en SQL: tampoco se comparan.
+            schema = ColumnSelection.Apply(schema, _columns?.GetExcluded(pipelineId, entity) ?? new HashSet<string>());
 
             // Las columnas de etiqueta de enum ([<col>_$label]) se derivan al cargar: no están en el parquet.
             var columns = schema.Attributes.Where(a => a.EnumSourceColumn is null).ToList();
