@@ -76,12 +76,10 @@ public sealed class IngestExecutor : IIngestExecutor
         var progress = _progressStore?.Begin(task.PipelineId, task.JobId, "ingest", cancellationToken) ?? StageProgress.None;
         progress.StartStep(JobStepCatalog.Discover);
 
-        // Un solo cliente ADLS: implementa IAdlsClient (lectura del origen) e IParquetStore
-        // (escritura del parquet/schema durable). Evita doble construcción y doble descifrado
-        // del client_secret por tarea de ingest.
+        // El cliente ADLS lee el origen; el parquet/schema durable va al almacén que elija la
+        // conexión (parquet_storage): el container de ADLS o el disco del portal.
         var adls = await _adlsFactory.CreateAsync(pipeline.SourceId, cancellationToken);
-        var parquetStore = adls as IParquetStore
-            ?? throw new InvalidOperationException("El cliente ADLS no soporta almacenamiento de parquet.");
+        var parquetStore = await _adlsFactory.CreateParquetStoreAsync(pipeline.SourceId, cancellationToken);
         var pipelineState = _stateStore.GetOrCreate(task.PipelineId);
         var settled = await adls.GetSettledSnapshotAsync(cancellationToken);
         var snapshots = await adls.ListSnapshotFoldersAsync(cancellationToken);

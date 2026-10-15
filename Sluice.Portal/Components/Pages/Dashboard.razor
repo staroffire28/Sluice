@@ -146,7 +146,7 @@
                         <FluentButton Appearance="ButtonAppearance.Outline" Size="ButtonSize.Small" Class="btn-danger" OnClick="@(() => CancelJobAsync(active.Job.Id))">@L["Common.Cancel"]</FluentButton>
                     </span>
                 </div>
-                <JobFlowCanvas Flow="active.Flow" Compact="true" />
+                <JobFlowCanvas Flow="active.Flow" Compact="true" ParquetOnPortal="active.ParquetOnPortal" />
                 @* Como mucho una fila más (alto fijo); el resto, enlazado al historial de jobs. *@
                 @if (_active.FirstOrDefault(a => a != active) is { } other)
                 {
@@ -232,7 +232,7 @@
 
 @code {
     private sealed record StorageRow(int SnapshotFolders, string ParquetMb, int EligiblePurge, bool Unavailable = false);
-    private sealed record ActiveJob(Job Job, JobFlowView Flow);
+    private sealed record ActiveJob(Job Job, JobFlowView Flow, bool ParquetOnPortal);
 
     private const int MaxWorkers = 4;
     private static readonly Icon WarningIcon = new Icons.Filled.Size16.Warning();
@@ -361,7 +361,7 @@
             var now = DateTimeOffset.UtcNow;
             _active = JobService.ListRunning()
                 .OrderByDescending(j => j.StartedAt)
-                .Select(j => new ActiveJob(j, JobFlowBuilder.Build(j, ProgressStore.Load(j.PipelineId, j.Id), now)))
+                .Select(j => new ActiveJob(j, JobFlowBuilder.Build(j, ProgressStore.Load(j.PipelineId, j.Id), now), ParquetOnPortal(j.PipelineId)))
                 .ToList();
             _primary = PickPrimary(_active);
 
@@ -399,6 +399,11 @@
 
     private string PipelineName(string pipelineId) =>
         _pipelines.FirstOrDefault(p => p.Id == pipelineId)?.Name ?? pipelineId;
+
+    private bool ParquetOnPortal(string pipelineId) =>
+        _pipelines.FirstOrDefault(p => p.Id == pipelineId) is { } pipeline
+        && Connections.Get(pipeline.SourceId) is { } source
+        && AdlsClientFactory.KeepsParquetOnPortal(source);
 
     private DateTimeOffset ToLocal(DateTimeOffset at) =>
         _timeZone is null ? at.ToLocalTime() : TimeZoneInfo.ConvertTime(at, _timeZone);

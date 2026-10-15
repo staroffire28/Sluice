@@ -13,9 +13,11 @@ volumen sobreviva intacto.
 ## Qué incluye el backup
 
 Todo `DATA_DIR`: `connections/`, `pipelines/`, `jobs/`, `tasks/`, `reports/`, `keys/`
-(keyring de Data Protection), `workers/`, y el estado por pipeline (`{pipelineId}/state/`).
-No incluye el parquet consolidado ni los snapshots de ADLS (eso vive en Azure, fuera del
-volumen local, y tiene su propia durabilidad/replicación gestionada por Azure Storage).
+(keyring de Data Protection), `workers/`, el estado por pipeline (`{pipelineId}/state/`) y
+`parquet/` (el parquet consolidado de los orígenes que lo guardan en el disco del portal).
+No incluye el parquet consolidado guardado en ADLS ni los snapshots de ADLS (eso vive en
+Azure, fuera del volumen local, y tiene su propia durabilidad/replicación gestionada por
+Azure Storage).
 
 ## Cómo hacer un backup
 

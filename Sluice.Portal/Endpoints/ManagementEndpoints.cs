@@ -51,8 +51,8 @@ public static class ManagementEndpoints
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid connection.");
             }
         });
-        api.MapPut("/connections/{id}", (string id, Connection connection, IConnectionService svc) =>
-            svc.Update(id, connection) is { } c ? Results.Ok(c) : Results.NotFound());
+        api.MapPut("/connections/{id}", async (string id, Connection connection, IConnectionService svc, CancellationToken ct) =>
+            (await svc.UpdateAsync(id, connection, ct)).Connection is { } c ? Results.Ok(c) : Results.NotFound());
         api.MapDelete("/connections/{id}", (string id, IConnectionService svc) =>
         {
             if (!svc.Delete(id, out var error))

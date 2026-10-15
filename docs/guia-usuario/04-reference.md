@@ -75,7 +75,7 @@ A janitor caps the volume's growth. The **job is the unit of retention**: an old
 
 ### Source snapshots (Synapse Link ADLS container)
 
-A second janitor purges **already processed** CSV folders in the Synapse Link source container. Consolidated parquet in the dedicated container is the recovery artifact.
+A second janitor purges **already processed** CSV folders in the Synapse Link source container. Consolidated parquet (in its dedicated container or on the portal disk) is the recovery artifact.
 
 - **Always kept**: the last 14 processed snapshots (floor K), pending or in-export snapshots, `Changelog/` and CDM metadata.
 - **Knob**: `SourceSnapshotRetentionDays` in `/settings` (default 30). `0` or negative disables purging.

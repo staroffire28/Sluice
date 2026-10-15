@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
+using Sluice.Portal.Models;
 using Sluice.Portal.Services.Connections;
 
 namespace Sluice.Portal.Services.Adls;
@@ -8,12 +9,23 @@ public interface IAdlsClientFactory
 {
     Task<IAdlsClient> CreateAsync(string connectionId, CancellationToken cancellationToken = default);
     Task<IParquetStore> CreateParquetStoreAsync(string connectionId, CancellationToken cancellationToken = default);
+
+    // El almacén de una conexión aún sin guardar (copia al cambiar parquet_storage). Por defecto,
+    // el de la conexión guardada con ese id, para los dobles de test.
+    Task<IParquetStore> CreateParquetStoreAsync(Connection connection, CancellationToken cancellationToken = default) =>
+        CreateParquetStoreAsync(connection.Id, cancellationToken);
     Task<(bool Ok, string Message)> TestAsync(string connectionId, CancellationToken cancellationToken = default);
 }
 
 public sealed class AdlsClientFactory : IAdlsClientFactory
 {
     public const string LocalType = "local";
+
+    // parquet_storage de un origen ADLS: dónde se guarda el Parquet. "adls" (por defecto, el
+    // parquet_container de la cuenta) o "portal" (DATA_DIR/parquet, el volumen del portal).
+    public const string ParquetStorageKey = "parquet_storage";
+    public const string AdlsParquetStorage = "adls";
+    public const string PortalParquetStorage = "portal";
 
     private readonly IConnectionResolver _connections;
     private readonly AppOptions _options;
@@ -25,15 +37,36 @@ public sealed class AdlsClientFactory : IAdlsClientFactory
     }
 
     public Task<IAdlsClient> CreateAsync(string connectionId, CancellationToken cancellationToken = default) =>
-        Task.FromResult<IAdlsClient>(Build(connectionId));
+        Task.FromResult(Build(Resolve(connectionId)));
 
     public Task<IParquetStore> CreateParquetStoreAsync(string connectionId, CancellationToken cancellationToken = default) =>
-        Task.FromResult((IParquetStore)Build(connectionId));
+        Task.FromResult(ParquetStore(Resolve(connectionId)));
 
-    private IAdlsClient Build(string connectionId)
-    {
-        var connection = _connections.GetUnmasked(connectionId)
+    public Task<IParquetStore> CreateParquetStoreAsync(Connection connection, CancellationToken cancellationToken = default) =>
+        Task.FromResult(ParquetStore(_connections.Unprotect(connection)));
+
+    private Connection Resolve(string connectionId) =>
+        _connections.GetUnmasked(connectionId)
             ?? throw new InvalidOperationException($"Source connection '{connectionId}' not found.");
+
+    // Un origen local siempre guarda el Parquet en su carpeta, sea cual sea parquet_storage.
+    public static bool KeepsParquetOnPortal(Connection connection) =>
+        !string.Equals(connection.Type, LocalType, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(connection.Config.GetValueOrDefault(ParquetStorageKey), PortalParquetStorage, StringComparison.OrdinalIgnoreCase);
+
+    private IParquetStore ParquetStore(Connection connection)
+    {
+        if (KeepsParquetOnPortal(connection))
+        {
+            return new LocalParquetStore(Path.Combine(_options.DataDir, "parquet"));
+        }
+
+        return (IParquetStore)Build(connection);
+    }
+
+    private IAdlsClient Build(Connection connection)
+    {
+        var connectionId = connection.Id;
 
         // Origen simulado de las pruebas UAT: solo si el portal arrancó con LOCAL_SOURCE_ROOT.
         if (string.Equals(connection.Type, LocalType, StringComparison.OrdinalIgnoreCase))
