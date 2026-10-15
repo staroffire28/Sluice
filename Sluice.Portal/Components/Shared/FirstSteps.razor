@@ -1,0 +1,50 @@
+@* Primeros pasos: lista guiada en el Panel mientras ninguna ejecución ha cargado tablas. Cada paso
+   enlaza a su página y se marca solo al cumplirse; elegir tablas es opcional (si no, se cargan
+   todas), así que no tiene marca. La lista desaparece en cuanto hay tablas cargadas. *@
+@inject IStringLocalizer<SharedResource> L
+
+<section class="first-steps" data-testid="first-steps" aria-labelledby="first-steps-title">
+    <h2 id="first-steps-title" class="first-steps__title">@L["FirstSteps.Title"]</h2>
+    <p class="field-hint">@L["FirstSteps.Hint"]</p>
+    <ol class="first-steps__list">
+        @foreach (var step in Steps)
+        {
+            <li class="first-steps__step" data-testid="@($"first-step-{step.Key}")" data-done="@(step.Done ? "true" : "false")">
+                <FluentIcon Value="@(step.Done ? DoneIcon : TodoIcon)" Color="Color.Custom"
+                            CustomColor="@(step.Done ? "var(--colorStatusSuccessForeground1, #107c10)" : "var(--colorNeutralForeground3, #605e5c)")" />
+                <span class="first-steps__text">
+                    <strong>@L[$"FirstSteps.{step.Key}"]</strong>
+                    <span class="field-hint">@L[$"FirstSteps.{step.Key}.Hint"]</span>
+                </span>
+                @if (!step.Done && step.Href is not null)
+                {
+                    <FluentAnchorButton Href="@step.Href" Appearance="ButtonAppearance.Outline" data-testid="@($"first-step-{step.Key}-go")">
+                        @L[$"FirstSteps.{step.Key}.Action"]
+                    </FluentAnchorButton>
+                }
+            </li>
+        }
+    </ol>
+</section>
+
+@code {
+    private static readonly Icon DoneIcon = new Icons.Filled.Size20.CheckmarkCircle();
+    private static readonly Icon TodoIcon = new Icons.Regular.Size20.Circle();
+
+    [Parameter] public bool HasSource { get; set; }
+    [Parameter] public bool HasDestination { get; set; }
+
+    // Primer pipeline (null = aún no hay): de él cuelgan elegir tablas y ejecutar.
+    [Parameter] public string? PipelineId { get; set; }
+
+    private sealed record Step(string Key, bool Done, string? Href);
+
+    private IEnumerable<Step> Steps =>
+    [
+        new("Source", HasSource, "/sources"),
+        new("Destination", HasDestination, "/destinations"),
+        new("Pipeline", PipelineId is not null, "/pipelines"),
+        new("Tables", false, PipelineId is null ? null : $"/catalog?pipeline={Uri.EscapeDataString(PipelineId)}"),
+        new("Run", false, PipelineId is null ? null : "/pipelines"),
+    ];
+}

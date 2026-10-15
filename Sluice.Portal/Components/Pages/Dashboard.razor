@@ -56,6 +56,11 @@
         </Actions>
     </PageHeader>
 
+    @if (!_loading && _tableCount == 0)
+    {
+        <FirstSteps HasSource="@_hasSource" HasDestination="@_hasDestination" PipelineId="@_pipelines.FirstOrDefault()?.Id" />
+    }
+
     <PanelState IsLoading="@_loading" Error="@_error">
         <section class="dash-stats" aria-label="@L["Page.Dashboard.Overview"]" data-testid="dashboard-stats">
             <div class="dash-stat">
@@ -247,6 +252,8 @@
     private Job? _lastJob;
     private List<Pipeline> _pipelines = [];
     private string _selectedPipeline = "";
+    private bool _hasSource;
+    private bool _hasDestination;
     private List<ActiveJob> _active = [];
     private ActiveJob? _primary;
     private QueueSnapshot? _queue;
@@ -355,6 +362,8 @@
             }
 
             _lastJob = JobService.List(1, 1).FirstOrDefault();
+            _hasSource = Connections.List(ConnectionRole.Source).Count > 0;
+            _hasDestination = Connections.List(ConnectionRole.Destination).Count > 0;
 
             // ListRunning = JobProgressHelper.IsActive (incluye Partial sin FinishedAt, que sigue
             // con SQL/Conciliación). El % sale del mismo JobFlowBuilder que el detalle del job.
