@@ -172,7 +172,7 @@ public sealed class PipelineSchedulerService : BackgroundService
         var hours = _settings.Get().PipelineLagAlertHours;
         var now = DateTimeOffset.UtcNow;
         var closedAt = hours <= 0 || catalog.LastProcessedSnapshot is null ? null : OldestPendingClosedAt(catalog);
-        if (closedAt is not { } since || now - since < TimeSpan.FromHours(hours))
+        if (closedAt is not { } since || (now - since).TotalHours < hours)
         {
             _lagAlertsSent.Remove(pipeline.Id);
             return;
