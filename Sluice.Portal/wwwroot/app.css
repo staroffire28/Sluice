@@ -514,6 +514,9 @@ fluent-button[appearance="subtle"]:not([icon-only]):not([disabled]),
 fluent-anchor-button[appearance="subtle"]:not([icon-only]) {
     border-color: var(--colorNeutralStroke1);
 }
+fluent-button[appearance="subtle"]:not([icon-only])[disabled] {
+    border-color: var(--colorNeutralStrokeDisabled);
+}
 
 .data-panel {
     width: 100%;
