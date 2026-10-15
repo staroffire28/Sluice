@@ -44,6 +44,8 @@
         <div class="dialog-form" style="max-width:560px;">
             <p class="field-hint">@L["Page.Settings.Alerts.Hint"]</p>
             <FluentSwitch @bind-Value="_alertEnabled" Label="@L["Page.Settings.Alerts.Enabled"]" />
+            <FluentNumberInput TValue="int" @bind-Value="_pipelineLagAlertHours" Label="@L["Page.Settings.PipelineLagAlertHours"]" Style="width:100%;" data-testid="settings-pipeline-lag-hours" />
+            <p class="field-hint">@L["Page.Settings.PipelineLagAlertHours.Hint"]</p>
             @* La URL lleva la firma (sig=...): no se envía al navegador. Vacío = conservar la guardada. *@
             <FluentTextInput @bind-Value="_alertWebhookUrl" Label="@L["Page.Settings.Alerts.WebhookUrl"]" Style="width:100%;"
                              TextInputType="TextInputType.Password"
@@ -123,6 +125,7 @@
     private bool _sourceSnapshotRetentionDryRun;
     private bool _sourceSnapshotRetentionRequireParquet = true;
     private bool _alertEnabled;
+    private int _pipelineLagAlertHours = 6;
     private string? _alertWebhookUrl;
     private string? _storedWebhookUrl;
 
@@ -147,6 +150,7 @@
         _sourceSnapshotRetentionDryRun = settings.SourceSnapshotRetentionDryRun;
         _sourceSnapshotRetentionRequireParquet = settings.SourceSnapshotRetentionRequireParquet;
         _alertEnabled = settings.AlertEnabled;
+        _pipelineLagAlertHours = settings.PipelineLagAlertHours;
         _storedWebhookUrl = settings.AlertWebhookUrl;
     }
 
@@ -174,6 +178,7 @@
             SourceSnapshotRetentionDryRun = _sourceSnapshotRetentionDryRun,
             SourceSnapshotRetentionRequireParquet = _sourceSnapshotRetentionRequireParquet,
             AlertEnabled = _alertEnabled,
+            PipelineLagAlertHours = _pipelineLagAlertHours,
             AlertWebhookUrl = EffectiveWebhookUrl,
         };
 

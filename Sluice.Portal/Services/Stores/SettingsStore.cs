@@ -31,6 +31,10 @@ public sealed record AppSettings
     // queda al menos la más reciente). 0 o negativo las desactiva.
     public int ParquetVersionDays { get; init; } = 7;
 
+    // Alerta de pipeline atrasado: un snapshot cerrado lleva más de estas horas sin procesarse en un
+    // pipeline con scheduler. 0 o negativo la desactiva.
+    public int PipelineLagAlertHours { get; init; } = 6;
+
     // Antigüedad (días) de carpetas snapshot CSV ya procesadas en el container origen
     // de Synapse Link. 0 o negativo desactiva la purga. El piso K es constante en
     // SnapshotRetentionService.
@@ -133,6 +137,9 @@ public sealed class SettingsStore
             StaleTableDays = root.TryGetProperty("staleTableDays", out _)
                 ? settings.StaleTableDays
                 : defaults.StaleTableDays,
+            PipelineLagAlertHours = root.TryGetProperty("pipelineLagAlertHours", out _)
+                ? settings.PipelineLagAlertHours
+                : defaults.PipelineLagAlertHours,
         };
     }
 

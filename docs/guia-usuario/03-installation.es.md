@@ -121,6 +121,7 @@ Se editan en el portal, se guardan en el volumen y aplican sin reiniciar.
 | Simulación de la purga de snapshots | Registra qué se borraría sin borrar nada. | Activada |
 | Exigir Parquet antes de purgar | No purga snapshots si falta algún Parquet consolidado del pipeline. | Activada |
 | Alertas | Activar y URL del webhook (p. ej. una Azure Logic App); **Enviar prueba** comprueba la URL. | Desactivadas |
+| Horas de atraso para alertar | Alerta cuando un snapshot cerrado lleva más de estas horas sin procesarse en un pipeline con scheduler ([detalles](04-reference.es.md#observabilidad-y-alertas)). `0` la desactiva. | 6 |
 
 ## Variables de entorno
 
