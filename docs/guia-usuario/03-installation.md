@@ -121,6 +121,7 @@ Edited in the portal, saved to the volume, applied without restart.
 | Snapshot purge dry run | Logs what would be deleted without deleting anything. | On |
 | Require Parquet before purging | Skips the snapshot purge if any consolidated Parquet of the pipeline is missing. | On |
 | Alerts | Enable and webhook URL (e.g. an Azure Logic App); **Send test** checks the URL. | Off |
+| Hours behind before alerting | Alerts when a closed snapshot has waited longer than this on a pipeline with the scheduler on ([details](04-reference.md#observability-and-alerts)). `0` disables it. | 6 |
 
 ## Environment variables
 
