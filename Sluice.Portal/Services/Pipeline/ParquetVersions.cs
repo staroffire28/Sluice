@@ -186,9 +186,10 @@ public static class ParquetVersions
             .OrderByDescending(p => p.Snapshot, StringComparer.Ordinal)
             .ToList();
 
-    // Volver al punto de un snapshot. Una tabla cuya versión de entonces ya trae datos posteriores, o
-    // que sin versión tiene datos posteriores, aún no existía: se archiva. Las demás sin versión no
-    // han cambiado desde entonces y se quedan como están. Los nombres de snapshot
+    // Volver al punto de un snapshot. Una tabla sin versión de entonces válida (no tiene, o ya trae
+    // datos posteriores) cuyo estado actual tiene datos posteriores aún no existía: se archiva. Las
+    // demás ya están en ese punto (no han cambiado desde entonces, o una restauración anterior ya las
+    // devolvió o archivó) y se quedan como están. Los nombres de snapshot
     // (yyyy-MM-ddTHH.mm.ssZ) ordenan cronológicamente.
     public static RestorePlan Plan(
         IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>> versions,
@@ -206,7 +207,7 @@ public static class ParquetVersions
             {
                 restore.Add((entity, version));
             }
-            else if (version is not null || After(tables.GetValueOrDefault(entity)?.LastSnapshot, snapshot))
+            else if (After(tables.GetValueOrDefault(entity)?.LastSnapshot, snapshot))
             {
                 archive.Add(entity);
             }
