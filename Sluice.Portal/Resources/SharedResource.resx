@@ -291,6 +291,7 @@
   <data name="Page.Parquet.Versions" xml:space="preserve"><value>Versiones</value></data>
   <data name="Page.Parquet.VersionsTitle" xml:space="preserve"><value>Versiones de {0}</value></data>
   <data name="Page.Parquet.VersionsHint" xml:space="preserve"><value>Copias anteriores del parquet consolidado, una por cada ejecución que lo cambió. Se guardan los días configurados en Ajustes y siempre al menos la más reciente. Restaurar una la vuelve a poner como consolidado, recarga la tabla en SQL desde ella y deja la actual como otra versión. Las filas más nuevas vuelven en la siguiente ejecución si sus snapshots siguen en el lago.</value></data>
+  <data name="Page.Parquet.MissingConsolidated" xml:space="preserve"><value>Falta el consolidado: restaura una versión</value></data>
   <data name="Page.Parquet.NoVersions" xml:space="preserve"><value>Esta tabla aún no tiene versiones anteriores.</value></data>
   <data name="Page.Parquet.RestoreBlocked" xml:space="preserve"><value>Hay un job en ejecución en este pipeline: espera a que termine para restaurar.</value></data>
   <data name="Page.Parquet.ArchivedAt" xml:space="preserve"><value>Guardada (UTC)</value></data>

@@ -15,6 +15,9 @@ public interface IParquetArtifactService
     Task<IReadOnlyList<ParquetVersion>> ListVersionsAsync(string pipelineId, string entity, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<ParquetVersion>>([]);
 
+    Task<IReadOnlyList<string>> ListVersionedEntitiesAsync(string pipelineId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<string>>([]);
+
     Task<int> DeleteVersionsAsync(string pipelineId, CancellationToken cancellationToken = default) => Task.FromResult(0);
 
     // Vuelve a poner la versión como consolidado vigente; el vigente pasa a ser una versión más
@@ -71,6 +74,12 @@ public sealed class ParquetArtifactService : IParquetArtifactService
         EnsureEntityName(entity);
         var store = await StoreFor(pipelineId, cancellationToken);
         return await ParquetVersions.ListAsync(store, pipelineId, entity, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<string>> ListVersionedEntitiesAsync(string pipelineId, CancellationToken cancellationToken = default)
+    {
+        var store = await StoreFor(pipelineId, cancellationToken);
+        return await ParquetVersions.ListEntitiesAsync(store, pipelineId, cancellationToken);
     }
 
     public async Task<int> DeleteVersionsAsync(string pipelineId, CancellationToken cancellationToken = default)

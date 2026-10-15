@@ -118,6 +118,15 @@ public static class ParquetVersions
         return versions.OrderByDescending(v => v.Id, StringComparer.Ordinal).ToList();
     }
 
+    // Tablas del pipeline con alguna versión, aunque ya no tengan consolidado: la página Parquet
+    // las lista igualmente para poder restaurar cuando la ingesta se para porque falta el consolidado.
+    public static async Task<IReadOnlyList<string>> ListEntitiesAsync(
+        IParquetStore store, string pipelineId, CancellationToken cancellationToken = default) =>
+        (await store.ListParquetAsync(Prefix(pipelineId), cancellationToken))
+            .Select(a => a.Path[Prefix(pipelineId).Length..].Split('/')[0])
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
     public static async Task<bool> HasVersionsAsync(
         IParquetStore store, string pipelineId, string entity, CancellationToken cancellationToken = default) =>
         (await store.ListParquetAsync(EntityPrefix(pipelineId, entity), cancellationToken)).Count > 0;

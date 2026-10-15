@@ -292,6 +292,7 @@
   <data name="Page.Parquet.Versions" xml:space="preserve"><value>Versions</value></data>
   <data name="Page.Parquet.VersionsTitle" xml:space="preserve"><value>Versions of {0}</value></data>
   <data name="Page.Parquet.VersionsHint" xml:space="preserve"><value>Earlier copies of the consolidated Parquet, one for each run that changed it. They are kept for the days set in Settings, and the most recent one is always kept. Restoring one puts it back as the consolidated Parquet, reloads the table in SQL from it and keeps the current one as another version. Newer rows come back on the next run if their snapshots are still in the lake.</value></data>
+  <data name="Page.Parquet.MissingConsolidated" xml:space="preserve"><value>Consolidated missing: restore a version</value></data>
   <data name="Page.Parquet.NoVersions" xml:space="preserve"><value>This table has no earlier versions yet.</value></data>
   <data name="Page.Parquet.RestoreBlocked" xml:space="preserve"><value>A job is running on this pipeline: wait for it to finish before restoring.</value></data>
   <data name="Page.Parquet.ArchivedAt" xml:space="preserve"><value>Saved (UTC)</value></data>

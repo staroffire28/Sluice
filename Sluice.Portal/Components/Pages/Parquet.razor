@@ -51,12 +51,15 @@
                     <PropertyColumn Property="@(r => r.Modified)" Title="@L["Page.Parquet.Modified"]" />
                     <TemplateColumn Title="@L["Common.Actions"]" Align="DataGridCellAlignment.End">
                         @* ForceLoad: sin él el router de Blazor busca /api/... como página y muestra "Not found". *@
-                        <FluentAnchorButton Href="@DownloadUrl(context.Path)"
-                                      ForceLoad="true"
-                                      data-testid="@($"parquet-download-{context.Path}")"
-                                      Appearance="ButtonAppearance.Subtle"
-                                      IconStart="@(new Icons.Regular.Size20.ArrowDownload())"
-                                      Title="@L["Common.Download"]" />
+                        @if (!context.Missing)
+                        {
+                            <FluentAnchorButton Href="@DownloadUrl(context.Path)"
+                                          ForceLoad="true"
+                                          data-testid="@($"parquet-download-{context.Path}")"
+                                          Appearance="ButtonAppearance.Subtle"
+                                          IconStart="@(new Icons.Regular.Size20.ArrowDownload())"
+                                          Title="@L["Common.Download"]" />
+                        }
                         @if (ConsolidatedEntity(context.Path) is { } entity)
                         {
                             <FluentButton Appearance="ButtonAppearance.Subtle"
@@ -65,10 +68,13 @@
                                           data-testid="@($"parquet-versions-{entity}")"
                                           OnClick="@(() => OpenVersionsAsync(entity))" />
                         }
-                        <FluentButton Appearance="ButtonAppearance.Subtle"
-                                      IconStart="@(new Icons.Regular.Size20.Delete())"
-                                      Title="@L["Common.Delete"]"
-                                      OnClick="@(() => ConfirmDeleteAsync(context.Path))" />
+                        @if (!context.Missing)
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Subtle"
+                                          IconStart="@(new Icons.Regular.Size20.Delete())"
+                                          Title="@L["Common.Delete"]"
+                                          OnClick="@(() => ConfirmDeleteAsync(context.Path))" />
+                        }
                     </TemplateColumn>
                 </FluentDataGrid>
                 <PaginationControl Page="_page" TotalPages="_totalPages" TotalCount="_totalCount" PageChanged="OnPageChanged" />
@@ -219,12 +225,13 @@
         {
             _loading = _allRows.Count == 0;
             var artifacts = await ParquetService.ListAsync(_pipelineId, ct);
+            var versioned = await ParquetService.ListVersionedEntitiesAsync(_pipelineId, ct);
             if (ct.IsCancellationRequested)
             {
                 return;
             }
 
-            SetRows(artifacts);
+            SetRows(artifacts, versioned);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -245,16 +252,25 @@
         }
     }
 
-    private void SetRows(IEnumerable<ParquetArtifact> artifacts) =>
-        _allRows = artifacts
+    // Una tabla con versiones pero sin consolidado también sale (sin descargar ni borrar): la
+    // ingesta se para en ese caso y pide restaurar una versión desde aquí.
+    private void SetRows(IEnumerable<ParquetArtifact> artifacts, IEnumerable<string> versionedEntities)
+    {
+        var rows = artifacts
             .Select(a => new ArtifactRow
             {
                 Path = a.Path,
                 Size = FormatSize(a.SizeBytes),
                 Modified = a.LastModified?.ToString("u") ?? "-",
             })
-            .OrderBy(r => r.Path, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var paths = rows.Select(r => r.Path).ToHashSet(StringComparer.Ordinal);
+        rows.AddRange(versionedEntities
+            .Select(e => IngestManifestStore.GetConsolidatedBlobPath(_pipelineId, e))
+            .Where(p => !paths.Contains(p))
+            .Select(p => new ArtifactRow { Path = p, Size = "-", Modified = L["Page.Parquet.MissingConsolidated"].Value, Missing = true }));
+        _allRows = rows.OrderBy(r => r.Path, StringComparer.OrdinalIgnoreCase).ToList();
+    }
 
     // El listado ya llega entero en memoria (IParquetArtifactService lista todo el
     // container de una vez); filtrar y paginar aquí es solo de presentación, sin tocar el
@@ -379,5 +395,6 @@
         public string Path { get; init; } = "";
         public string Size { get; init; } = "";
         public string Modified { get; init; } = "";
+        public bool Missing { get; init; }
     }
 }
