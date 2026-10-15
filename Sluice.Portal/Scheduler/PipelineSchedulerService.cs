@@ -169,6 +169,11 @@ public sealed class PipelineSchedulerService : BackgroundService
     // como la del changelog: se rearma al ponerse al día.
     private async Task CheckPipelineLagAsync(Models.Pipeline pipeline, SnapshotCatalogResult catalog, CancellationToken ct)
     {
+        if (catalog.Blocked)
+        {
+            return;
+        }
+
         var hours = _settings.Get().PipelineLagAlertHours;
         var now = DateTimeOffset.UtcNow;
         var closedAt = hours <= 0 || catalog.LastProcessedSnapshot is null ? null : OldestPendingClosedAt(catalog);
