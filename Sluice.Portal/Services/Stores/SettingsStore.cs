@@ -130,6 +130,9 @@ public sealed class SettingsStore
             ParquetVersionDays = root.TryGetProperty("parquetVersionDays", out _)
                 ? settings.ParquetVersionDays
                 : defaults.ParquetVersionDays,
+            StaleTableDays = root.TryGetProperty("staleTableDays", out _)
+                ? settings.StaleTableDays
+                : defaults.StaleTableDays,
         };
     }
 
