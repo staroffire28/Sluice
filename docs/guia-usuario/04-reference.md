@@ -87,11 +87,11 @@ A second janitor purges **already processed** CSV folders in the Synapse Link so
 
 ### Consolidated Parquet versions
 
-Before a table's consolidated Parquet is replaced, the previous one is moved (rename, no data copy) to `_versions/{pipeline}/{table}/` with a `.json` holding its schema and the table and pipeline state.
+Before a table's consolidated Parquet is replaced, the previous one is moved (rename, no data copy) to `_versions/{pipeline}/{table}/` with a `.json` holding its schema, the table state and the pipeline's last processed snapshot. A **restore point** is that snapshot: restoring it, each table takes the first version archived after it was processed (among those of the same snapshot, the oldest); if that version already holds later data, or the table has no version but does have later data, the table did not exist yet and is archived.
 
-- **Knob**: `ParquetVersionDays` in `/settings` (default 7). The most recent version is always kept; `0` or negative disables them (publishing is still validated and atomic).
-- **Space**: each version is a full copy of the table; a table that changes in every snapshot every 12 h builds up to about 14 versions with 7 days.
-- **Safeguard**: if a table's consolidated Parquet is missing but it has versions (an interrupted publish or a manual delete), ingest stops with an error instead of rebuilding it from the new snapshots only; restore a version on the Parquet page.
+- **Knob**: `ParquetVersionDays` in `/settings` (default 7). The points of the snapshots of those days (by snapshot date) are kept, and always the most recent one, with the versions they need; only those are offered on the Parquet page. `0` or negative disables them (publishing is still validated and atomic).
+- **Space**: each version is a full copy of the table; a table that changes in every snapshot every 12 h builds up to about 14 versions with 7 days. Pruning runs at the end of each ingest, so during a job the new and the previous consolidated files both exist even with versions disabled.
+- **Safeguard**: if a table's consolidated Parquet is missing but it has versions (an interrupted publish or a manual delete), ingest stops with an error instead of rebuilding it from the new snapshots only; restore a point on the Parquet page (*Restore points*).
 
 ## Common errors
 

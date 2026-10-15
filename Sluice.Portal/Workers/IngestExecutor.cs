@@ -334,7 +334,7 @@ public sealed class IngestExecutor : IIngestExecutor
                 // o alguien lo borró. Seguir lo reconstruiría solo con los snapshots nuevos y la
                 // historia se perdería en silencio.
                 throw new InvalidOperationException(
-                    $"{entity}: falta el parquet consolidado pero hay versiones anteriores. Restaura una en la página Parquet y vuelve a ejecutar.");
+                    $"{entity}: falta el parquet consolidado pero hay versiones anteriores. Restaura un punto en la página Parquet (Puntos de restauración) y vuelve a ejecutar.");
             }
 
             var stagingConsolidated = _manifestStore.GetStagingConsolidatedPath(task.JobId, entity);
@@ -392,8 +392,6 @@ public sealed class IngestExecutor : IIngestExecutor
                     PipelineSnapshot = pipelineState.LastProcessedSnapshot,
                 },
                 DateTimeOffset.UtcNow, cancellationToken);
-            await ParquetVersions.PruneAsync(
-                parquetStore, task.PipelineId, entity, _settings?.Get().ParquetVersionDays ?? 0, DateTimeOffset.UtcNow, cancellationToken);
 
             // Delta: solo las filas de los snapshots de esta corrida (deduplicadas), para que la
             // etapa SQL no remergee la tabla entera. Solo con consolidado previo: sin él la tabla
@@ -488,6 +486,17 @@ public sealed class IngestExecutor : IIngestExecutor
             Entities = manifestEntities,
         });
         progress.CompleteStep(JobStepCatalog.Register);
+
+        // La poda va por puntos de restauración (todas las tablas a la vez), así que una vez por job.
+        // Si falla, la ingesta ya está hecha: solo se avisa y se reintenta en la siguiente.
+        try
+        {
+            await ParquetVersions.PruneAsync(parquetStore, task.PipelineId, _settings?.Get().ParquetVersionDays ?? 0, DateTimeOffset.UtcNow, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _jobs.AppendEvent(task.JobId, EventLevel.Warning, $"No se pudieron podar las versiones del parquet: {ex.Message}");
+        }
 
         // Entidades que fallaron en TODOS sus intentos (nunca llegaron a consolidarse): se
         // reportan como error para que el operador las vea en el detalle del job.

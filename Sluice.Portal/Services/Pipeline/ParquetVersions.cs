@@ -20,6 +20,14 @@ public sealed record ParquetVersion
     public string? SchemaJson { get; init; }
 }
 
+// Un punto de restauración: el lago tal como quedó al procesar un snapshot. LeftAt y
+// ReplacedByJobId: cuándo y con qué job se dejó atrás (su primera versión archivada).
+public sealed record RestorePoint(string Snapshot, DateTimeOffset LeftAt, string? ReplacedByJobId);
+
+// Qué pasa con cada tabla al volver a un punto: Restore recupera la versión que tenía entonces y
+// Archive son las que aún no existían (su consolidado pasa a versión).
+public sealed record RestorePlan(IReadOnlyList<(string Entity, ParquetVersion Version)> Restore, IReadOnlyList<string> Archive);
+
 // Versiones del consolidado. Antes de sustituirlo, la copia vigente se mueve (rename, sin copiar
 // datos) a _versions/{pipeline}/{entity}/{id}.parquet con un sidecar {id}.json. Fuera de
 // {pipeline}/ a propósito: la conciliación, Force y la página Parquet tratan como tabla cualquier
@@ -38,10 +46,6 @@ public static class ParquetVersions
     private static string SidecarPath(string parquetPath) => parquetPath[..^".parquet".Length] + ".json";
 
     private static string IdOf(string parquetPath) => Path.GetFileNameWithoutExtension(parquetPath);
-
-    private static DateTimeOffset? ArchivedAtOf(string id) =>
-        DateTimeOffset.TryParseExact(id, IdFormat, CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var at) ? at : null;
 
     // Publica el consolidado nuevo sin dejar nunca la única copia a medias: se sube con otro
     // nombre, se comprueba que llegó entero, la copia vigente pasa a versión y el nuevo ocupa su
@@ -131,19 +135,108 @@ public static class ParquetVersions
         IParquetStore store, string pipelineId, string entity, CancellationToken cancellationToken = default) =>
         (await store.ListParquetAsync(EntityPrefix(pipelineId, entity), cancellationToken)).Count > 0;
 
-    // Borra las versiones de más de keepDays días y conserva siempre la más reciente; con
-    // keepDays <= 0 (versiones desactivadas) las borra todas.
-    public static async Task<int> PruneAsync(
-        IParquetStore store, string pipelineId, string entity, int keepDays, DateTimeOffset now, CancellationToken cancellationToken = default)
+    // Las versiones de todas las tablas del pipeline, por tabla.
+    public static async Task<IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>>> ListAllAsync(
+        IParquetStore store, string pipelineId, CancellationToken cancellationToken = default)
     {
-        var paths = (await store.ListParquetAsync(EntityPrefix(pipelineId, entity), cancellationToken))
-            .Select(a => a.Path)
-            .OrderByDescending(IdOf, StringComparer.Ordinal)
+        var versions = new Dictionary<string, IReadOnlyList<ParquetVersion>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entity in await ListEntitiesAsync(store, pipelineId, cancellationToken))
+        {
+            versions[entity] = await ListAsync(store, pipelineId, entity, cancellationToken);
+        }
+
+        return versions;
+    }
+
+    // La versión de una tabla que era la vigente al terminar de procesar un snapshot: la primera que
+    // se archivó después. Se archiva con el LastProcessedSnapshot del momento, así que es la de menor
+    // PipelineSnapshot >= snapshot y, entre las que lo comparten (un job que falló a medias y se
+    // reintentó, un Force), la más antigua: las siguientes ya traen filas posteriores o rehechas.
+    // null: la tabla no ha cambiado desde entonces, o aún no existía.
+    public static ParquetVersion? VersionAt(IEnumerable<ParquetVersion> versions, string snapshot) =>
+        versions
+            .Where(v => v.PipelineSnapshot is not null && string.CompareOrdinal(v.PipelineSnapshot, snapshot) >= 0)
+            .OrderBy(v => v.PipelineSnapshot, StringComparer.Ordinal)
+            .ThenBy(v => v.Id, StringComparer.Ordinal)
+            .FirstOrDefault();
+
+    // Un punto por cada snapshot con el que se archivó alguna versión, el más reciente primero.
+    public static IReadOnlyList<RestorePoint> RestorePoints(IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>> versions) =>
+        versions.Values
+            .SelectMany(v => v)
+            .Where(v => v.PipelineSnapshot is not null)
+            .GroupBy(v => v.PipelineSnapshot!, StringComparer.Ordinal)
+            .Select(g => g.MinBy(v => v.Id, StringComparer.Ordinal)!)
+            .Select(v => new RestorePoint(v.PipelineSnapshot!, v.ArchivedAt, v.ReplacedByJobId))
+            .OrderByDescending(p => p.Snapshot, StringComparer.Ordinal)
             .ToList();
+
+    // Volver al punto de un snapshot. Una tabla cuya versión de entonces ya trae datos posteriores, o
+    // que sin versión tiene datos posteriores, aún no existía: se archiva. Las demás sin versión no
+    // han cambiado desde entonces y se quedan como están. Los nombres de snapshot
+    // (yyyy-MM-ddTHH.mm.ssZ) ordenan cronológicamente.
+    public static RestorePlan Plan(
+        IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>> versions,
+        IReadOnlyDictionary<string, TableState> tables,
+        string snapshot)
+    {
+        static bool After(string? value, string snapshot) => value is not null && string.CompareOrdinal(value, snapshot) > 0;
+
+        var restore = new List<(string, ParquetVersion)>();
+        var archive = new List<string>();
+        foreach (var entity in versions.Keys.Union(tables.Keys, StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
+        {
+            var version = versions.TryGetValue(entity, out var list) ? VersionAt(list, snapshot) : null;
+            if (version is not null && !After(version.Table?.LastSnapshot, snapshot))
+            {
+                restore.Add((entity, version));
+            }
+            else if (version is not null || After(tables.GetValueOrDefault(entity)?.LastSnapshot, snapshot))
+            {
+                archive.Add(entity);
+            }
+        }
+
+        return new RestorePlan(restore, archive);
+    }
+
+    // Los puntos que la poda conserva enteros, los únicos que se ofrecen: los de snapshots de los
+    // últimos keepDays días y siempre el más reciente. Cuenta la fecha del snapshot y no cuándo se
+    // archivaron sus versiones, que cambia al podar: así un punto que se deja caer no vuelve a la
+    // lista con versiones de menos. Con keepDays <= 0 (versiones desactivadas), ninguno.
+    public static IReadOnlyList<RestorePoint> KeptPoints(
+        IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>> versions, int keepDays, DateTimeOffset now)
+    {
+        if (keepDays <= 0)
+        {
+            return [];
+        }
+
         var cutoff = now.AddDays(-keepDays);
-        var expired = keepDays <= 0
-            ? paths
-            : paths.Skip(1).Where(p => ArchivedAtOf(IdOf(p)) is { } at && at < cutoff).ToList();
+        return RestorePoints(versions)
+            .Where((point, index) => index == 0 || (SnapshotFolderTime.TryParse(point.Snapshot, out var at) && at >= cutoff))
+            .ToList();
+    }
+
+    // Poda por puntos de restauración: se conservan las versiones que necesitan los puntos
+    // conservados (KeptPoints); del resto solo se borran las de más de keepDays días. Con
+    // keepDays <= 0 (versiones desactivadas) se borran todas.
+    public static async Task<int> PruneAsync(
+        IParquetStore store, string pipelineId, int keepDays, DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        if (keepDays <= 0)
+        {
+            return await DeleteAllAsync(store, pipelineId, cancellationToken);
+        }
+
+        var versions = await ListAllAsync(store, pipelineId, cancellationToken);
+        var cutoff = now.AddDays(-keepDays);
+        var kept = KeptPoints(versions, keepDays, now);
+        var expired = versions
+            .SelectMany(e => e.Value
+                .Where(v => v.ArchivedAt < cutoff && !kept.Any(p => VersionAt(e.Value, p.Snapshot) == v))
+                .Select(v => ParquetPath(pipelineId, e.Key, v.Id)))
+            .ToList();
 
         foreach (var path in expired)
         {
