@@ -254,7 +254,7 @@
     }
 
     // Una tabla del estado con versiones pero sin consolidado también sale (sin descargar ni borrar):
-    // la ingesta se para en ese caso y pide restaurar una versión desde aquí. Las que archivó una
+    // la ingesta se para en ese caso y pide restaurar un punto desde aquí. Las que archivó una
     // restauración ya no están en el estado y la siguiente ejecución las reconstruye.
     private void SetRows(IEnumerable<ParquetArtifact> artifacts, IEnumerable<string> versionedEntities)
     {
