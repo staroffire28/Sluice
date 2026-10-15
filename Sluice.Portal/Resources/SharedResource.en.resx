@@ -297,6 +297,7 @@
   <data name="Page.Parquet.ArchivedAt" xml:space="preserve"><value>Saved (UTC)</value></data>
   <data name="Page.Parquet.Rows" xml:space="preserve"><value>Rows</value></data>
   <data name="Page.Parquet.LastSnapshot" xml:space="preserve"><value>Last snapshot with data</value></data>
+  <data name="Page.Parquet.ReplacedBy" xml:space="preserve"><value>Replaced by</value></data>
   <data name="Page.Parquet.Restore" xml:space="preserve"><value>Restore</value></data>
   <data name="Page.Parquet.ConfirmRestoreTitle" xml:space="preserve"><value>Restore version</value></data>
   <data name="Page.Parquet.ConfirmRestore" xml:space="preserve"><value>Restore the version of {0} saved on {1}? The current copy becomes another version and the table is reloaded in SQL from the restored one.</value></data>

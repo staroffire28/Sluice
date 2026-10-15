@@ -102,6 +102,16 @@
                     </TemplateColumn>
                     <TemplateColumn Title="@L["Page.Parquet.Rows"]">@(context.Table is { } table ? table.RowCount.ToString("N0") : "—")</TemplateColumn>
                     <TemplateColumn Title="@L["Page.Parquet.LastSnapshot"]">@(context.Table?.LastSnapshot ?? "—")</TemplateColumn>
+                    <TemplateColumn Title="@L["Page.Parquet.ReplacedBy"]">
+                        @if (context.ReplacedByJobId is { } jobId)
+                        {
+                            <a href="@($"/jobs/{jobId}")" data-testid="@($"parquet-version-job-{context.Id}")">@jobId</a>
+                        }
+                        else
+                        {
+                            @("—")
+                        }
+                    </TemplateColumn>
                     <TemplateColumn Align="DataGridCellAlignment.End">
                         <FluentButton Appearance="ButtonAppearance.Outline"
                                       Disabled="@(_jobRunning || _restoring)"

@@ -322,7 +322,8 @@ public sealed class IngestExecutor : IIngestExecutor
             }
 
             var transientSources = sources.ToList();
-            var hasPreviousConsolidated = !isForce && await parquetStore.ParquetExistsAsync(consolidatedBlobPath, cancellationToken);
+            var consolidatedExists = await parquetStore.ParquetExistsAsync(consolidatedBlobPath, cancellationToken);
+            var hasPreviousConsolidated = !isForce && consolidatedExists;
             if (hasPreviousConsolidated)
             {
                 sources.Add(ct => parquetStore.OpenParquetReadAsync(consolidatedBlobPath, ct));
@@ -365,7 +366,7 @@ public sealed class IngestExecutor : IIngestExecutor
 
             // Las filas de borrado se conservan, así que el consolidado no debería encoger. Solo se
             // avisa: con la versión anterior a salvo, bloquear dejaría el pipeline atascado.
-            if (hasPreviousConsolidated)
+            if (consolidatedExists)
             {
                 var previousRows = await parquetStore.CountParquetRowsAsync(consolidatedBlobPath, cancellationToken: cancellationToken);
                 if (result.Rows < previousRows)

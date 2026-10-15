@@ -296,6 +296,7 @@
   <data name="Page.Parquet.ArchivedAt" xml:space="preserve"><value>Guardada (UTC)</value></data>
   <data name="Page.Parquet.Rows" xml:space="preserve"><value>Filas</value></data>
   <data name="Page.Parquet.LastSnapshot" xml:space="preserve"><value>Último snapshot con datos</value></data>
+  <data name="Page.Parquet.ReplacedBy" xml:space="preserve"><value>Sustituida por</value></data>
   <data name="Page.Parquet.Restore" xml:space="preserve"><value>Restaurar</value></data>
   <data name="Page.Parquet.ConfirmRestoreTitle" xml:space="preserve"><value>Restaurar versión</value></data>
   <data name="Page.Parquet.ConfirmRestore" xml:space="preserve"><value>¿Restaurar la versión de {0} guardada el {1}? La copia actual pasa a ser una versión más y la tabla se recarga en SQL desde la restaurada.</value></data>
