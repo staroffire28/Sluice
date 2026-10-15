@@ -288,6 +288,20 @@
   <data name="Page.Parquet.Modified" xml:space="preserve"><value>Modificado</value></data>
   <data name="Page.Parquet.ConfirmDelete" xml:space="preserve"><value>¿Borrar el parquet '{0}' de ADLS? Esta acción es irreversible.</value></data>
   <data name="Page.Parquet.ConfirmDeleteTitle" xml:space="preserve"><value>Confirmar borrado</value></data>
+  <data name="Page.Parquet.Versions" xml:space="preserve"><value>Versiones</value></data>
+  <data name="Page.Parquet.VersionsTitle" xml:space="preserve"><value>Versiones de {0}</value></data>
+  <data name="Page.Parquet.VersionsHint" xml:space="preserve"><value>Copias anteriores del parquet consolidado, una por cada ejecución que lo cambió. Se guardan los días configurados en Ajustes y siempre al menos la más reciente. Restaurar una la vuelve a poner como consolidado, recarga la tabla en SQL desde ella y deja la actual como otra versión. Las filas más nuevas vuelven en la siguiente ejecución si sus snapshots siguen en el lago.</value></data>
+  <data name="Page.Parquet.MissingConsolidated" xml:space="preserve"><value>Falta el consolidado: restaura una versión</value></data>
+  <data name="Page.Parquet.NoVersions" xml:space="preserve"><value>Esta tabla aún no tiene versiones anteriores.</value></data>
+  <data name="Page.Parquet.RestoreBlocked" xml:space="preserve"><value>Hay un job en ejecución en este pipeline: espera a que termine para restaurar.</value></data>
+  <data name="Page.Parquet.ArchivedAt" xml:space="preserve"><value>Guardada (UTC)</value></data>
+  <data name="Page.Parquet.Rows" xml:space="preserve"><value>Filas</value></data>
+  <data name="Page.Parquet.LastSnapshot" xml:space="preserve"><value>Último snapshot con datos</value></data>
+  <data name="Page.Parquet.ReplacedBy" xml:space="preserve"><value>Sustituida por</value></data>
+  <data name="Page.Parquet.Restore" xml:space="preserve"><value>Restaurar</value></data>
+  <data name="Page.Parquet.ConfirmRestoreTitle" xml:space="preserve"><value>Restaurar versión</value></data>
+  <data name="Page.Parquet.ConfirmRestore" xml:space="preserve"><value>¿Restaurar la versión de {0} guardada el {1}? La copia actual pasa a ser una versión más y la tabla se recarga en SQL desde la restaurada.</value></data>
+  <data name="Page.Parquet.Restored" xml:space="preserve"><value>Versión de {0} restaurada; se está recargando la tabla en SQL.</value></data>
   <data name="Page.Reports.SelectPipeline" xml:space="preserve"><value>Selecciona un pipeline para ver sus últimos reportes de reconcile y diff.</value></data>
   <data name="Page.Reports.Reconcile" xml:space="preserve"><value>Reconcile</value></data>
   <data name="Page.Reports.NoReconcile" xml:space="preserve"><value>Aún no hay reporte de reconcile. Ejecuta un job Reconcile desde Pipelines.</value></data>
@@ -691,6 +705,8 @@
   <data name="Page.Tables.LastDataStale" xml:space="preserve"><value>{0} días sin datos nuevos: revisa si la tabla sigue en el perfil de Synapse Link.</value></data>
   <data name="Page.Settings.StaleTableDays" xml:space="preserve"><value>Días sin datos para resaltar una tabla</value></data>
   <data name="Page.Settings.StaleTableDays.Hint" xml:space="preserve"><value>En Tablas, «Último dato» se resalta cuando la última carga con filas es más antigua. 0 o negativo lo desactiva.</value></data>
+  <data name="Page.Settings.ParquetVersionDays" xml:space="preserve"><value>Días de versiones del parquet</value></data>
+  <data name="Page.Settings.ParquetVersionDays.Hint" xml:space="preserve"><value>Cuántos días se guardan las copias anteriores del parquet consolidado de cada tabla, para restaurarlas desde la página Parquet. Siempre se conserva al menos la más reciente. 0 o negativo las desactiva.</value></data>
   <data name="Page.Sources.ParquetStorage" xml:space="preserve"><value>Dónde guardar el Parquet</value></data>
   <data name="Page.Sources.ParquetStorage.Adls" xml:space="preserve"><value>Contenedor de ADLS</value></data>
   <data name="Page.Sources.ParquetStorage.Portal" xml:space="preserve"><value>Disco del portal (DATA_DIR)</value></data>

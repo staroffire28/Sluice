@@ -54,6 +54,14 @@ public sealed class LocalParquetStore : IParquetStore
         return Task.FromResult(artifacts);
     }
 
+    public Task MoveAsync(string fromPath, string toPath, CancellationToken cancellationToken = default)
+    {
+        var target = PathOf(toPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.Move(PathOf(fromPath), target);
+        return Task.CompletedTask;
+    }
+
     public async Task UploadTextAsync(string blobPath, string content, CancellationToken cancellationToken = default)
     {
         var path = PathOf(blobPath);

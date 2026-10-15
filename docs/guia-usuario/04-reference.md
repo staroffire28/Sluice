@@ -85,6 +85,14 @@ A second janitor purges **already processed** CSV folders in the Synapse Link so
 - **Parquet certification**: `SourceSnapshotRetentionRequireParquet` (default on) — skips purge if any `{pipeline}/{entity}.parquet` is missing.
 - **Soft-delete**: enable blob soft-delete on the Azure storage account to recover mistakenly deleted folders (configured outside the portal).
 
+### Consolidated Parquet versions
+
+Before a table's consolidated Parquet is replaced, the previous one is moved (rename, no data copy) to `_versions/{pipeline}/{table}/` with a `.json` holding its schema and the table and pipeline state.
+
+- **Knob**: `ParquetVersionDays` in `/settings` (default 7). The most recent version is always kept; `0` or negative disables them (publishing is still validated and atomic).
+- **Space**: each version is a full copy of the table; a table that changes in every snapshot every 12 h builds up to about 14 versions with 7 days.
+- **Safeguard**: if a table's consolidated Parquet is missing but it has versions (an interrupted publish or a manual delete), ingest stops with an error instead of rebuilding it from the new snapshots only; restore a version on the Parquet page.
+
 ## Common errors
 
 When a job or a connection test fails with a known error, the portal shows what happened and what to do, with the original message below. Errors are recognized by their code (SQL Server error number, ADLS HTTP status, Entra ID `AADSTS` code), so they are recognized whatever the server language.

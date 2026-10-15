@@ -141,6 +141,9 @@ public sealed class PipelineResetService : IPipelineResetService
             }
         }
 
+        // Las versiones anteriores del consolidado describen la historia que el reset descarta.
+        deleted += await _parquet.DeleteVersionsAsync(pipelineId, cancellationToken);
+
         _stateStore.Save(new PipelineState { PipelineId = pipelineId });
 
         return new PipelineResetResult

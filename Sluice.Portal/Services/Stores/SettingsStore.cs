@@ -27,6 +27,10 @@ public sealed record AppSettings
     // negativo lo desactiva.
     public int StaleTableDays { get; init; } = 7;
 
+    // Días que se guardan las versiones anteriores del parquet consolidado de cada tabla (siempre
+    // queda al menos la más reciente). 0 o negativo las desactiva.
+    public int ParquetVersionDays { get; init; } = 7;
+
     // Antigüedad (días) de carpetas snapshot CSV ya procesadas en el container origen
     // de Synapse Link. 0 o negativo desactiva la purga. El piso K es constante en
     // SnapshotRetentionService.
@@ -123,6 +127,9 @@ public sealed class SettingsStore
             AlertEnabled = root.TryGetProperty("alertEnabled", out _)
                 ? settings.AlertEnabled
                 : defaults.AlertEnabled,
+            ParquetVersionDays = root.TryGetProperty("parquetVersionDays", out _)
+                ? settings.ParquetVersionDays
+                : defaults.ParquetVersionDays,
         };
     }
 

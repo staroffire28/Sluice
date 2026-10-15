@@ -85,6 +85,14 @@ Un segundo janitor purga carpetas CSV **ya procesadas** en el container origen d
 - **Certificación parquet**: `SourceSnapshotRetentionRequireParquet` (default activo) — no purga si falta algún `{pipeline}/{entity}.parquet`.
 - **Soft-delete**: habilita blob soft-delete en la storage account de Azure para recuperar carpetas borradas por error (configuración fuera del portal).
 
+### Versiones del Parquet consolidado
+
+Antes de sustituir el consolidado de una tabla, el anterior se mueve (rename, sin copiar datos) a `_versions/{pipeline}/{tabla}/` junto a un `.json` con su schema y el estado de la tabla y del pipeline.
+
+- **Perilla**: `ParquetVersionDays` en `/settings` (por defecto 7). Siempre se conserva la versión más reciente; `0` o negativo las desactiva (la publicación sigue siendo validada y atómica).
+- **Espacio**: cada versión es una copia completa de la tabla; una tabla que cambia en cada snapshot cada 12 h acumula hasta unas 14 versiones con 7 días.
+- **Protección**: si falta el consolidado de una tabla pero tiene versiones (publicación interrumpida o borrado a mano), la ingesta se para con un error en vez de reconstruirlo solo con los snapshots nuevos; restaura una versión en la página Parquet.
+
 ## Errores frecuentes
 
 Cuando un job o una prueba de conexión falla con un error conocido, el portal muestra qué pasó y qué hacer, con el mensaje original debajo. Los errores se reconocen por su código (número de error de SQL Server, estado HTTP de ADLS, código `AADSTS` de Entra ID), así que se reconocen sea cual sea el idioma del servidor.
