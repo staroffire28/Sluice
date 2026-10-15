@@ -507,6 +507,14 @@ fluent-dialog[fuib].dialog-wide::part(dialog) {
     min-width: 64px;
 }
 
+/* Los botones Subtle con texto se veían como texto suelto: llevan el borde del Outline (el fondo al
+   pasar el ratón ya lo trae FluentUI). Los de solo icono (cabecera, acciones de las filas) siguen
+   sin borde. Desde fuera del shadow DOM esta regla gana a la del :host del componente. */
+fluent-button[appearance="subtle"]:not([icon-only]):not([disabled]),
+fluent-anchor-button[appearance="subtle"]:not([icon-only]) {
+    border-color: var(--colorNeutralStroke1);
+}
+
 .data-panel {
     width: 100%;
 }

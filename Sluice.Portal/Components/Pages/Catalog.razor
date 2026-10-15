@@ -51,7 +51,7 @@
                         <FluentSwitch TValue="bool" data-testid="@($"catalog-include-{context.Name}")" Value="@context.Included"
                                       ValueChanged="@(included => SetIncluded(context.Name, included))" />
                     </TemplateColumn>
-                    <TemplateColumn Title="@L["Page.Catalog.Columns"]" Align="DataGridCellAlignment.End">
+                    <TemplateColumn Title="@L["Page.Catalog.Columns"]">
                         <FluentButton Appearance="ButtonAppearance.Outline" data-testid="@($"catalog-columns-{context.Name}")"
                                       OnClick="@(() => OpenColumnsAsync(context))">
                             @(context.ExcludedColumns > 0 ? L["Page.Catalog.ColumnsExcluded", context.ExcludedColumns] : L["Page.Catalog.AllColumns"])
