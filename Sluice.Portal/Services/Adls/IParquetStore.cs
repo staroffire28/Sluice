@@ -24,6 +24,19 @@ public interface IParquetStore
     // (p.ej. el schema CDM en {pipeline}/{job}/{entity}.schema.json).
     Task UploadTextAsync(string blobPath, string content, CancellationToken cancellationToken = default);
     Task<string?> ReadTextAsync(string blobPath, CancellationToken cancellationToken = default);
+
+    // Renombra un fichero (parquet o texto). El destino no debe existir: quien llama lo garantiza,
+    // porque si ADLS sobrescribe o falla en ese caso no forma parte del contrato. AdlsClient y
+    // LocalParquetStore lo hacen atómico; por defecto copia y borra, para los dobles de test.
+    async Task MoveAsync(string fromPath, string toPath, CancellationToken cancellationToken = default)
+    {
+        await using (var content = await OpenParquetReadAsync(fromPath, cancellationToken))
+        {
+            await UploadParquetAsync(toPath, content, cancellationToken);
+        }
+
+        await DeleteParquetAsync(fromPath, cancellationToken);
+    }
 }
 
 public sealed record ParquetArtifact(string Path, long SizeBytes, DateTimeOffset? LastModified);

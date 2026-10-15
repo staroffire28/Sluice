@@ -24,6 +24,10 @@ public interface IOrchestrationService
 
     Task<Job> ReloadFromParquetAsync(string pipelineId, CancellationToken cancellationToken = default);
 
+    // Restaura una versión anterior del parquet consolidado de una tabla y recarga SQL desde ella.
+    Task<Job> RestoreParquetVersionAsync(string pipelineId, string entity, string versionId, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
+
     // Comparación de valores (hash por fila) de una tabla o, con entity null, de todo el pipeline.
     Task<Job> CompareValuesAsync(string pipelineId, string? entity, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
@@ -40,6 +44,7 @@ public sealed class OrchestrationService : IOrchestrationService
     private readonly IngestManifestStore _manifests;
     private readonly ReportStore _reports;
     private readonly IParquetArtifactService _parquet;
+    private readonly PipelineStateStore? _stateStore;
 
     public OrchestrationService(
         IOptions<AppOptions> options,
@@ -49,8 +54,10 @@ public sealed class OrchestrationService : IOrchestrationService
         WorkerRegistry workers,
         IngestManifestStore manifests,
         ReportStore reports,
-        IParquetArtifactService parquet)
+        IParquetArtifactService parquet,
+        PipelineStateStore? stateStore = null)
     {
+        _stateStore = stateStore;
         _options = options.Value;
         _pipelines = pipelines;
         _jobs = jobs;
@@ -275,6 +282,58 @@ public sealed class OrchestrationService : IOrchestrationService
             throw new InvalidOperationException("Ya hay un job en ejecución para este pipeline.");
         }
 
+        return await EnqueueResyncAsync(pipelineId, entities, mode, triggeredBy, cancellationToken);
+    }
+
+    // Restaura una versión anterior del consolidado de una tabla y recarga SQL desde ella. Todo bajo
+    // el lock de ejecución: entre mover ficheros y encolar el re-sync no puede arrancar otro job.
+    // El estado de la tabla vuelve al de la versión y el del pipeline se rebobina hasta ella, para
+    // que la siguiente ejecución recupere las filas posteriores si sus snapshots siguen en el lago.
+    public async Task<Job> RestoreParquetVersionAsync(string pipelineId, string entity, string versionId, CancellationToken cancellationToken = default)
+    {
+        _ = _pipelines.Get(pipelineId)
+            ?? throw new InvalidOperationException("Pipeline not found.");
+        var stateStore = _stateStore
+            ?? throw new InvalidOperationException("Restoring a Parquet version requires the pipeline state store.");
+
+        using var runLock = await AcquireRunLockAsync(pipelineId, cancellationToken);
+        if (_jobs.ListRunning().Any(j => j.PipelineId == pipelineId))
+        {
+            throw new InvalidOperationException("Ya hay un job en ejecución para este pipeline.");
+        }
+
+        var state = stateStore.GetOrCreate(pipelineId);
+        var restored = await _parquet.RestoreVersionAsync(pipelineId, entity, versionId, new ParquetVersion
+        {
+            Table = state.Tables.GetValueOrDefault(entity),
+            PipelineSnapshot = state.LastProcessedSnapshot,
+        }, cancellationToken);
+
+        var tables = new Dictionary<string, TableState>(state.Tables, StringComparer.OrdinalIgnoreCase);
+        if (restored.Table is { } table)
+        {
+            tables[entity] = table;
+        }
+        else
+        {
+            tables.Remove(entity);
+        }
+
+        // Los nombres de snapshot (yyyy-MM-ddTHH.mm.ssZ) ordenan cronológicamente; null = ninguno procesado.
+        var rewindTo = restored.PipelineSnapshot is null || state.LastProcessedSnapshot is null
+            ? null
+            : string.CompareOrdinal(restored.PipelineSnapshot, state.LastProcessedSnapshot) < 0 ? restored.PipelineSnapshot : state.LastProcessedSnapshot;
+        stateStore.Save(state with { LastProcessedSnapshot = rewindTo, Tables = tables });
+
+        var job = await EnqueueResyncAsync(pipelineId, [entity], ResyncMode.Reload, AutoRemediation.TriggeredByUser, cancellationToken);
+        _jobs.AppendEvent(job.Id, EventLevel.Info,
+            $"Restaurada la versión del parquet de {entity} archivada el {restored.ArchivedAt:u}; se recarga SQL desde ella.");
+        return job;
+    }
+
+    // Crea y encola el job de re-sync. Quien llama ya tiene el lock de ejecución del pipeline.
+    private async Task<Job> EnqueueResyncAsync(string pipelineId, IReadOnlyList<string> entities, ResyncMode mode, string triggeredBy, CancellationToken cancellationToken)
+    {
         var jobId = NewJobId(pipelineId, "resync");
 
         // Manifest sintético de las entidades apuntando a los artefactos durables ya existentes

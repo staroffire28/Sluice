@@ -14,7 +14,8 @@ volumen sobreviva intacto.
 
 Todo `DATA_DIR`: `connections/`, `pipelines/`, `jobs/`, `tasks/`, `reports/`, `keys/`
 (keyring de Data Protection), `workers/`, el estado por pipeline (`{pipelineId}/state/`) y
-`parquet/` (el parquet consolidado de los orígenes que lo guardan en el disco del portal).
+`parquet/` (el parquet consolidado de los orígenes que lo guardan en el disco del portal, con
+sus versiones anteriores en `parquet/_versions/`).
 No incluye el parquet consolidado guardado en ADLS ni los snapshots de ADLS (eso vive en
 Azure, fuera del volumen local, y tiene su propia durabilidad/replicación gestionada por
 Azure Storage).

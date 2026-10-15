@@ -102,6 +102,19 @@ public sealed class AdlsClient : IAdlsClient, IParquetStore
         await file.DeleteIfExistsAsync(cancellationToken: cancellationToken);
     }
 
+    // Rename de ADLS Gen2 (espacio jerárquico): atómico y solo de metadatos, no copia datos.
+    public async Task MoveAsync(string fromPath, string toPath, CancellationToken cancellationToken = default)
+    {
+        var fileSystem = ParquetFileSystem();
+        var parent = toPath.Contains('/') ? toPath[..toPath.LastIndexOf('/')] : null;
+        if (parent is not null)
+        {
+            await fileSystem.GetDirectoryClient(parent).CreateIfNotExistsAsync(cancellationToken: cancellationToken);
+        }
+
+        await fileSystem.GetFileClient(fromPath).RenameAsync(toPath, cancellationToken: cancellationToken);
+    }
+
     public async Task UploadTextAsync(string blobPath, string content, CancellationToken cancellationToken = default)
     {
         var bytes = Encoding.UTF8.GetBytes(content);

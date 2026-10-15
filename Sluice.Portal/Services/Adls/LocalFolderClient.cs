@@ -71,6 +71,9 @@ public sealed class LocalFolderClient : IAdlsClient, IParquetStore
     public Task<string?> ReadTextAsync(string blobPath, CancellationToken cancellationToken = default) =>
         Parquet.ReadTextAsync(blobPath, cancellationToken);
 
+    public Task MoveAsync(string fromPath, string toPath, CancellationToken cancellationToken = default) =>
+        Parquet.MoveAsync(fromPath, toPath, cancellationToken);
+
     // --- IAdlsClient ---
 
     public Task TestAsync(CancellationToken cancellationToken = default) =>

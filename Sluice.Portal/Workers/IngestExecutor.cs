@@ -31,6 +31,7 @@ public sealed class IngestExecutor : IIngestExecutor
     private readonly ILogger<IngestExecutor> _logger;
     private readonly JobProgressStore? _progressStore;
     private readonly AlertService? _alerts;
+    private readonly SettingsStore? _settings;
 
     public IngestExecutor(
         IJobService jobs,
@@ -42,7 +43,8 @@ public sealed class IngestExecutor : IIngestExecutor
         IOptions<AppOptions> options,
         ILogger<IngestExecutor> logger,
         JobProgressStore? progress = null,
-        AlertService? alerts = null)
+        AlertService? alerts = null,
+        SettingsStore? settings = null)
     {
         _jobs = jobs;
         _pipelines = pipelines;
@@ -54,6 +56,7 @@ public sealed class IngestExecutor : IIngestExecutor
         _logger = logger;
         _progressStore = progress;
         _alerts = alerts;
+        _settings = settings;
     }
 
     public async Task ExecuteAsync(PipelineTask task, CancellationToken cancellationToken = default)
@@ -324,6 +327,14 @@ public sealed class IngestExecutor : IIngestExecutor
             {
                 sources.Add(ct => parquetStore.OpenParquetReadAsync(consolidatedBlobPath, ct));
             }
+            else if (!isForce && await ParquetVersions.HasVersionsAsync(parquetStore, task.PipelineId, entity, cancellationToken))
+            {
+                // Sin consolidado pero con versiones: una publicación se cortó entre sus dos renames
+                // o alguien lo borró. Seguir lo reconstruiría solo con los snapshots nuevos y la
+                // historia se perdería en silencio.
+                throw new InvalidOperationException(
+                    $"{entity}: falta el parquet consolidado pero hay versiones anteriores. Restaura una en la página Parquet y vuelve a ejecutar.");
+            }
 
             var stagingConsolidated = _manifestStore.GetStagingConsolidatedPath(task.JobId, entity);
             Directory.CreateDirectory(Path.GetDirectoryName(stagingConsolidated)!);
@@ -339,14 +350,49 @@ public sealed class IngestExecutor : IIngestExecutor
                     $"{entity}: {result.RowsWithoutId} fila(s) sin Id válido descartada(s).");
             }
 
-            // Schema + consolidado a ADLS (durable, independiente de SQL), subidos en
-            // streaming desde el archivo local temporal.
-            await parquetStore.UploadTextAsync(
-                schemaBlobPath, JsonSerializer.Serialize(schema, JsonDefaults.Options), cancellationToken);
-            await using (var input = File.OpenRead(stagingConsolidated))
+            // Antes de publicar: el fichero tiene las filas que el consolidador dice haber escrito.
+            long writtenRows;
+            await using (var written = File.OpenRead(stagingConsolidated))
             {
-                await parquetStore.UploadParquetAsync(consolidatedBlobPath, input, cancellationToken);
+                writtenRows = await ParquetMaterializer.CountRowsAsync(written, cancellationToken: cancellationToken);
             }
+
+            if (writtenRows != result.Rows)
+            {
+                throw new InvalidOperationException(
+                    $"{entity}: el consolidado tiene {writtenRows:N0} filas y se escribieron {result.Rows:N0}; no se publica y se conserva el anterior.");
+            }
+
+            // Las filas de borrado se conservan, así que el consolidado no debería encoger. Solo se
+            // avisa: con la versión anterior a salvo, bloquear dejaría el pipeline atascado.
+            if (hasPreviousConsolidated)
+            {
+                var previousRows = await parquetStore.CountParquetRowsAsync(consolidatedBlobPath, cancellationToken: cancellationToken);
+                if (result.Rows < previousRows)
+                {
+                    var message = $"{entity}: el consolidado nuevo tiene {result.Rows:N0} filas y el anterior {previousRows:N0}. La versión anterior queda guardada en la página Parquet por si hay que restaurarla.";
+                    _jobs.AppendEvent(task.JobId, EventLevel.Warning, message);
+                    if (_alerts is not null)
+                    {
+                        await _alerts.SendAsync($"Pipeline {pipeline.Name}: {message}", cancellationToken);
+                    }
+                }
+            }
+
+            // Schema + consolidado al almacén durable (independiente de SQL): se sube con otro
+            // nombre, se valida y sustituye al anterior, que pasa a ser una versión.
+            await ParquetVersions.PublishAsync(
+                parquetStore, task.PipelineId, entity, stagingConsolidated, result.Rows,
+                JsonSerializer.Serialize(schema, JsonDefaults.Options),
+                new ParquetVersion
+                {
+                    ReplacedByJobId = task.JobId,
+                    Table = pipelineState.Tables.GetValueOrDefault(entity),
+                    PipelineSnapshot = pipelineState.LastProcessedSnapshot,
+                },
+                DateTimeOffset.UtcNow, cancellationToken);
+            await ParquetVersions.PruneAsync(
+                parquetStore, task.PipelineId, entity, _settings?.Get().ParquetVersionDays ?? 0, DateTimeOffset.UtcNow, cancellationToken);
 
             // Delta: solo las filas de los snapshots de esta corrida (deduplicadas), para que la
             // etapa SQL no remergee la tabla entera. Solo con consolidado previo: sin él la tabla

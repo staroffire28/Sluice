@@ -7,6 +7,10 @@
 @inject IPipelineService PipelineService
 @inject IParquetArtifactService ParquetService
 @inject IDialogService DialogService
+@inject IOrchestrationService Orchestration
+@inject IJobService JobService
+@inject INotificationService NotificationService
+@inject NavigationManager Nav
 @implements IDisposable
 
 @inject IStringLocalizer<SharedResource> L
@@ -53,6 +57,14 @@
                                       Appearance="ButtonAppearance.Subtle"
                                       IconStart="@(new Icons.Regular.Size20.ArrowDownload())"
                                       Title="@L["Common.Download"]" />
+                        @if (ConsolidatedEntity(context.Path) is { } entity)
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Subtle"
+                                          IconStart="@(new Icons.Regular.Size20.History())"
+                                          Title="@L["Page.Parquet.Versions"]"
+                                          data-testid="@($"parquet-versions-{entity}")"
+                                          OnClick="@(() => OpenVersionsAsync(entity))" />
+                        }
                         <FluentButton Appearance="ButtonAppearance.Subtle"
                                       IconStart="@(new Icons.Regular.Size20.Delete())"
                                       Title="@L["Common.Delete"]"
@@ -66,6 +78,59 @@
     </PageSection>
 </FluentStack>
 
+<InlineDialog @bind-Visible="_showVersions" Title="@L["Page.Parquet.VersionsTitle", _versionsEntity]" Class="dialog-wide">
+    <ChildContent>
+        <div data-testid="parquet-versions-dialog">
+            <p class="field-hint">@L["Page.Parquet.VersionsHint"]</p>
+            @if (_jobRunning)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Warning" data-testid="parquet-restore-blocked">@L["Page.Parquet.RestoreBlocked"]</FluentMessageBar>
+            }
+            @if (_versionsLoading)
+            {
+                <FluentProgressRing />
+            }
+            else if (_versions.Count == 0)
+            {
+                <p data-testid="parquet-versions-empty">@L["Page.Parquet.NoVersions"]</p>
+            }
+            else
+            {
+                <FluentDataGrid Items="@_versions.AsQueryable()" TGridItem="ParquetVersion" data-testid="parquet-versions-table">
+                    <TemplateColumn Title="@L["Page.Parquet.ArchivedAt"]">
+                        <span data-testid="@($"parquet-version-{context.Id}")">@context.ArchivedAt.ToString("u")</span>
+                    </TemplateColumn>
+                    <TemplateColumn Title="@L["Page.Parquet.Rows"]">@(context.Table is { } table ? table.RowCount.ToString("N0") : "—")</TemplateColumn>
+                    <TemplateColumn Title="@L["Page.Parquet.LastSnapshot"]">@(context.Table?.LastSnapshot ?? "—")</TemplateColumn>
+                    <TemplateColumn Align="DataGridCellAlignment.End">
+                        <FluentButton Appearance="ButtonAppearance.Outline"
+                                      Disabled="@(_jobRunning || _restoring)"
+                                      data-testid="@($"parquet-restore-{context.Id}")"
+                                      OnClick="@(() => _pendingRestore = context)">
+                            @L["Page.Parquet.Restore"]
+                        </FluentButton>
+                    </TemplateColumn>
+                </FluentDataGrid>
+                @* Confirmación dentro del diálogo: un segundo modal encima de este no llega a mostrarse. *@
+                @if (_pendingRestore is { } pending)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning" Title="@L["Page.Parquet.ConfirmRestoreTitle"]" data-testid="parquet-restore-confirmation">
+                        @L["Page.Parquet.ConfirmRestore", _versionsEntity, pending.ArchivedAt.ToString("u")]
+                    </FluentMessageBar>
+                    <FluentStack HorizontalGap="8">
+                        <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@_restoring" data-testid="parquet-restore-confirm"
+                                      OnClick="@(() => RestoreAsync(pending))">@L["Page.Parquet.Restore"]</FluentButton>
+                        <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@(() => _pendingRestore = null)">@L["Common.Cancel"]</FluentButton>
+                    </FluentStack>
+                }
+            }
+        </div>
+    </ChildContent>
+    <Actions>
+        <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@(() => _showVersions = false)">@L["Common.Close"]</FluentButton>
+    </Actions>
+</InlineDialog>
+
 @code {
     private string _pipelineId = "";
     private string _search = "";
@@ -77,6 +142,13 @@
     private const int PageSize = 20;
     private int _totalCount;
     private int _totalPages = 1;
+    private bool _showVersions;
+    private string _versionsEntity = "";
+    private IReadOnlyList<ParquetVersion> _versions = [];
+    private bool _versionsLoading;
+    private bool _jobRunning;
+    private bool _restoring;
+    private ParquetVersion? _pendingRestore;
 
     // Cambiar de pipeline (o salir de la página) cancela la carga en curso: si no, el
     // listado lento de ADLS de la selección anterior podía llegar después y pisar el nuevo.
@@ -227,6 +299,54 @@
         catch (Exception ex)
         {
             _error = ex.Message;
+        }
+    }
+
+    // Solo el consolidado ({pipeline}/{entidad}.parquet) tiene versiones.
+    private string? ConsolidatedEntity(string path) =>
+        path.StartsWith($"{_pipelineId}/", StringComparison.Ordinal) && path.Count(c => c == '/') == 1
+            && path.EndsWith(".parquet", StringComparison.OrdinalIgnoreCase)
+            ? Path.GetFileNameWithoutExtension(path)
+            : null;
+
+    private async Task OpenVersionsAsync(string entity)
+    {
+        _versionsEntity = entity;
+        _versions = [];
+        _pendingRestore = null;
+        _versionsLoading = true;
+        _jobRunning = JobService.ListRunning().Any(j => j.PipelineId == _pipelineId);
+        _showVersions = true;
+        try
+        {
+            _versions = await ParquetService.ListVersionsAsync(_pipelineId, entity);
+        }
+        catch (Exception ex)
+        {
+            await NotificationService.ShowErrorToastAsync(ex.Message);
+        }
+        finally
+        {
+            _versionsLoading = false;
+        }
+    }
+
+    private async Task RestoreAsync(ParquetVersion version)
+    {
+        _restoring = true;
+        try
+        {
+            var job = await Orchestration.RestoreParquetVersionAsync(_pipelineId, _versionsEntity, version.Id);
+            await NotificationService.ShowSuccessToastAsync(L["Page.Parquet.Restored", _versionsEntity].Value);
+            Nav.NavigateTo($"/jobs/{Uri.EscapeDataString(job.Id)}");
+        }
+        catch (Exception ex)
+        {
+            await NotificationService.ShowErrorToastAsync(ex.Message);
+        }
+        finally
+        {
+            _restoring = false;
         }
     }
 

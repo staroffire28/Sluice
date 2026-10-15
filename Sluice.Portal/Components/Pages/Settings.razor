@@ -29,6 +29,8 @@
             <p class="field-hint">@L["Page.Settings.RetentionDays.Hint"]</p>
             <FluentNumberInput TValue="int" @bind-Value="_staleTableDays" Label="@L["Page.Settings.StaleTableDays"]" Style="width:100%;" data-testid="settings-stale-days" />
             <p class="field-hint">@L["Page.Settings.StaleTableDays.Hint"]</p>
+            <FluentNumberInput TValue="int" @bind-Value="_parquetVersionDays" Label="@L["Page.Settings.ParquetVersionDays"]" Style="width:100%;" data-testid="settings-parquet-version-days" />
+            <p class="field-hint">@L["Page.Settings.ParquetVersionDays.Hint"]</p>
             <FluentNumberInput TValue="int" @bind-Value="_sourceSnapshotRetentionDays" Label="@L["Page.Settings.SourceSnapshotRetentionDays"]" Style="width:100%;" />
             <p class="field-hint">@L["Page.Settings.SourceSnapshotRetentionDays.Hint"]</p>
             <FluentSwitch @bind-Value="_sourceSnapshotRetentionDryRun" Label="@L["Page.Settings.SourceSnapshotRetentionDryRun"]" />
@@ -117,6 +119,7 @@
     private int _retentionDays = 90;
     private int _sourceSnapshotRetentionDays = 30;
     private int _staleTableDays = 7;
+    private int _parquetVersionDays = 7;
     private bool _sourceSnapshotRetentionDryRun;
     private bool _sourceSnapshotRetentionRequireParquet = true;
     private bool _alertEnabled;
@@ -139,6 +142,7 @@
         _autoRemediate = settings.AutoRemediate;
         _retentionDays = settings.RetentionDays;
         _staleTableDays = settings.StaleTableDays;
+        _parquetVersionDays = settings.ParquetVersionDays;
         _sourceSnapshotRetentionDays = settings.SourceSnapshotRetentionDays;
         _sourceSnapshotRetentionDryRun = settings.SourceSnapshotRetentionDryRun;
         _sourceSnapshotRetentionRequireParquet = settings.SourceSnapshotRetentionRequireParquet;
@@ -165,6 +169,7 @@
             AutoRemediate = _autoRemediate,
             RetentionDays = _retentionDays,
             StaleTableDays = _staleTableDays,
+            ParquetVersionDays = _parquetVersionDays,
             SourceSnapshotRetentionDays = _sourceSnapshotRetentionDays,
             SourceSnapshotRetentionDryRun = _sourceSnapshotRetentionDryRun,
             SourceSnapshotRetentionRequireParquet = _sourceSnapshotRetentionRequireParquet,
