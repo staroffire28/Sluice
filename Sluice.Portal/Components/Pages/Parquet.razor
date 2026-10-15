@@ -11,6 +11,7 @@
 @inject IJobService JobService
 @inject INotificationService NotificationService
 @inject NavigationManager Nav
+@inject Sluice.Portal.Services.Stores.SettingsStore Settings
 @implements IDisposable
 
 @inject IStringLocalizer<SharedResource> L
@@ -34,6 +35,13 @@
                           IconStart="@(new Icons.Regular.Size20.ArrowSync())"
                           OnClick="Reload">
                 @L["Common.Refresh"]
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle"
+                          IconStart="@(new Icons.Regular.Size20.History())"
+                          Disabled="@string.IsNullOrWhiteSpace(_pipelineId)"
+                          data-testid="parquet-restore-points"
+                          OnClick="OpenPointsAsync">
+                @L["Page.Parquet.RestorePoints"]
             </FluentButton>
         </div>
 
@@ -60,14 +68,6 @@
                                           IconStart="@(new Icons.Regular.Size20.ArrowDownload())"
                                           Title="@L["Common.Download"]" />
                         }
-                        @if (ConsolidatedEntity(context.Path) is { } entity)
-                        {
-                            <FluentButton Appearance="ButtonAppearance.Subtle"
-                                          IconStart="@(new Icons.Regular.Size20.History())"
-                                          Title="@L["Page.Parquet.Versions"]"
-                                          data-testid="@($"parquet-versions-{entity}")"
-                                          OnClick="@(() => OpenVersionsAsync(entity))" />
-                        }
                         @if (!context.Missing)
                         {
                             <FluentButton Appearance="ButtonAppearance.Subtle"
@@ -84,34 +84,36 @@
     </PageSection>
 </FluentStack>
 
-<InlineDialog @bind-Visible="_showVersions" Title="@L["Page.Parquet.VersionsTitle", _versionsEntity]" Class="dialog-wide">
+<InlineDialog @bind-Visible="_showPoints" Title="@L["Page.Parquet.RestorePoints"]" Class="dialog-wide">
     <ChildContent>
-        <div data-testid="parquet-versions-dialog">
-            <p class="field-hint">@L["Page.Parquet.VersionsHint"]</p>
+        <div data-testid="parquet-points-dialog">
+            <p class="field-hint">@L["Page.Parquet.RestorePointsHint"]</p>
             @if (_jobRunning)
             {
                 <FluentMessageBar Intent="MessageBarIntent.Warning" data-testid="parquet-restore-blocked">@L["Page.Parquet.RestoreBlocked"]</FluentMessageBar>
             }
-            @if (_versionsLoading)
+            @if (_pointsLoading)
             {
                 <FluentProgressRing />
             }
-            else if (_versions.Count == 0)
+            else if (_points.Count == 0)
             {
-                <p data-testid="parquet-versions-empty">@L["Page.Parquet.NoVersions"]</p>
+                <p data-testid="parquet-points-empty">@L["Page.Parquet.NoRestorePoints"]</p>
             }
             else
             {
-                <FluentDataGrid Items="@_versions.AsQueryable()" TGridItem="ParquetVersion" data-testid="parquet-versions-table">
-                    <TemplateColumn Title="@L["Page.Parquet.ArchivedAt"]">
-                        <span data-testid="@($"parquet-version-{context.Id}")">@context.ArchivedAt.ToString("u")</span>
+                <FluentDataGrid Items="@_points.AsQueryable()" TGridItem="PointRow" data-testid="parquet-points-table">
+                    <TemplateColumn Title="@L["Page.Parquet.Snapshot"]">
+                        <span data-testid="@($"parquet-point-{context.Point.Snapshot}")">@context.Point.Snapshot</span>
                     </TemplateColumn>
-                    <TemplateColumn Title="@L["Page.Parquet.Rows"]">@(context.Table is { } table ? table.RowCount.ToString("N0") : "—")</TemplateColumn>
-                    <TemplateColumn Title="@L["Page.Parquet.LastSnapshot"]">@(context.Table?.LastSnapshot ?? "—")</TemplateColumn>
+                    <TemplateColumn Title="@L["Page.Parquet.LeftAt"]">@context.Point.LeftAt.ToString("u")</TemplateColumn>
+                    <TemplateColumn Title="@L["Page.Parquet.TablesBack"]">
+                        <span data-testid="@($"parquet-point-tables-{context.Point.Snapshot}")">@context.Plan.Restore.Count</span>
+                    </TemplateColumn>
                     <TemplateColumn Title="@L["Page.Parquet.ReplacedBy"]">
-                        @if (context.ReplacedByJobId is { } jobId)
+                        @if (context.Point.ReplacedByJobId is { } jobId)
                         {
-                            <a href="@($"/jobs/{jobId}")" data-testid="@($"parquet-version-job-{context.Id}")">@jobId</a>
+                            <a href="@($"/jobs/{jobId}")" data-testid="@($"parquet-point-job-{context.Point.Snapshot}")">@jobId</a>
                         }
                         else
                         {
@@ -120,8 +122,8 @@
                     </TemplateColumn>
                     <TemplateColumn Align="DataGridCellAlignment.End">
                         <FluentButton Appearance="ButtonAppearance.Outline"
-                                      Disabled="@(_jobRunning || _restoring)"
-                                      data-testid="@($"parquet-restore-{context.Id}")"
+                                      Disabled="@(_jobRunning || _restoring || (context.Plan.Restore.Count == 0 && context.Plan.Archive.Count == 0))"
+                                      data-testid="@($"parquet-restore-{context.Point.Snapshot}")"
                                       OnClick="@(() => _pendingRestore = context)">
                             @L["Page.Parquet.Restore"]
                         </FluentButton>
@@ -131,7 +133,7 @@
                 @if (_pendingRestore is { } pending)
                 {
                     <FluentMessageBar Intent="MessageBarIntent.Warning" Title="@L["Page.Parquet.ConfirmRestoreTitle"]" data-testid="parquet-restore-confirmation">
-                        @L["Page.Parquet.ConfirmRestore", _versionsEntity, pending.ArchivedAt.ToString("u")]
+                        @L["Page.Parquet.ConfirmRestore", pending.Point.Snapshot, pending.Plan.Restore.Count, pending.Plan.Archive.Count]
                     </FluentMessageBar>
                     <FluentStack HorizontalGap="8">
                         <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@_restoring" data-testid="parquet-restore-confirm"
@@ -143,7 +145,7 @@
         </div>
     </ChildContent>
     <Actions>
-        <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@(() => _showVersions = false)">@L["Common.Close"]</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@(() => _showPoints = false)">@L["Common.Close"]</FluentButton>
     </Actions>
 </InlineDialog>
 
@@ -158,13 +160,12 @@
     private const int PageSize = 20;
     private int _totalCount;
     private int _totalPages = 1;
-    private bool _showVersions;
-    private string _versionsEntity = "";
-    private IReadOnlyList<ParquetVersion> _versions = [];
-    private bool _versionsLoading;
+    private bool _showPoints;
+    private IReadOnlyList<PointRow> _points = [];
+    private bool _pointsLoading;
     private bool _jobRunning;
     private bool _restoring;
-    private ParquetVersion? _pendingRestore;
+    private PointRow? _pendingRestore;
 
     // Cambiar de pipeline (o salir de la página) cancela la carga en curso: si no, el
     // listado lento de ADLS de la selección anterior podía llegar después y pisar el nuevo.
@@ -252,10 +253,12 @@
         }
     }
 
-    // Una tabla con versiones pero sin consolidado también sale (sin descargar ni borrar): la
-    // ingesta se para en ese caso y pide restaurar una versión desde aquí.
+    // Una tabla del estado con versiones pero sin consolidado también sale (sin descargar ni borrar):
+    // la ingesta se para en ese caso y pide restaurar un punto desde aquí. Las que archivó una
+    // restauración ya no están en el estado y la siguiente ejecución las reconstruye.
     private void SetRows(IEnumerable<ParquetArtifact> artifacts, IEnumerable<string> versionedEntities)
     {
+        var tables = PipelineService.GetState(_pipelineId).Tables;
         var rows = artifacts
             .Select(a => new ArtifactRow
             {
@@ -266,6 +269,7 @@
             .ToList();
         var paths = rows.Select(r => r.Path).ToHashSet(StringComparer.Ordinal);
         rows.AddRange(versionedEntities
+            .Where(tables.ContainsKey)
             .Select(e => IngestManifestStore.GetConsolidatedBlobPath(_pipelineId, e))
             .Where(p => !paths.Contains(p))
             .Select(p => new ArtifactRow { Path = p, Size = "-", Modified = L["Page.Parquet.MissingConsolidated"].Value, Missing = true }));
@@ -328,24 +332,22 @@
         }
     }
 
-    // Solo el consolidado ({pipeline}/{entidad}.parquet) tiene versiones.
-    private string? ConsolidatedEntity(string path) =>
-        path.StartsWith($"{_pipelineId}/", StringComparison.Ordinal) && path.Count(c => c == '/') == 1
-            && path.EndsWith(".parquet", StringComparison.OrdinalIgnoreCase)
-            ? Path.GetFileNameWithoutExtension(path)
-            : null;
-
-    private async Task OpenVersionsAsync(string entity)
+    // Los puntos que la poda conserva, cada uno con lo que haría al restaurarlo (según el estado
+    // actual del pipeline).
+    private async Task OpenPointsAsync()
     {
-        _versionsEntity = entity;
-        _versions = [];
+        _points = [];
         _pendingRestore = null;
-        _versionsLoading = true;
+        _pointsLoading = true;
         _jobRunning = JobService.ListRunning().Any(j => j.PipelineId == _pipelineId);
-        _showVersions = true;
+        _showPoints = true;
         try
         {
-            _versions = await ParquetService.ListVersionsAsync(_pipelineId, entity);
+            var versions = await ParquetService.ListAllVersionsAsync(_pipelineId);
+            var tables = PipelineService.GetState(_pipelineId).Tables;
+            _points = ParquetVersions.KeptPoints(versions, Settings.Get().ParquetVersionDays, DateTimeOffset.UtcNow)
+                .Select(p => new PointRow(p, ParquetVersions.Plan(versions, tables, p.Snapshot)))
+                .ToList();
         }
         catch (Exception ex)
         {
@@ -353,18 +355,26 @@
         }
         finally
         {
-            _versionsLoading = false;
+            _pointsLoading = false;
         }
     }
 
-    private async Task RestoreAsync(ParquetVersion version)
+    private async Task RestoreAsync(PointRow row)
     {
         _restoring = true;
         try
         {
-            var job = await Orchestration.RestoreParquetVersionAsync(_pipelineId, _versionsEntity, version.Id);
-            await NotificationService.ShowSuccessToastAsync(L["Page.Parquet.Restored", _versionsEntity].Value);
-            Nav.NavigateTo($"/jobs/{Uri.EscapeDataString(job.Id)}");
+            var job = await Orchestration.RestorePointAsync(_pipelineId, row.Point.Snapshot);
+            await NotificationService.ShowSuccessToastAsync(L["Page.Parquet.Restored", row.Point.Snapshot].Value);
+            if (job is not null)
+            {
+                Nav.NavigateTo($"/jobs/{Uri.EscapeDataString(job.Id)}");
+            }
+            else
+            {
+                _showPoints = false;
+                await Reload();
+            }
         }
         catch (Exception ex)
         {
@@ -397,4 +407,6 @@
         public string Modified { get; init; } = "";
         public bool Missing { get; init; }
     }
+
+    private sealed record PointRow(RestorePoint Point, RestorePlan Plan);
 }

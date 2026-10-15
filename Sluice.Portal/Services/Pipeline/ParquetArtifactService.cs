@@ -11,9 +11,10 @@ public interface IParquetArtifactService
     Task<Stream?> OpenAsync(string pipelineId, string blobPath, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(string pipelineId, string blobPath, CancellationToken cancellationToken = default);
 
-    // Versiones del consolidado (ParquetVersions). Por defecto sin versiones, para los dobles de test.
-    Task<IReadOnlyList<ParquetVersion>> ListVersionsAsync(string pipelineId, string entity, CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<ParquetVersion>>([]);
+    // Versiones del consolidado (ParquetVersions), por tabla. Por defecto sin versiones, para los
+    // dobles de test.
+    Task<IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>>> ListAllVersionsAsync(string pipelineId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>>>(new Dictionary<string, IReadOnlyList<ParquetVersion>>());
 
     Task<IReadOnlyList<string>> ListVersionedEntitiesAsync(string pipelineId, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<string>>([]);
@@ -24,6 +25,11 @@ public interface IParquetArtifactService
     // (archiveCurrentAs), así que restaurar también se puede deshacer. Devuelve la restaurada.
     Task<ParquetVersion> RestoreVersionAsync(
         string pipelineId, string entity, string versionId, ParquetVersion archiveCurrentAs, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
+
+    // Pasa el consolidado vigente a versión sin poner otro en su sitio (una tabla que aún no existía
+    // en el punto al que se vuelve). Sin consolidado no hace nada.
+    Task ArchiveCurrentAsync(string pipelineId, string entity, ParquetVersion info, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 }
 
@@ -69,11 +75,20 @@ public sealed class ParquetArtifactService : IParquetArtifactService
         return true;
     }
 
-    public async Task<IReadOnlyList<ParquetVersion>> ListVersionsAsync(string pipelineId, string entity, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>>> ListAllVersionsAsync(string pipelineId, CancellationToken cancellationToken = default)
+    {
+        var store = await StoreFor(pipelineId, cancellationToken);
+        return await ParquetVersions.ListAllAsync(store, pipelineId, cancellationToken);
+    }
+
+    public async Task ArchiveCurrentAsync(string pipelineId, string entity, ParquetVersion info, CancellationToken cancellationToken = default)
     {
         EnsureEntityName(entity);
         var store = await StoreFor(pipelineId, cancellationToken);
-        return await ParquetVersions.ListAsync(store, pipelineId, entity, cancellationToken);
+        if (await store.ParquetExistsAsync(IngestManifestStore.GetConsolidatedBlobPath(pipelineId, entity), cancellationToken))
+        {
+            await ParquetVersions.ArchiveCurrentAsync(store, pipelineId, entity, info, DateTimeOffset.UtcNow, cancellationToken);
+        }
     }
 
     public async Task<IReadOnlyList<string>> ListVersionedEntitiesAsync(string pipelineId, CancellationToken cancellationToken = default)

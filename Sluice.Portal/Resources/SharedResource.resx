@@ -291,20 +291,19 @@
   <data name="Page.Parquet.Modified" xml:space="preserve"><value>Modificado</value></data>
   <data name="Page.Parquet.ConfirmDelete" xml:space="preserve"><value>¿Borrar el parquet '{0}' de ADLS? Esta acción es irreversible.</value></data>
   <data name="Page.Parquet.ConfirmDeleteTitle" xml:space="preserve"><value>Confirmar borrado</value></data>
-  <data name="Page.Parquet.Versions" xml:space="preserve"><value>Versiones</value></data>
-  <data name="Page.Parquet.VersionsTitle" xml:space="preserve"><value>Versiones de {0}</value></data>
-  <data name="Page.Parquet.VersionsHint" xml:space="preserve"><value>Copias anteriores del parquet consolidado, una por cada ejecución que lo cambió. Se guardan los días configurados en Ajustes y siempre al menos la más reciente. Restaurar una la vuelve a poner como consolidado, recarga la tabla en SQL desde ella y deja la actual como otra versión. Las filas más nuevas vuelven en la siguiente ejecución si sus snapshots siguen en el lago.</value></data>
-  <data name="Page.Parquet.MissingConsolidated" xml:space="preserve"><value>Falta el consolidado: restaura una versión</value></data>
-  <data name="Page.Parquet.NoVersions" xml:space="preserve"><value>Esta tabla aún no tiene versiones anteriores.</value></data>
+  <data name="Page.Parquet.MissingConsolidated" xml:space="preserve"><value>Falta el consolidado: restaura un punto</value></data>
+  <data name="Page.Parquet.RestorePoints" xml:space="preserve"><value>Puntos de restauración</value></data>
+  <data name="Page.Parquet.RestorePointsHint" xml:space="preserve"><value>Un punto por cada snapshot procesado que una ejecución posterior dejó atrás al cambiar alguna tabla ya cargada. Restaurar uno devuelve todo el pipeline a ese momento: cada tabla que cambió después recupera el parquet que tenía, las que aún no existían se archivan y el pipeline se rebobina a ese snapshot. SQL se recarga solo para las tablas que vuelven atrás y la siguiente ejecución recupera las filas posteriores si sus snapshots siguen en el lago. Se guardan los días configurados en Ajustes y siempre al menos el punto más reciente, que también deshace una restauración.</value></data>
+  <data name="Page.Parquet.NoRestorePoints" xml:space="preserve"><value>Este pipeline aún no tiene puntos de restauración: se crean cuando una ejecución cambia alguna tabla ya cargada.</value></data>
+  <data name="Page.Parquet.Snapshot" xml:space="preserve"><value>Snapshot</value></data>
+  <data name="Page.Parquet.LeftAt" xml:space="preserve"><value>Dejado atrás (UTC)</value></data>
+  <data name="Page.Parquet.TablesBack" xml:space="preserve"><value>Tablas que vuelven</value></data>
   <data name="Page.Parquet.RestoreBlocked" xml:space="preserve"><value>Hay un job en ejecución en este pipeline: espera a que termine para restaurar.</value></data>
-  <data name="Page.Parquet.ArchivedAt" xml:space="preserve"><value>Guardada (UTC)</value></data>
-  <data name="Page.Parquet.Rows" xml:space="preserve"><value>Filas</value></data>
-  <data name="Page.Parquet.LastSnapshot" xml:space="preserve"><value>Último snapshot con datos</value></data>
-  <data name="Page.Parquet.ReplacedBy" xml:space="preserve"><value>Sustituida por</value></data>
+  <data name="Page.Parquet.ReplacedBy" xml:space="preserve"><value>Sustituido por</value></data>
   <data name="Page.Parquet.Restore" xml:space="preserve"><value>Restaurar</value></data>
-  <data name="Page.Parquet.ConfirmRestoreTitle" xml:space="preserve"><value>Restaurar versión</value></data>
-  <data name="Page.Parquet.ConfirmRestore" xml:space="preserve"><value>¿Restaurar la versión de {0} guardada el {1}? La copia actual pasa a ser una versión más y la tabla se recarga en SQL desde la restaurada.</value></data>
-  <data name="Page.Parquet.Restored" xml:space="preserve"><value>Versión de {0} restaurada; se está recargando la tabla en SQL.</value></data>
+  <data name="Page.Parquet.ConfirmRestoreTitle" xml:space="preserve"><value>Restaurar punto</value></data>
+  <data name="Page.Parquet.ConfirmRestore" xml:space="preserve"><value>¿Volver al snapshot {0}? {1} tabla(s) recuperan el parquet que tenían y {2} que aún no existían se archivan. Las copias actuales pasan a ser versiones (el punto más reciente deshace la restauración) y SQL se recarga para las tablas que vuelven.</value></data>
+  <data name="Page.Parquet.Restored" xml:space="preserve"><value>Punto del snapshot {0} restaurado; se están recargando las tablas en SQL.</value></data>
   <data name="Page.Catalog.Title" xml:space="preserve"><value>Catálogo de tablas</value></data>
   <data name="Page.Catalog.Subtitle" xml:space="preserve"><value>Qué tablas y columnas del lago se cargan en SQL</value></data>
   <data name="Page.Catalog.Hint" xml:space="preserve"><value>Una tabla excluida no se ingiere ni se carga; las tablas nuevas que aparezcan en el lago se cargan solas. Es el mismo ajuste que la sincronización de cada tabla en Tablas.</value></data>
@@ -732,7 +731,7 @@
   <data name="Page.Settings.StaleTableDays" xml:space="preserve"><value>Días sin datos para resaltar una tabla</value></data>
   <data name="Page.Settings.StaleTableDays.Hint" xml:space="preserve"><value>En Tablas, «Último dato» se resalta cuando la última carga con filas es más antigua. 0 o negativo lo desactiva.</value></data>
   <data name="Page.Settings.ParquetVersionDays" xml:space="preserve"><value>Días de versiones del parquet</value></data>
-  <data name="Page.Settings.ParquetVersionDays.Hint" xml:space="preserve"><value>Cuántos días se guardan las copias anteriores del parquet consolidado de cada tabla, para restaurarlas desde la página Parquet. Siempre se conserva al menos la más reciente. 0 o negativo las desactiva.</value></data>
+  <data name="Page.Settings.ParquetVersionDays.Hint" xml:space="preserve"><value>Cuántos días de puntos de restauración se guardan (por la fecha del snapshot), para devolver el pipeline desde la página Parquet. Siempre se conserva al menos el punto más reciente. 0 o negativo los desactiva.</value></data>
   <data name="FirstSteps.Title" xml:space="preserve"><value>Primeros pasos</value></data>
   <data name="FirstSteps.Hint" xml:space="preserve"><value>Configura Sluice en unos minutos. Esta lista desaparece cuando la primera ejecución carga tablas.</value></data>
   <data name="FirstSteps.Source" xml:space="preserve"><value>Conecta el origen</value></data>

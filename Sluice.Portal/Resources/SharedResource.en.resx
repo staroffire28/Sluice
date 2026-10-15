@@ -292,20 +292,19 @@
   <data name="Page.Parquet.Modified" xml:space="preserve"><value>Modified</value></data>
   <data name="Page.Parquet.ConfirmDelete" xml:space="preserve"><value>Delete the parquet '{0}' from ADLS? This action is irreversible.</value></data>
   <data name="Page.Parquet.ConfirmDeleteTitle" xml:space="preserve"><value>Confirm delete</value></data>
-  <data name="Page.Parquet.Versions" xml:space="preserve"><value>Versions</value></data>
-  <data name="Page.Parquet.VersionsTitle" xml:space="preserve"><value>Versions of {0}</value></data>
-  <data name="Page.Parquet.VersionsHint" xml:space="preserve"><value>Earlier copies of the consolidated Parquet, one for each run that changed it. They are kept for the days set in Settings, and the most recent one is always kept. Restoring one puts it back as the consolidated Parquet, reloads the table in SQL from it and keeps the current one as another version. Newer rows come back on the next run if their snapshots are still in the lake.</value></data>
-  <data name="Page.Parquet.MissingConsolidated" xml:space="preserve"><value>Consolidated missing: restore a version</value></data>
-  <data name="Page.Parquet.NoVersions" xml:space="preserve"><value>This table has no earlier versions yet.</value></data>
+  <data name="Page.Parquet.MissingConsolidated" xml:space="preserve"><value>Consolidated missing: restore a point</value></data>
+  <data name="Page.Parquet.RestorePoints" xml:space="preserve"><value>Restore points</value></data>
+  <data name="Page.Parquet.RestorePointsHint" xml:space="preserve"><value>A point for each processed snapshot that a later run left behind by changing a table already loaded. Restoring one takes the whole pipeline back to that moment: every table that changed afterwards gets back the Parquet it had, tables that did not exist yet are archived, and the pipeline is rewound to that snapshot. SQL is reloaded only for the tables that go back, and the next run brings back the later rows if their snapshots are still in the lake. Points are kept for the days set in Settings, and the most recent one is always kept; it also undoes a restore.</value></data>
+  <data name="Page.Parquet.NoRestorePoints" xml:space="preserve"><value>This pipeline has no restore points yet: they are created when a run changes a table that was already loaded.</value></data>
+  <data name="Page.Parquet.Snapshot" xml:space="preserve"><value>Snapshot</value></data>
+  <data name="Page.Parquet.LeftAt" xml:space="preserve"><value>Left behind (UTC)</value></data>
+  <data name="Page.Parquet.TablesBack" xml:space="preserve"><value>Tables that go back</value></data>
   <data name="Page.Parquet.RestoreBlocked" xml:space="preserve"><value>A job is running on this pipeline: wait for it to finish before restoring.</value></data>
-  <data name="Page.Parquet.ArchivedAt" xml:space="preserve"><value>Saved (UTC)</value></data>
-  <data name="Page.Parquet.Rows" xml:space="preserve"><value>Rows</value></data>
-  <data name="Page.Parquet.LastSnapshot" xml:space="preserve"><value>Last snapshot with data</value></data>
   <data name="Page.Parquet.ReplacedBy" xml:space="preserve"><value>Replaced by</value></data>
   <data name="Page.Parquet.Restore" xml:space="preserve"><value>Restore</value></data>
-  <data name="Page.Parquet.ConfirmRestoreTitle" xml:space="preserve"><value>Restore version</value></data>
-  <data name="Page.Parquet.ConfirmRestore" xml:space="preserve"><value>Restore the version of {0} saved on {1}? The current copy becomes another version and the table is reloaded in SQL from the restored one.</value></data>
-  <data name="Page.Parquet.Restored" xml:space="preserve"><value>Version of {0} restored; the table is being reloaded in SQL.</value></data>
+  <data name="Page.Parquet.ConfirmRestoreTitle" xml:space="preserve"><value>Restore point</value></data>
+  <data name="Page.Parquet.ConfirmRestore" xml:space="preserve"><value>Go back to snapshot {0}? {1} table(s) get back the Parquet they had and {2} that did not exist yet are archived. The current copies become versions (the most recent point undoes the restore) and SQL is reloaded for the tables that go back.</value></data>
+  <data name="Page.Parquet.Restored" xml:space="preserve"><value>Restore point of snapshot {0} restored; the tables are being reloaded in SQL.</value></data>
   <data name="Page.Catalog.Title" xml:space="preserve"><value>Table catalog</value></data>
   <data name="Page.Catalog.Subtitle" xml:space="preserve"><value>Which lake tables and columns are loaded into SQL</value></data>
   <data name="Page.Catalog.Hint" xml:space="preserve"><value>An excluded table is neither ingested nor loaded; new tables that show up in the lake are loaded automatically. It is the same setting as each table's sync in Tables.</value></data>
@@ -733,7 +732,7 @@
   <data name="Page.Settings.StaleTableDays" xml:space="preserve"><value>Days without data to flag a table</value></data>
   <data name="Page.Settings.StaleTableDays.Hint" xml:space="preserve"><value>In Tables, "Last data" is highlighted when the last load with rows is older. 0 or negative disables it.</value></data>
   <data name="Page.Settings.ParquetVersionDays" xml:space="preserve"><value>Days of Parquet versions</value></data>
-  <data name="Page.Settings.ParquetVersionDays.Hint" xml:space="preserve"><value>How many days earlier copies of each table's consolidated Parquet are kept, so they can be restored from the Parquet page. The most recent one is always kept. 0 or negative disables them.</value></data>
+  <data name="Page.Settings.ParquetVersionDays.Hint" xml:space="preserve"><value>How many days of restore points are kept (by snapshot date), to take the pipeline back from the Parquet page. The most recent point is always kept. 0 or negative disables them.</value></data>
   <data name="FirstSteps.Title" xml:space="preserve"><value>First steps</value></data>
   <data name="FirstSteps.Hint" xml:space="preserve"><value>Set up Sluice in a few minutes. This list goes away once the first run loads tables.</value></data>
   <data name="FirstSteps.Source" xml:space="preserve"><value>Connect the source</value></data>
