@@ -490,6 +490,12 @@ fluent-dialog[fuib].dialog-wide::part(dialog) {
     max-width: calc(100vw - 3rem);
 }
 
+/* Tablas de cinco columnas con fechas y snapshots enteros (puntos de restauración). */
+fluent-dialog[fuib].dialog-xwide::part(dialog) {
+    width: 960px;
+    max-width: calc(100vw - 3rem);
+}
+
 .dialog-form fluent-text-input {
     display: block;
     width: 100%;
@@ -575,6 +581,12 @@ fluent-button[appearance="subtle"]:not([icon-only])[disabled] {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+}
+
+/* Identificadores largos sin espacios (ids de job): se parten donde haga falta en vez de recortarse. */
+.wrap-anywhere {
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .cell-ellipsis {

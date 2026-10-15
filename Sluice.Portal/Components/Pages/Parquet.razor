@@ -84,7 +84,7 @@
     </PageSection>
 </FluentStack>
 
-<InlineDialog @bind-Visible="_showPoints" Title="@L["Page.Parquet.RestorePoints"]" Class="dialog-wide">
+<InlineDialog @bind-Visible="_showPoints" Title="@L["Page.Parquet.RestorePoints"]" Class="dialog-xwide">
     <ChildContent>
         <div data-testid="parquet-points-dialog">
             <p class="field-hint">@L["Page.Parquet.RestorePointsHint"]</p>
@@ -102,7 +102,10 @@
             }
             else
             {
-                <FluentDataGrid Items="@_points.AsQueryable()" TGridItem="PointRow" data-testid="parquet-points-table">
+                @* Columnas a la medida de su contenido (con partes iguales el snapshot y la fecha se
+                   recortaban); el id del job, largo, ocupa el resto y se parte en líneas. *@
+                <FluentDataGrid Items="@_points.AsQueryable()" TGridItem="PointRow" data-testid="parquet-points-table"
+                                GridTemplateColumns="auto auto auto minmax(6rem, 1fr) auto">
                     <TemplateColumn Title="@L["Page.Parquet.Snapshot"]">
                         <span data-testid="@($"parquet-point-{context.Point.Snapshot}")">@context.Point.Snapshot</span>
                     </TemplateColumn>
@@ -113,7 +116,7 @@
                     <TemplateColumn Title="@L["Page.Parquet.ReplacedBy"]">
                         @if (context.Point.ReplacedByJobId is { } jobId)
                         {
-                            <a href="@($"/jobs/{jobId}")" data-testid="@($"parquet-point-job-{context.Point.Snapshot}")">@jobId</a>
+                            <a class="wrap-anywhere" href="@($"/jobs/{jobId}")" data-testid="@($"parquet-point-job-{context.Point.Snapshot}")">@jobId</a>
                         }
                         else
                         {
