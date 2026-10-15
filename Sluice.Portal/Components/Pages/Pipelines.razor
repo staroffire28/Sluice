@@ -13,6 +13,7 @@
 @inject INotificationService NotificationService
 @inject IDialogService DialogService
 @inject IActivityLog ActivityLog
+@inject NavigationManager Nav
 
 @inject IStringLocalizer<SharedResource> L
 
@@ -24,6 +25,16 @@
             <FluentButton Appearance="ButtonAppearance.Primary" data-testid="add-pipeline" OnClick="OpenCreate">@L["Common.Add"]</FluentButton>
         </Actions>
     </PageHeader>
+
+    @* Recién creado: antes de la primera ejecución conviene elegir qué tablas cargar. *@
+    @if (_createdPipelineId is { } createdId)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Info" data-testid="pipe-created-catalog">
+            @L["Page.Pipelines.ChooseTables"]
+            <FluentButton Appearance="ButtonAppearance.Primary" data-testid="pipe-created-catalog-open"
+                          OnClick="@(() => Nav.NavigateTo($"/catalog?pipeline={Uri.EscapeDataString(createdId)}"))">@L["Page.Pipelines.ChooseTablesAction"]</FluentButton>
+        </FluentMessageBar>
+    }
 
     <PageSection>
     <ListWithEmptyCta HasItems="@(_allItems.Count > 0)" EmptyText="@L["Page.Pipelines.EmptyText"]">
@@ -51,6 +62,7 @@
                         <FluentMenuList>
                             <PipelineRunActions PipelineId="@context.Id" OnCompleted="@OnRunCompleted" />
                             <FluentMenuItem data-testid="@($"edit-{context.Id}")" OnClick="@(() => Edit(context))">@L["Common.Edit"]</FluentMenuItem>
+                            <FluentMenuItem data-testid="@($"catalog-{context.Id}")" OnClick="@(() => Nav.NavigateTo($"/catalog?pipeline={Uri.EscapeDataString(context.Id)}"))">@L["Page.Pipelines.TablesAndColumns"]</FluentMenuItem>
                             <FluentMenuItem data-testid="@($"reset-{context.Id}")" OnClick="@(() => ConfirmReset(context))">@L["Page.Pipelines.Reset"]</FluentMenuItem>
                             <FluentMenuItem data-testid="@($"delete-{context.Id}")" OnClick="@(() => ConfirmDelete(context))">@L["Common.Delete"]</FluentMenuItem>
                         </FluentMenuList>
@@ -132,6 +144,7 @@
     private bool _showDelete;
     private string _editorTitle = "";
     private string? _editingId;
+    private string? _createdPipelineId;
     private string _editName = "";
     private string _sourceId = "";
     private string _destId = "";
@@ -233,6 +246,7 @@
                     DeleteMode = Enum.Parse<DeleteMode>(_deleteMode),
                     Enabled = false, // scheduler apagado al crear: primero se corre a mano, luego se activa
                 });
+                _createdPipelineId = $"pipe-{slug}";
             }
             else
             {

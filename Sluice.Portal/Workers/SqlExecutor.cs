@@ -27,6 +27,7 @@ public sealed class SqlExecutor : ISqlExecutor
     private readonly ILogger<SqlExecutor> _logger;
     private readonly JobProgressStore? _progressStore;
     private readonly PipelineStateStore? _stateStore;
+    private readonly ColumnSelectionStore? _columns;
 
     public SqlExecutor(
         IJobService jobs,
@@ -39,8 +40,10 @@ public sealed class SqlExecutor : ISqlExecutor
         IOptions<AppOptions> options,
         ILogger<SqlExecutor> logger,
         JobProgressStore? progress = null,
-        PipelineStateStore? stateStore = null)
+        PipelineStateStore? stateStore = null,
+        ColumnSelectionStore? columns = null)
     {
+        _columns = columns;
         _jobs = jobs;
         _pipelines = pipelines;
         _manifestStore = manifestStore;
@@ -152,12 +155,27 @@ public sealed class SqlExecutor : ISqlExecutor
                 var cdmSchema = JsonSerializer.Deserialize<CdmEntitySchema>(schemaJson, JsonDefaults.Options)
                     ?? throw new InvalidOperationException($"Invalid schema for {entry.Entity}.");
 
+                // Columnas excluidas en el catálogo: el parquet las trae, pero no se cargan en SQL.
+                var excludedColumns = _columns?.GetExcluded(task.PipelineId, entry.Entity) ?? new HashSet<string>();
+                cdmSchema = ColumnSelection.Apply(cdmSchema, excludedColumns);
+
                 if (optionsetMetadata is not null)
                 {
                     cdmSchema = EnumLabelEnricher.Apply(cdmSchema, optionsetMetadata);
                 }
 
                 await _mergeExecutor.EnsureTableAsync(connection, schema, entry.Entity, cdmSchema, sqlVersion, cancellationToken);
+                if (excludedColumns.Count > 0)
+                {
+                    // No se borran de SQL (romperían informes que las usen): quedan con su último valor.
+                    var existing = await _mergeExecutor.GetColumnsAsync(connection, schema, entry.Entity, cancellationToken);
+                    var stale = excludedColumns.Where(existing.Contains).OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToList();
+                    if (stale.Count > 0)
+                    {
+                        _jobs.AppendEvent(task.JobId, EventLevel.Info,
+                            $"{entry.Entity}: {stale.Count} columna(s) excluida(s) siguen en la tabla SQL y ya no se actualizan ({string.Join(", ", stale)}): conservan su último valor y quedan vacías en las filas nuevas.");
+                    }
+                }
                 if (!await _mergeExecutor.EnsureUniqueIdIndexAsync(connection, schema, entry.Entity, cancellationToken))
                 {
                     _jobs.AppendEvent(task.JobId, EventLevel.Warning,

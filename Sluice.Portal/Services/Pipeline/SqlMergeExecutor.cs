@@ -97,6 +97,15 @@ public interface ISqlMergeExecutor
         string entity,
         CancellationToken cancellationToken = default) => Task.FromResult(true);
 
+    // Columnas que tiene hoy la tabla destino (vacío si no existe). Por defecto vacío, para los dobles
+    // de test que no ejercitan SQL.
+    Task<IReadOnlySet<string>> GetColumnsAsync(
+        SqlConnection connection,
+        string schema,
+        string entity,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlySet<string>>(new HashSet<string>());
+
     // Lee la tabla entera (solo las columnas pedidas, en ese orden) para la comparación de valores.
     // DBNull llega como null. Por defecto no soportado, para los dobles de test que no lo ejercitan.
     IAsyncEnumerable<object?[]> ReadRowsAsync(
@@ -447,30 +456,39 @@ public sealed class SqlMergeExecutor : ISqlMergeExecutor
         }
     }
 
-    private static async Task EnsureColumnsAsync(
+    public async Task<IReadOnlySet<string>> GetColumnsAsync(
+        SqlConnection connection,
+        string schema,
+        string entity,
+        CancellationToken cancellationToken = default)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
+            """;
+        cmd.Parameters.AddWithValue("@schema", schema);
+        cmd.Parameters.AddWithValue("@table", entity);
+
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            existing.Add(reader.GetString(0));
+        }
+
+        return existing;
+    }
+
+    private async Task EnsureColumnsAsync(
         SqlConnection connection,
         string schema,
         string entity,
         CdmEntitySchema cdmSchema,
         CancellationToken cancellationToken)
     {
-        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        await using (var cmd = connection.CreateCommand())
-        {
-            cmd.CommandText = """
-                SELECT COLUMN_NAME
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
-                """;
-            cmd.Parameters.AddWithValue("@schema", schema);
-            cmd.Parameters.AddWithValue("@table", entity);
-
-            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                existing.Add(reader.GetString(0));
-            }
-        }
+        var existing = await GetColumnsAsync(connection, schema, entity, cancellationToken);
 
         foreach (var attr in cdmSchema.Attributes)
         {

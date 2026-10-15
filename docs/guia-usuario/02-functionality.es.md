@@ -35,6 +35,7 @@ El trabajo fluye por una **cola basada en archivos**: cada tarea es un archivo J
 | Orígenes | `/sources` | Conexiones de origen ADLS (crear, probar, editar, eliminar). |
 | Destinos | `/destinations` | Conexiones de destino SQL Server. |
 | Pipelines | `/pipelines` | Crear/editar pipelines, programarlos, ejecutarlos. |
+| Catálogo de tablas | `/catalog` | Qué tablas y columnas del lago se cargan en SQL (desde Pipelines → **Tablas y columnas**). |
 | Snapshots | `/snapshots` | Carpetas de snapshot en ADLS, estado del changelog, backlog. |
 | Conciliación | `/reconcile` | Tablas divergentes y su remediación. |
 | Parquet | `/parquet` | Archivos Parquet materializados, en ADLS o en el disco del portal (descargar, eliminar, **Versiones** del consolidado de cada tabla). |
@@ -52,6 +53,8 @@ El estado se muestra en todas partes como una insignia de color: **Running/Claim
 **Crear una conexión.** Orígenes/Destinos → Agregar → completar los campos → Guardar → Probar. Los secretos se guardan cifrados y se muestran como `***`.
 
 **Crear un pipeline.** Pipelines → Agregar → elegir un origen y un destino → Guardar. Arranca con el scheduler apagado; ejecútalo manualmente primero. **Filas borradas en F&O** decide qué pasa con los borrados: *Borrarlas también en SQL* (por defecto) o *Cargarlas marcadas* (`IsDelete = 1`, resto de columnas vacías). El cambio se aplica desde la próxima ejecución; para corregir las filas ya cargadas, ejecuta **Forzar**.
+
+**Elegir tablas y columnas.** Al crear un pipeline, un aviso ofrece **Elegir tablas**; después, Pipelines → menú de la fila → **Tablas y columnas**. El catálogo lista las tablas del lago (los esquemas del último snapshot cerrado y de la raíz, más las tablas ya cargadas) sin lanzar ningún job. El interruptor **Cargar** excluye una tabla: no se ingiere ni se carga (es el mismo ajuste que la sincronización de la tabla en Tablas). Las tablas nuevas que aparezcan en el lago se cargan solas. **Columnas** abre la lista de columnas de la tabla: las desmarcadas no se cargan en SQL, pero el Parquet las conserva completas, así que se pueden volver a incluir; al hacerlo, el portal ofrece re-sincronizar la tabla para rellenarlas. `Id`, `SinkModifiedOn`, `versionnumber` e `IsDelete` son obligatorias. Una columna excluida que ya estaba en la tabla SQL no se borra (no rompe informes que la usen): conserva su último valor, queda vacía en las filas nuevas y el job lo indica. Comparar valores tampoco compara las columnas excluidas. Con `TRANSLATE_ENUMS`, la columna de etiqueta (`_$label`) de una columna excluida se vacía en vez de conservar su último valor.
 
 **Ejecutar un pipeline.** Desde el menú de ejecución del Dashboard o de Pipelines: **Ejecutar** (Incremental: solo datos nuevos, el habitual), **Forzar** (recarga SQL desde el Parquet consolidado — todas las tablas), **Reconciliar** (solo verifica conteos), **Diff** (solo reporta diferencias). Confirma en el diálogo.
 

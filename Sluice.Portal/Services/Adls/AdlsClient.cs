@@ -282,6 +282,31 @@ public sealed class AdlsClient : IAdlsClient, IParquetStore
         return entities.OrderBy(e => e, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
+    public async Task<IReadOnlyList<string>> ListSchemaEntitiesAsync(string? snapshot, CancellationToken cancellationToken = default)
+    {
+        var folder = string.IsNullOrWhiteSpace(snapshot) ? CdmFolder : $"{snapshot.TrimEnd('/')}/{CdmFolder}";
+        var entities = new List<string>();
+        try
+        {
+            await foreach (var path in _fileSystem.GetPathsAsync(folder, false, false, cancellationToken))
+            {
+                var name = path.Name.Split('/').Last();
+                if (path.IsDirectory != true && name.EndsWith(SchemaSuffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    entities.Add(name[..^SchemaSuffix.Length]);
+                }
+            }
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            // Sin carpeta de esquemas en ese nivel: nada que listar.
+        }
+
+        return entities.OrderBy(e => e, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private const string SchemaSuffix = "-model.json";
+
     public async Task<CdmEntitySchema> GetEntitySchemaAsync(
         string entity,
         string snapshot,

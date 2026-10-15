@@ -157,6 +157,16 @@ h1:focus {
     color: var(--colorNeutralForeground3, #605e5c);
 }
 
+/* Catálogo → Columnas: una tabla de F&O puede tener cientos; rejilla con scroll propio. */
+.catalog-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 4px 16px;
+    max-height: 50vh;
+    overflow-y: auto;
+    margin-top: 8px;
+}
+
 .section-panel {
     background: var(--colorNeutralBackground1, #fff);
     border: 1px solid var(--colorNeutralStroke2, #e0e0e0);

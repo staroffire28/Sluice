@@ -1,0 +1,322 @@
+@page "/catalog"
+@rendermode InteractiveServer
+@using Sluice.Portal.Components.Shared
+@using Sluice.Portal.Services
+@using Sluice.Portal.Services.Pipeline
+@inject IPipelineService PipelineService
+@inject TableCatalogService CatalogService
+@inject IOrchestrationService Orchestration
+@inject INotificationService NotificationService
+@inject NavigationManager Nav
+@inject IStringLocalizer<SharedResource> L
+@implements IDisposable
+
+<PageTitle>@L["Page.Catalog.Title"]</PageTitle>
+
+<FluentStack Class="page-stack" Orientation="Orientation.Vertical" VerticalGap="12">
+    <PageHeader Title="@L["Page.Catalog.Title"]" Subtitle="@L["Page.Catalog.Subtitle"]" />
+
+    <PageSection>
+        <div class="toolbar" data-testid="catalog-page" data-pipeline="@_pipelineId">
+            <FluentSelect TOption="string" TValue="string" @bind-Value="_pipelineId" @bind-Value:after="Reload" data-testid="catalog-pipeline" Label="@L["Common.Pipeline"]" Style="min-width:240px;">
+                @foreach (var p in PipelineService.List())
+                {
+                    <FluentOption TValue="string" Value="@p.Id">@p.Name</FluentOption>
+                }
+            </FluentSelect>
+            <FluentTextInput @bind-Value="_search" @bind-Value:after="OnSearchChanged" data-testid="catalog-search"
+                             Label="@L["Common.Search"]" Placeholder="@L["Page.Tables.FilterPlaceholder"]" Style="min-width:220px;" />
+            <FluentButton Appearance="ButtonAppearance.Subtle" data-testid="catalog-include-all" OnClick="@(() => SetAll(true))">@L["Page.Catalog.IncludeAll"]</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle" data-testid="catalog-exclude-all" OnClick="@(() => SetAll(false))">@L["Page.Catalog.ExcludeAll"]</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.ArrowSync())" OnClick="Reload">@L["Common.Refresh"]</FluentButton>
+        </div>
+        <p class="field-hint">@L["Page.Catalog.Hint"]</p>
+
+        @if (_error is not null)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Error">@_error</FluentMessageBar>
+        }
+
+        <PanelState IsEmpty="@(string.IsNullOrWhiteSpace(_pipelineId))" EmptyText="@L["Page.Parquet.SelectPipeline"]">
+            <PanelState IsLoading="@_loading" IsEmpty="@(_tables.Count == 0)" EmptyText="@L["Page.Catalog.Empty"]">
+                <p data-testid="catalog-summary">@L["Page.Catalog.Summary", _tables.Count(t => t.Included), _tables.Count]</p>
+                <FluentDataGrid Class="data-panel" Items="@_rows.AsQueryable()" TGridItem="CatalogTable">
+                    <TemplateColumn Title="@L["Page.Catalog.Table"]">@context.Name</TemplateColumn>
+                    <TemplateColumn Title="@L["Page.Catalog.State"]">
+                        <span data-testid="@($"catalog-state-{context.Name}")">
+                            @(context.Loaded ? L["Page.Catalog.Loaded", context.RowCount.ToString("N0")] : L["Page.Catalog.NotLoaded"])
+                        </span>
+                    </TemplateColumn>
+                    <TemplateColumn Title="@L["Page.Catalog.Load"]">
+                        <FluentSwitch TValue="bool" data-testid="@($"catalog-include-{context.Name}")" Value="@context.Included"
+                                      ValueChanged="@(included => SetIncluded(context.Name, included))" />
+                    </TemplateColumn>
+                    <TemplateColumn Title="@L["Page.Catalog.Columns"]" Align="DataGridCellAlignment.End">
+                        <FluentButton Appearance="ButtonAppearance.Outline" data-testid="@($"catalog-columns-{context.Name}")"
+                                      OnClick="@(() => OpenColumnsAsync(context))">
+                            @(context.ExcludedColumns > 0 ? L["Page.Catalog.ColumnsExcluded", context.ExcludedColumns] : L["Page.Catalog.AllColumns"])
+                        </FluentButton>
+                    </TemplateColumn>
+                </FluentDataGrid>
+                <PaginationControl Page="_page" TotalPages="_totalPages" TotalCount="_totalCount" PageChanged="OnPageChanged" />
+            </PanelState>
+        </PanelState>
+    </PageSection>
+</FluentStack>
+
+<InlineDialog @bind-Visible="_showColumns" Title="@L["Page.Catalog.ColumnsTitle", _columnsTable?.Name ?? ""]" Class="dialog-wide">
+    <ChildContent>
+        <div data-testid="catalog-columns-dialog">
+            <p class="field-hint">@L["Page.Catalog.ColumnsHint"]</p>
+            @if (_columnsLoading)
+            {
+                <FluentProgressRing />
+            }
+            else if (_resyncOffer is { Count: > 0 })
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" data-testid="catalog-resync-offer">
+                    @L["Page.Catalog.ResyncOffer", string.Join(", ", _resyncOffer)]
+                </FluentMessageBar>
+            }
+            else
+            {
+                <FluentTextInput @bind-Value="_columnSearch" Immediate="true" ImmediateDelay="250" data-testid="catalog-column-search"
+                                 Placeholder="@L["Common.Search"]" Style="width:100%;" />
+                <div class="catalog-columns">
+                    @foreach (var column in _columns.Where(c => string.IsNullOrWhiteSpace(_columnSearch) || c.Name.Contains(_columnSearch.Trim(), StringComparison.OrdinalIgnoreCase)))
+                    {
+                        <FluentCheckbox TValue="bool" data-testid="@($"catalog-col-{column.Name}")"
+                                        Value="@(column.Required || !_excluded.Contains(column.Name))"
+                                        Disabled="@column.Required"
+                                        ValueChanged="@(included => ToggleColumn(column.Name, included))"
+                                        Label="@(column.Required ? $"{column.Name} ({L["Page.Catalog.Required"]})" : column.Name)" />
+                    }
+                </div>
+            }
+        </div>
+    </ChildContent>
+    <Actions>
+        @if (_resyncOffer is { Count: > 0 })
+        {
+            <FluentButton Appearance="ButtonAppearance.Primary" data-testid="catalog-resync" OnClick="ResyncAsync">@L["Page.Catalog.ResyncNow"]</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@(() => _showColumns = false)">@L["Page.Catalog.Later"]</FluentButton>
+        }
+        else
+        {
+            <FluentButton Appearance="ButtonAppearance.Primary" data-testid="catalog-columns-save" Disabled="@_columnsLoading" OnClick="SaveColumnsAsync">@L["Common.Save"]</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@(() => _showColumns = false)">@L["Common.Cancel"]</FluentButton>
+        }
+    </Actions>
+</InlineDialog>
+
+@code {
+    private const int PageSize = 25;
+
+    private string _pipelineId = "";
+    private string _search = "";
+    private bool _loading;
+    private string? _error;
+    private List<CatalogTable> _tables = [];
+    private List<CatalogTable> _rows = [];
+    private int _page = 1;
+    private int _totalCount;
+    private int _totalPages = 1;
+
+    private bool _showColumns;
+    private bool _columnsLoading;
+    private CatalogTable? _columnsTable;
+    private IReadOnlyList<CatalogColumn> _columns = [];
+    private HashSet<string> _excluded = new(StringComparer.OrdinalIgnoreCase);
+    private string? _columnSearch;
+    private IReadOnlyList<string>? _resyncOffer;
+
+    // Cambiar de pipeline (o salir) cancela la lectura del lago en curso, como en Parquet.
+    private CancellationTokenSource? _loadCts;
+
+    [SupplyParameterFromQuery(Name = "pipeline")]
+    public string? PipelineQuery { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var pipelines = PipelineService.List();
+        var first = pipelines.FirstOrDefault(p => p.Id == PipelineQuery) ?? pipelines.FirstOrDefault();
+        if (first is null)
+        {
+            return;
+        }
+
+        _pipelineId = first.Id;
+
+        // El lago se lee solo con el circuito; el prerender muestra "cargando".
+        if (!RendererInfo.IsInteractive)
+        {
+            _loading = true;
+            return;
+        }
+
+        await Reload();
+    }
+
+    public void Dispose()
+    {
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+    }
+
+    private async Task Reload()
+    {
+        _error = null;
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _loadCts = new CancellationTokenSource();
+        var ct = _loadCts.Token;
+        try
+        {
+            _loading = _tables.Count == 0;
+            var tables = await CatalogService.ListTablesAsync(_pipelineId, ct);
+            if (!ct.IsCancellationRequested)
+            {
+                _tables = tables.ToList();
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // La sustituyó otra carga.
+        }
+        catch (Exception ex)
+        {
+            _tables = [];
+            _error = ex.Message;
+        }
+        finally
+        {
+            if (!ct.IsCancellationRequested)
+            {
+                _loading = false;
+                ApplyPaging();
+            }
+        }
+    }
+
+    private List<CatalogTable> Filtered() =>
+        string.IsNullOrWhiteSpace(_search)
+            ? _tables
+            : _tables.Where(t => t.Name.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+
+    private void ApplyPaging()
+    {
+        var filtered = Filtered();
+        _totalCount = filtered.Count;
+        _totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+        _page = Math.Min(_page, _totalPages);
+        _rows = filtered.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
+    }
+
+    private void OnSearchChanged()
+    {
+        _page = 1;
+        ApplyPaging();
+    }
+
+    private void OnPageChanged(int page)
+    {
+        _page = page;
+        ApplyPaging();
+    }
+
+    private void SetIncluded(string table, bool included)
+    {
+        CatalogService.SetTableIncluded(_pipelineId, table, included);
+        Replace(table, t => t with { Included = included });
+    }
+
+    // Incluir o excluir todas las que deja el buscador.
+    private void SetAll(bool included)
+    {
+        foreach (var table in Filtered().Where(t => t.Included != included).ToList())
+        {
+            SetIncluded(table.Name, included);
+        }
+    }
+
+    private void Replace(string table, Func<CatalogTable, CatalogTable> change)
+    {
+        var index = _tables.FindIndex(t => string.Equals(t.Name, table, StringComparison.OrdinalIgnoreCase));
+        if (index >= 0)
+        {
+            _tables[index] = change(_tables[index]);
+            ApplyPaging();
+        }
+    }
+
+    private async Task OpenColumnsAsync(CatalogTable table)
+    {
+        _columnsTable = table;
+        _columns = [];
+        _excluded = new(StringComparer.OrdinalIgnoreCase);
+        _columnSearch = null;
+        _resyncOffer = null;
+        _columnsLoading = true;
+        _showColumns = true;
+        try
+        {
+            _columns = await CatalogService.ListColumnsAsync(_pipelineId, table.Name);
+            _excluded = new(_columns.Where(c => !c.Included).Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            _showColumns = false;
+            await NotificationService.ShowErrorToastAsync(ex.Message);
+        }
+        finally
+        {
+            _columnsLoading = false;
+        }
+    }
+
+    private void ToggleColumn(string column, bool included)
+    {
+        if (included)
+        {
+            _excluded.Remove(column);
+        }
+        else
+        {
+            _excluded.Add(column);
+        }
+    }
+
+    private async Task SaveColumnsAsync()
+    {
+        if (_columnsTable is not { } table)
+        {
+            return;
+        }
+
+        var reincluded = CatalogService.SetExcludedColumns(_pipelineId, table.Name, _excluded);
+        Replace(table.Name, t => t with { ExcludedColumns = _excluded.Count });
+        await NotificationService.ShowSuccessToastAsync(L["Common.Saved"].Value);
+
+        // SQL solo rellena una columna que vuelve a cargarse al re-sincronizar la tabla.
+        if (table.Loaded && reincluded.Count > 0)
+        {
+            _resyncOffer = reincluded;
+            return;
+        }
+
+        _showColumns = false;
+    }
+
+    private async Task ResyncAsync()
+    {
+        try
+        {
+            var job = await Orchestration.ResyncTableAsync(_pipelineId, _columnsTable!.Name, ResyncMode.Reload);
+            Nav.NavigateTo($"/jobs/{Uri.EscapeDataString(job.Id)}");
+        }
+        catch (Exception ex)
+        {
+            await NotificationService.ShowErrorToastAsync(ex.Message);
+        }
+    }
+}

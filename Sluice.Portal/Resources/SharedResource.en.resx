@@ -216,6 +216,9 @@
   <data name="Page.Pipelines.DeletePrefix" xml:space="preserve"><value>Delete pipeline</value></data>
   <data name="Page.Pipelines.WipeState" xml:space="preserve"><value>Also wipe pipeline state</value></data>
   <data name="Page.Pipelines.Reset" xml:space="preserve"><value>Reset</value></data>
+  <data name="Page.Pipelines.TablesAndColumns" xml:space="preserve"><value>Tables and columns</value></data>
+  <data name="Page.Pipelines.ChooseTables" xml:space="preserve"><value>Pipeline created. Choose which tables and columns to load before the first run; otherwise all of them are loaded.</value></data>
+  <data name="Page.Pipelines.ChooseTablesAction" xml:space="preserve"><value>Choose tables</value></data>
   <data name="Page.Pipelines.ResetTitle" xml:space="preserve"><value>Reset pipeline</value></data>
   <data name="Page.Pipelines.ResetPrefix" xml:space="preserve"><value>Reset pipeline</value></data>
   <data name="Page.Pipelines.ResetWarning" xml:space="preserve"><value>This deletes the record of processed snapshots, each table's state and this pipeline's consolidated Parquet files in ADLS. Deleting from ADLS can't be undone.</value></data>
@@ -303,6 +306,27 @@
   <data name="Page.Parquet.ConfirmRestoreTitle" xml:space="preserve"><value>Restore version</value></data>
   <data name="Page.Parquet.ConfirmRestore" xml:space="preserve"><value>Restore the version of {0} saved on {1}? The current copy becomes another version and the table is reloaded in SQL from the restored one.</value></data>
   <data name="Page.Parquet.Restored" xml:space="preserve"><value>Version of {0} restored; the table is being reloaded in SQL.</value></data>
+  <data name="Page.Catalog.Title" xml:space="preserve"><value>Table catalog</value></data>
+  <data name="Page.Catalog.Subtitle" xml:space="preserve"><value>Which lake tables and columns are loaded into SQL</value></data>
+  <data name="Page.Catalog.Hint" xml:space="preserve"><value>An excluded table is neither ingested nor loaded; new tables that show up in the lake are loaded automatically. It is the same setting as each table's sync in Tables.</value></data>
+  <data name="Page.Catalog.IncludeAll" xml:space="preserve"><value>Include all</value></data>
+  <data name="Page.Catalog.ExcludeAll" xml:space="preserve"><value>Exclude all</value></data>
+  <data name="Page.Catalog.Empty" xml:space="preserve"><value>There are no tables in the lake or loaded for this pipeline.</value></data>
+  <data name="Page.Catalog.Summary" xml:space="preserve"><value>{0} of {1} tables are loaded</value></data>
+  <data name="Page.Catalog.Table" xml:space="preserve"><value>Table</value></data>
+  <data name="Page.Catalog.State" xml:space="preserve"><value>Status</value></data>
+  <data name="Page.Catalog.Loaded" xml:space="preserve"><value>Loaded · {0} rows</value></data>
+  <data name="Page.Catalog.NotLoaded" xml:space="preserve"><value>Not loaded yet</value></data>
+  <data name="Page.Catalog.Load" xml:space="preserve"><value>Load</value></data>
+  <data name="Page.Catalog.Columns" xml:space="preserve"><value>Columns</value></data>
+  <data name="Page.Catalog.ColumnsExcluded" xml:space="preserve"><value>{0} excluded</value></data>
+  <data name="Page.Catalog.AllColumns" xml:space="preserve"><value>All</value></data>
+  <data name="Page.Catalog.ColumnsTitle" xml:space="preserve"><value>Columns of {0}</value></data>
+  <data name="Page.Catalog.ColumnsHint" xml:space="preserve"><value>Unchecked columns are not loaded into SQL. The Parquet keeps them, so you can include them again at any time. If one already exists in the SQL table, it keeps its last value and stays empty in new rows. New source columns are loaded automatically.</value></data>
+  <data name="Page.Catalog.Required" xml:space="preserve"><value>required</value></data>
+  <data name="Page.Catalog.ResyncOffer" xml:space="preserve"><value>Loaded again: {0}. SQL fills them in only when the table is re-synced.</value></data>
+  <data name="Page.Catalog.ResyncNow" xml:space="preserve"><value>Re-sync now</value></data>
+  <data name="Page.Catalog.Later" xml:space="preserve"><value>Later</value></data>
   <data name="Page.Reports.SelectPipeline" xml:space="preserve"><value>Select a pipeline to view its latest reconcile and diff reports.</value></data>
   <data name="Page.Reports.Reconcile" xml:space="preserve"><value>Reconcile</value></data>
   <data name="Page.Reports.NoReconcile" xml:space="preserve"><value>No reconcile report yet. Run a Reconcile job from Pipelines.</value></data>
