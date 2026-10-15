@@ -108,8 +108,8 @@ public sealed class SettingsStore
     }
 
     // System.Text.Json no aplica los inicializadores del record cuando falta la clave en
-    // settings.json (bool → false, int → 0). Solo rellenamos campos de retención origen
-    // ausentes; un valor explícito en el JSON (p. ej. dry-run desactivado) se respeta.
+    // settings.json (bool → false, int → 0). Solo rellenamos los campos listados abajo
+    // cuando faltan; un valor explícito en el JSON (p. ej. dry-run desactivado) se respeta.
     private static AppSettings ApplyMissingDefaults(AppSettings settings, JsonElement root)
     {
         var defaults = new AppSettings();
@@ -130,6 +130,9 @@ public sealed class SettingsStore
             ParquetVersionDays = root.TryGetProperty("parquetVersionDays", out _)
                 ? settings.ParquetVersionDays
                 : defaults.ParquetVersionDays,
+            StaleTableDays = root.TryGetProperty("staleTableDays", out _)
+                ? settings.StaleTableDays
+                : defaults.StaleTableDays,
         };
     }
 
