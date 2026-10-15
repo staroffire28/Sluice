@@ -328,11 +328,14 @@ public sealed class IngestExecutor : IIngestExecutor
             {
                 sources.Add(ct => parquetStore.OpenParquetReadAsync(consolidatedBlobPath, ct));
             }
-            else if (!isForce && await ParquetVersions.HasVersionsAsync(parquetStore, task.PipelineId, entity, cancellationToken))
+            else if (!isForce
+                && pipelineState.Tables.ContainsKey(entity)
+                && await ParquetVersions.HasVersionsAsync(parquetStore, task.PipelineId, entity, cancellationToken))
             {
-                // Sin consolidado pero con versiones: una publicación se cortó entre sus dos renames
-                // o alguien lo borró. Seguir lo reconstruiría solo con los snapshots nuevos y la
-                // historia se perdería en silencio.
+                // Sin consolidado pero con versiones y aún en el estado: una publicación se cortó
+                // entre sus dos renames o alguien lo borró. Seguir lo reconstruiría solo con los
+                // snapshots nuevos y la historia se perdería en silencio. Una tabla que archivó una
+                // restauración (aún no existía en ese punto) ya no está en el estado y se reconstruye.
                 throw new InvalidOperationException(
                     $"{entity}: falta el parquet consolidado pero hay versiones anteriores. Restaura un punto en la página Parquet (Puntos de restauración) y vuelve a ejecutar.");
             }

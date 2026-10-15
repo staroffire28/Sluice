@@ -290,9 +290,11 @@ public sealed class OrchestrationService : IOrchestrationService
     // entonces recupera la versión que tenía, las que aún no existían se archivan (vuelven en la
     // siguiente ejecución si sus snapshots siguen en el lago) y el estado se rebobina a ese snapshot.
     // Las copias sustituidas pasan a versión con el estado actual, así que el punto más reciente
-    // deshace la restauración (también si falla a medias: lo ya movido quedó archivado y el estado no
-    // se tocó). Solo se recargan en SQL las tablas que volvieron atrás. Todo bajo el lock de
-    // ejecución: entre mover ficheros y encolar el re-sync no puede arrancar otro job.
+    // deshace la restauración. El estado se rebobina antes de mover nada y se guarda tras cada tabla:
+    // si falla a medias, la siguiente ejecución vuelve a leer los snapshots posteriores (el
+    // consolidado deduplica por Id) y ninguna tabla ya movida pierde filas. Solo se recargan en SQL
+    // las tablas que volvieron atrás. Todo bajo el lock de ejecución: entre mover ficheros y encolar
+    // el re-sync no puede arrancar otro job.
     public async Task<Job> RestorePointAsync(string pipelineId, string snapshot, CancellationToken cancellationToken = default)
     {
         _ = _pipelines.Get(pipelineId)
@@ -314,6 +316,8 @@ public sealed class OrchestrationService : IOrchestrationService
         }
 
         var tables = new Dictionary<string, TableState>(state.Tables, StringComparer.OrdinalIgnoreCase);
+        var rewound = state with { LastProcessedSnapshot = snapshot, Tables = tables };
+        stateStore.Save(rewound);
         foreach (var (entity, version) in plan.Restore)
         {
             await _parquet.RestoreVersionAsync(pipelineId, entity, version.Id, CurrentAsVersion(state, entity), cancellationToken);
@@ -325,15 +329,16 @@ public sealed class OrchestrationService : IOrchestrationService
             {
                 tables.Remove(entity);
             }
+
+            stateStore.Save(rewound);
         }
 
         foreach (var entity in plan.Archive)
         {
             await _parquet.ArchiveCurrentAsync(pipelineId, entity, CurrentAsVersion(state, entity), cancellationToken);
             tables.Remove(entity);
+            stateStore.Save(rewound);
         }
-
-        stateStore.Save(state with { LastProcessedSnapshot = snapshot, Tables = tables });
 
         var job = await EnqueueResyncAsync(pipelineId, plan.Restore.Select(r => r.Entity).ToList(), ResyncMode.Reload, AutoRemediation.TriggeredByUser, cancellationToken);
         _jobs.AppendEvent(job.Id, EventLevel.Info,

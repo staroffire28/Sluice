@@ -105,21 +105,35 @@ public static class ParquetVersions
         return id;
     }
 
+    private static string EntityOf(string pipelineId, string parquetPath) => parquetPath[Prefix(pipelineId).Length..].Split('/')[0];
+
     // Versiones de una tabla, la más reciente primero.
     public static async Task<IReadOnlyList<ParquetVersion>> ListAsync(
-        IParquetStore store, string pipelineId, string entity, CancellationToken cancellationToken = default)
-    {
-        var versions = new List<ParquetVersion>();
-        foreach (var artifact in await store.ListParquetAsync(EntityPrefix(pipelineId, entity), cancellationToken))
-        {
-            var json = await store.ReadTextAsync(SidecarPath(artifact.Path), cancellationToken);
-            if (json is not null && JsonSerializer.Deserialize<ParquetVersion>(json, JsonDefaults.Options) is { } version)
-            {
-                versions.Add(version with { Id = IdOf(artifact.Path) });
-            }
-        }
+        IParquetStore store, string pipelineId, string entity, CancellationToken cancellationToken = default) =>
+        (await ReadAsync(store, await store.ListParquetAsync(EntityPrefix(pipelineId, entity), cancellationToken), cancellationToken))
+            .Select(v => v.Version)
+            .OrderByDescending(v => v.Id, StringComparer.Ordinal)
+            .ToList();
 
-        return versions.OrderByDescending(v => v.Id, StringComparer.Ordinal).ToList();
+    // Lee los sidecars en paralelo: con cientos de tablas son miles de lecturas.
+    private static async Task<IReadOnlyList<(string Path, ParquetVersion Version)>> ReadAsync(
+        IParquetStore store, IReadOnlyList<ParquetArtifact> artifacts, CancellationToken cancellationToken)
+    {
+        var versions = new (string Path, ParquetVersion Version)?[artifacts.Count];
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, artifacts.Count),
+            new ParallelOptions { MaxDegreeOfParallelism = 16, CancellationToken = cancellationToken },
+            async (i, ct) =>
+            {
+                var path = artifacts[i].Path;
+                var json = await store.ReadTextAsync(SidecarPath(path), ct);
+                if (json is not null && JsonSerializer.Deserialize<ParquetVersion>(json, JsonDefaults.Options) is { } version)
+                {
+                    versions[i] = (path, version with { Id = IdOf(path) });
+                }
+            });
+
+        return versions.Where(v => v is not null).Select(v => v!.Value).ToList();
     }
 
     // Tablas del pipeline con alguna versión, aunque ya no tengan consolidado: la página Parquet
@@ -127,7 +141,7 @@ public static class ParquetVersions
     public static async Task<IReadOnlyList<string>> ListEntitiesAsync(
         IParquetStore store, string pipelineId, CancellationToken cancellationToken = default) =>
         (await store.ListParquetAsync(Prefix(pipelineId), cancellationToken))
-            .Select(a => a.Path[Prefix(pipelineId).Length..].Split('/')[0])
+            .Select(a => EntityOf(pipelineId, a.Path))
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
@@ -137,16 +151,17 @@ public static class ParquetVersions
 
     // Las versiones de todas las tablas del pipeline, por tabla.
     public static async Task<IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>>> ListAllAsync(
-        IParquetStore store, string pipelineId, CancellationToken cancellationToken = default)
-    {
-        var versions = new Dictionary<string, IReadOnlyList<ParquetVersion>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var entity in await ListEntitiesAsync(store, pipelineId, cancellationToken))
-        {
-            versions[entity] = await ListAsync(store, pipelineId, entity, cancellationToken);
-        }
+        IParquetStore store, string pipelineId, CancellationToken cancellationToken = default) =>
+        await ListAllAsync(store, pipelineId, await store.ListParquetAsync(Prefix(pipelineId), cancellationToken), cancellationToken);
 
-        return versions;
-    }
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>>> ListAllAsync(
+        IParquetStore store, string pipelineId, IReadOnlyList<ParquetArtifact> artifacts, CancellationToken cancellationToken) =>
+        (await ReadAsync(store, artifacts, cancellationToken))
+            .GroupBy(v => EntityOf(pipelineId, v.Path), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<ParquetVersion>)g.Select(v => v.Version).OrderByDescending(v => v.Id, StringComparer.Ordinal).ToList(),
+                StringComparer.OrdinalIgnoreCase);
 
     // La versión de una tabla que era la vigente al terminar de procesar un snapshot: la primera que
     // se archivó después. Se archiva con el LastProcessedSnapshot del momento, así que es la de menor
@@ -220,7 +235,8 @@ public static class ParquetVersions
 
     // Poda por puntos de restauración: se conservan las versiones que necesitan los puntos
     // conservados (KeptPoints); del resto solo se borran las de más de keepDays días. Con
-    // keepDays <= 0 (versiones desactivadas) se borran todas.
+    // keepDays <= 0 (versiones desactivadas) se borran todas. El id es la fecha de archivado: si
+    // ninguna versión es anterior al corte no hay nada que podar y no se leen los sidecars.
     public static async Task<int> PruneAsync(
         IParquetStore store, string pipelineId, int keepDays, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
@@ -229,8 +245,14 @@ public static class ParquetVersions
             return await DeleteAllAsync(store, pipelineId, cancellationToken);
         }
 
-        var versions = await ListAllAsync(store, pipelineId, cancellationToken);
         var cutoff = now.AddDays(-keepDays);
+        var artifacts = await store.ListParquetAsync(Prefix(pipelineId), cancellationToken);
+        if (artifacts.All(a => DateTimeOffset.TryParseExact(IdOf(a.Path), IdFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at) && at >= cutoff))
+        {
+            return 0;
+        }
+
+        var versions = await ListAllAsync(store, pipelineId, artifacts, cancellationToken);
         var kept = KeptPoints(versions, keepDays, now);
         var expired = versions
             .SelectMany(e => e.Value

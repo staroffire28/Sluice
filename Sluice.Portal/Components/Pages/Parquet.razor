@@ -253,10 +253,12 @@
         }
     }
 
-    // Una tabla con versiones pero sin consolidado también sale (sin descargar ni borrar): la
-    // ingesta se para en ese caso y pide restaurar una versión desde aquí.
+    // Una tabla del estado con versiones pero sin consolidado también sale (sin descargar ni borrar):
+    // la ingesta se para en ese caso y pide restaurar una versión desde aquí. Las que archivó una
+    // restauración ya no están en el estado y la siguiente ejecución las reconstruye.
     private void SetRows(IEnumerable<ParquetArtifact> artifacts, IEnumerable<string> versionedEntities)
     {
+        var tables = PipelineService.GetState(_pipelineId).Tables;
         var rows = artifacts
             .Select(a => new ArtifactRow
             {
@@ -267,6 +269,7 @@
             .ToList();
         var paths = rows.Select(r => r.Path).ToHashSet(StringComparer.Ordinal);
         rows.AddRange(versionedEntities
+            .Where(tables.ContainsKey)
             .Select(e => IngestManifestStore.GetConsolidatedBlobPath(_pipelineId, e))
             .Where(p => !paths.Contains(p))
             .Select(p => new ArtifactRow { Path = p, Size = "-", Modified = L["Page.Parquet.MissingConsolidated"].Value, Missing = true }));
