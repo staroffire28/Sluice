@@ -25,8 +25,8 @@ public interface IOrchestrationService
     Task<Job> ReloadFromParquetAsync(string pipelineId, CancellationToken cancellationToken = default);
 
     // Devuelve todo el pipeline al punto de restauración de un snapshot y recarga SQL de las
-    // tablas que volvieron atrás.
-    Task<Job> RestorePointAsync(string pipelineId, string snapshot, CancellationToken cancellationToken = default) =>
+    // tablas que volvieron atrás (null si ninguna volvió atrás y solo se archivaron tablas).
+    Task<Job?> RestorePointAsync(string pipelineId, string snapshot, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 
     // Comparación de valores (hash por fila) de una tabla o, con entity null, de todo el pipeline.
@@ -295,7 +295,7 @@ public sealed class OrchestrationService : IOrchestrationService
     // consolidado deduplica por Id) y ninguna tabla ya movida pierde filas. Solo se recargan en SQL
     // las tablas que volvieron atrás. Todo bajo el lock de ejecución: entre mover ficheros y encolar
     // el re-sync no puede arrancar otro job.
-    public async Task<Job> RestorePointAsync(string pipelineId, string snapshot, CancellationToken cancellationToken = default)
+    public async Task<Job?> RestorePointAsync(string pipelineId, string snapshot, CancellationToken cancellationToken = default)
     {
         _ = _pipelines.Get(pipelineId)
             ?? throw new InvalidOperationException("Pipeline not found.");
@@ -310,9 +310,9 @@ public sealed class OrchestrationService : IOrchestrationService
 
         var state = stateStore.GetOrCreate(pipelineId);
         var plan = ParquetVersions.Plan(await _parquet.ListAllVersionsAsync(pipelineId, cancellationToken), state.Tables, snapshot);
-        if (plan.Restore.Count == 0)
+        if (plan.Restore.Count == 0 && plan.Archive.Count == 0)
         {
-            throw new InvalidOperationException($"El punto {snapshot} no devuelve ninguna tabla a una versión anterior.");
+            throw new InvalidOperationException($"El pipeline ya está en el punto {snapshot}.");
         }
 
         var tables = new Dictionary<string, TableState>(state.Tables, StringComparer.OrdinalIgnoreCase);
@@ -340,6 +340,11 @@ public sealed class OrchestrationService : IOrchestrationService
             stateStore.Save(rewound);
         }
 
+        if (plan.Restore.Count == 0)
+        {
+            return null;
+        }
+
         var job = await EnqueueResyncAsync(pipelineId, plan.Restore.Select(r => r.Entity).ToList(), ResyncMode.Reload, AutoRemediation.TriggeredByUser, cancellationToken);
         _jobs.AppendEvent(job.Id, EventLevel.Info,
             $"Restaurado el punto del snapshot {snapshot}: {plan.Restore.Count} tabla(s) vuelven a su versión de entonces"
@@ -348,11 +353,17 @@ public sealed class OrchestrationService : IOrchestrationService
         return job;
     }
 
-    private static ParquetVersion CurrentAsVersion(PipelineState state, string entity) => new()
+    private static ParquetVersion CurrentAsVersion(PipelineState state, string entity)
     {
-        Table = state.Tables.GetValueOrDefault(entity),
-        PipelineSnapshot = state.LastProcessedSnapshot,
-    };
+        var table = state.Tables.GetValueOrDefault(entity);
+        return new()
+        {
+            Table = table,
+            PipelineSnapshot = string.CompareOrdinal(table?.LastSnapshot, state.LastProcessedSnapshot) > 0
+                ? table!.LastSnapshot
+                : state.LastProcessedSnapshot,
+        };
+    }
 
     // Crea y encola el job de re-sync. Quien llama ya tiene el lock de ejecución del pipeline.
     private async Task<Job> EnqueueResyncAsync(string pipelineId, IReadOnlyList<string> entities, ResyncMode mode, string triggeredBy, CancellationToken cancellationToken)

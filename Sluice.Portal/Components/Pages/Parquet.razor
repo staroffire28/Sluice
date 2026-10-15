@@ -122,7 +122,7 @@
                     </TemplateColumn>
                     <TemplateColumn Align="DataGridCellAlignment.End">
                         <FluentButton Appearance="ButtonAppearance.Outline"
-                                      Disabled="@(_jobRunning || _restoring || context.Plan.Restore.Count == 0)"
+                                      Disabled="@(_jobRunning || _restoring || (context.Plan.Restore.Count == 0 && context.Plan.Archive.Count == 0))"
                                       data-testid="@($"parquet-restore-{context.Point.Snapshot}")"
                                       OnClick="@(() => _pendingRestore = context)">
                             @L["Page.Parquet.Restore"]
@@ -366,7 +366,15 @@
         {
             var job = await Orchestration.RestorePointAsync(_pipelineId, row.Point.Snapshot);
             await NotificationService.ShowSuccessToastAsync(L["Page.Parquet.Restored", row.Point.Snapshot].Value);
-            Nav.NavigateTo($"/jobs/{Uri.EscapeDataString(job.Id)}");
+            if (job is not null)
+            {
+                Nav.NavigateTo($"/jobs/{Uri.EscapeDataString(job.Id)}");
+            }
+            else
+            {
+                _showPoints = false;
+                await Reload();
+            }
         }
         catch (Exception ex)
         {
