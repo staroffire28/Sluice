@@ -146,6 +146,7 @@ builder.Services.AddSingleton<OrphanedJobWatchdog>();
 builder.Services.AddSingleton<IOrchestrationService, OrchestrationService>();
 builder.Services.AddSingleton<IReconcileService, ReconcileService>();
 builder.Services.AddSingleton<IJobReportPdfService, JobReportPdfService>();
+builder.Services.AddScoped<JobReportDownloader>();
 builder.Services.AddSingleton<RetentionService>();
 builder.Services.AddSingleton<SnapshotRetentionService>();
 builder.Services.AddSingleton<IStorageOverviewService, StorageOverviewService>();

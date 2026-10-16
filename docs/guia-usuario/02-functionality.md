@@ -30,7 +30,7 @@ Work flows through a **file-based queue**: each task is a JSON file whose folder
 |---|---|---|
 | Dashboard | `/` | Health, queue, workers; launch and cancel runs. Until a run has loaded tables, it shows **First steps**: connect the source and the destination, create a pipeline, choose tables (optional) and run it, each step with its link. |
 | Jobs | `/jobs` | Run history (pipeline, status and From/To date filters); open detail; download PDF/JSON report; **Export CSV** with the applied filters. The *Job* column shows the short id (the final suffix); the full id appears on hover, in the detail and in the CSV. |
-| Job detail | `/jobs/{id}` | Live progress: stages, per-table results, timeline. |
+| Job detail | `/jobs/{id}` | Live progress: stages, per-table results, timeline; download the PDF report. |
 | Tables | `/tables` | Row counts, watermarks, last data (highlighted after *Days without data*, see Settings) and load status per table; **Re-sync** any table from its Parquet. |
 | Sources | `/sources` | ADLS source connections (create, test, edit, delete). |
 | Destinations | `/destinations` | SQL Server destination connections. |
@@ -74,6 +74,6 @@ Status is shown everywhere as a colored badge: **Running/Claimed** (accent), **O
 
 **Automatic correction.** With **Settings → Automatic correction** on, when a run (or a value comparison) ends with tables above the divergence threshold or with value differences, Sluice starts a re-sync (reload) of those tables by itself, in a single job. One attempt only: if the difference persists, it alerts and does not retry. Accepted tables are not corrected. The Reconcile history marks these re-syncs as *Automatic*.
 
-**Get a report.** Jobs → **Actions** → **Report** (PDF) or **JSON**, per job. There is no separate Reports screen.
+**Get a report.** The **Report** button (PDF) in the job detail, or Jobs → **Actions** → **Report** (PDF) or **JSON**, per job. There is no separate Reports screen.
 
 For what each state and term means, see [Reference](04-reference.md).

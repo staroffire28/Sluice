@@ -14,6 +14,7 @@
 @inject IOrchestrationService Orchestration
 @inject JobProgressStore ProgressStore
 @inject Sluice.Portal.Services.Stores.ReportStore Reports
+@inject Sluice.Portal.Services.Reporting.JobReportDownloader ReportDownloader
 @inject IJSRuntime Js
 @inject INotificationService NotificationService
 @inject IDialogService DialogService
@@ -58,6 +59,8 @@
                     </div>
                 </div>
                 <div class="jd-head__actions">
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.DocumentPdf())"
+                                  data-testid="job-report" OnClick="@(() => ReportDownloader.DownloadAsync(job))">@L["Page.Jobs.Report"]</FluentButton>
                     @if (JobProgressHelper.IsActive(job))
                     {
                         <FluentButton Appearance="ButtonAppearance.Outline" Class="btn-danger" data-testid="cancel-job" OnClick="@(() => CancelJobAsync(job.Id))">@L["Common.Cancel"]</FluentButton>
