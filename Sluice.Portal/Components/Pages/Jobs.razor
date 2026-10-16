@@ -7,14 +7,12 @@
 @using Sluice.Portal.Models
 @using Sluice.Portal.Services
 @using Sluice.Portal.Services.Reporting
-@using Sluice.Portal.Services.Stores
 @using Sluice.Portal.Services.Logging
 @inject IJobService JobService
 @inject IActivityLog ActivityLog
 @inject IPipelineService PipelineService
 @inject IOrchestrationService Orchestration
-@inject IJobReportPdfService ReportPdf
-@inject ReportStore ReportStore
+@inject JobReportDownloader ReportDownloader
 @inject INotificationService NotificationService
 @inject IDialogService DialogService
 @inject IJSRuntime Js
@@ -206,32 +204,9 @@
 
     private async Task GenerateReportAsync(string jobId)
     {
-        var job = JobService.Get(jobId);
-        if (job is null)
+        if (JobService.Get(jobId) is { } job)
         {
-            return;
-        }
-
-        // Toast de progreso: la generación + descarga ocurre del lado servidor.
-        await NotificationService.ShowInfoToastAsync(L["Page.Jobs.ReportGenerating"].Value);
-        try
-        {
-            // Solo los reportes de ESTE job (recon-/diff-{jobId}). Sin respaldo al último del
-            // pipeline: sería de otro job y mezclaría sus filas y KPI en este PDF. Sin reporte
-            // propio, el PDF sale de las entidades del job.
-            var reconcile = ReportStore.GetReconcileByJob(jobId);
-            var diff = ReportStore.GetDiffByJob(jobId);
-            // La generación con QuestPDF es CPU-bound; fuera del hilo del circuito para
-            // no bloquear el render (el toast "Generando…" se pinta y la UI sigue viva).
-            var pdf = await Task.Run(() => ReportPdf.GenerateEquityReport(job, reconcile, diff));
-            var base64 = Convert.ToBase64String(pdf);
-            await Js.InvokeVoidAsync("sluiceUi.downloadFileBase64", $"reporte-{jobId}.pdf", base64, "application/pdf");
-            await NotificationService.ShowSuccessToastAsync(L["Page.Jobs.ReportReady"].Value);
-            ActivityLog.LogUser("job.report", $"Generó el reporte PDF del job {jobId}.", job.PipelineId, jobId);
-        }
-        catch (Exception ex)
-        {
-            await NotificationService.ShowErrorToastAsync(ex.Message);
+            await ReportDownloader.DownloadAsync(job);
         }
     }
 }

@@ -30,7 +30,7 @@ El trabajo fluye por una **cola basada en archivos**: cada tarea es un archivo J
 |---|---|---|
 | Panel | `/` | Salud, cola, workers; lanzar y cancelar corridas. Mientras ninguna ejecución haya cargado tablas, muestra **Primeros pasos**: conectar origen y destino, crear un pipeline, elegir tablas (opcional) y ejecutarlo, cada paso con su enlace. |
 | Jobs | `/jobs` | Historial de corridas (filtros de pipeline, estado y fechas Desde/Hasta); abrir detalle; descargar reporte PDF/JSON; **Exportar CSV** con los filtros aplicados. La columna *Trabajo* muestra el id corto (el sufijo final); el id completo aparece al pasar el ratón, en el detalle y en el CSV. |
-| Detalle del job | `/jobs/{id}` | Progreso en vivo: etapas, resultados por tabla, línea de tiempo. |
+| Detalle del job | `/jobs/{id}` | Progreso en vivo: etapas, resultados por tabla, línea de tiempo; descargar el reporte PDF. |
 | Tablas | `/tables` | Conteos de filas, watermarks, último dato (resaltado tras los *Días sin datos*, ver Ajustes) y estado de carga por tabla; **Re-sincronizar** cualquier tabla desde su Parquet. |
 | Orígenes | `/sources` | Conexiones de origen ADLS (crear, probar, editar, eliminar). |
 | Destinos | `/destinations` | Conexiones de destino SQL Server. |
@@ -74,6 +74,6 @@ El estado se muestra en todas partes como una insignia de color: **Running/Claim
 
 **Corrección automática.** Con **Ajustes → Corrección automática** activada, al terminar una corrida (o una comparación de valores) con tablas que superan el umbral de divergencia o con diferencias de valores, Sluice lanza solo un re-sync (recarga) de esas tablas, en un único job. Un solo intento: si la diferencia persiste, alerta y no reintenta. Las tablas aceptadas no se corrigen. El historial de Conciliación marca estos re-sync como *Automática*.
 
-**Obtener un reporte.** Jobs → **Acciones** → **Reporte** (PDF) o **JSON**, por job. No hay una pantalla de Reportes aparte.
+**Obtener un reporte.** Botón **Reporte** (PDF) en el detalle del job, o Jobs → **Acciones** → **Reporte** (PDF) o **JSON**, por job. No hay una pantalla de Reportes aparte.
 
 Para saber qué significa cada estado y término, ver [Referencia](04-reference.md).
