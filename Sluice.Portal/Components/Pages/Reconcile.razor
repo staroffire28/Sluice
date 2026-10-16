@@ -47,11 +47,10 @@
                     </FluentMessageBar>
 
                     <PanelState IsEmpty="@(_allRows.Count == 0)" EmptyText="@L["Page.Reconcile.NoDivergence"]">
-                        @* MultiLine: sin él la fila tiene alto fijo y, si los botones de acciones no
-                           caben en una línea, el que salta invade la fila siguiente. La columna de
-                           acciones reserva sitio para los tres botones en escritorio. *@
+                        @* MultiLine: sin él la fila tiene alto fijo y un texto largo (la dirección)
+                           invade la fila siguiente. Las acciones van en un menú de tres puntos. *@
                         <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true"
-                                        GridTemplateColumns="minmax(160px, 1.6fr) 1fr 1fr 0.9fr 1.2fr 0.9fr minmax(300px, 2fr)"
+                                        GridTemplateColumns="minmax(160px, 1.6fr) 1fr 1fr 0.9fr 1.2fr 0.9fr 0.6fr"
                                         Items="@_rows.AsQueryable()" TGridItem="ReconRow">
                             <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" />
                             <PropertyColumn Property="@(r => r.SourceRows)" Title="@L["Page.Reconcile.Source"]" />
@@ -71,23 +70,31 @@
                                 }
                             </TemplateColumn>
                             <TemplateColumn Title="@L["Common.Actions"]">
-                                <div class="grid-actions">
-                                    <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity" Appearance="ButtonAppearance.Primary"
-                                                       TestId="@($"recon-resync-{context.Entity}")" ActivityAction="reconcile.resync" OnStarted="Load" />
-                                    @if (context.SourceRows > context.DestinationRows)
-                                    {
-                                        <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity" Mode="ResyncMode.Remerge"
-                                                           TestId="@($"recon-remerge-{context.Entity}")" ActivityAction="reconcile.resync" OnStarted="Load" />
-                                    }
-                                    @if (context.Accepted)
-                                    {
-                                        <FluentButton Appearance="ButtonAppearance.Outline" data-testid="@($"recon-unaccept-{context.Entity}")" OnClick="@(() => Unaccept(context))">@L["Page.Reconcile.Unaccept"]</FluentButton>
-                                    }
-                                    else
-                                    {
-                                        <FluentButton Appearance="ButtonAppearance.Outline" data-testid="@($"recon-accept-{context.Entity}")" OnClick="@(() => Accept(context))">@L["Page.Reconcile.Accept"]</FluentButton>
-                                    }
-                                </div>
+                                @* Menú de tres puntos, como en Tablas: los botones no cabían en la columna y se solapaban. *@
+                                <FluentMenu>
+                                    <FluentButton slot="@FluentSlot.Trigger" Appearance="ButtonAppearance.Subtle" IconOnly="true"
+                                                  IconStart="@(new Icons.Regular.Size20.MoreHorizontal())"
+                                                  Title="@L["Common.Actions"]" data-testid="@($"recon-actions-{context.Entity}")" />
+                                    <FluentMenuList>
+                                        <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity"
+                                                           TestId="@($"recon-resync-{context.Entity}")" ActivityAction="reconcile.resync" OnStarted="Load" />
+                                        @if (context.SourceRows > context.DestinationRows)
+                                        {
+                                            <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity" Mode="ResyncMode.Remerge"
+                                                               TestId="@($"recon-remerge-{context.Entity}")" ActivityAction="reconcile.resync" OnStarted="Load" />
+                                        }
+                                        @if (context.Accepted)
+                                        {
+                                            <FluentMenuItem data-testid="@($"recon-unaccept-{context.Entity}")" IconStart="@(new Icons.Regular.Size20.ArrowUndo())"
+                                                            OnClick="@(() => Unaccept(context))">@L["Page.Reconcile.Unaccept"]</FluentMenuItem>
+                                        }
+                                        else
+                                        {
+                                            <FluentMenuItem data-testid="@($"recon-accept-{context.Entity}")" IconStart="@(new Icons.Regular.Size20.CheckmarkCircle())"
+                                                            OnClick="@(() => Accept(context))">@L["Page.Reconcile.Accept"]</FluentMenuItem>
+                                        }
+                                    </FluentMenuList>
+                                </FluentMenu>
                             </TemplateColumn>
                         </FluentDataGrid>
                         <PaginationControl Page="_page" TotalPages="_totalPages" TotalCount="_totalCount" PageChanged="OnPageChanged" />
@@ -135,13 +142,20 @@
                                     {
                                         <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Danger" title="@context.Error">@L["Page.Reconcile.Values.Error"]</FluentBadge>
                                     }
-                                    else
-                                    {
-                                        <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity" Appearance="ButtonAppearance.Primary"
-                                                           TestId="@($"values-resync-{context.Entity}")" ActivityAction="reconcile.resync" OnStarted="Load" />
-                                    }
-                                    <FluentButton Appearance="ButtonAppearance.Outline" data-testid="@($"values-compare-{context.Entity}")"
-                                                  OnClick="@(() => CompareValuesAsync(context.Entity))">@L["Page.Reconcile.CompareAgain"]</FluentButton>
+                                    <FluentMenu>
+                                        <FluentButton slot="@FluentSlot.Trigger" Appearance="ButtonAppearance.Subtle" IconOnly="true"
+                                                      IconStart="@(new Icons.Regular.Size20.MoreHorizontal())"
+                                                      Title="@L["Common.Actions"]" data-testid="@($"values-actions-{context.Entity}")" />
+                                        <FluentMenuList>
+                                            @if (context.Error is null)
+                                            {
+                                                <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity"
+                                                                   TestId="@($"values-resync-{context.Entity}")" ActivityAction="reconcile.resync" OnStarted="Load" />
+                                            }
+                                            <FluentMenuItem data-testid="@($"values-compare-{context.Entity}")" IconStart="@(new Icons.Regular.Size20.ColumnDoubleCompare())"
+                                                            OnClick="@(() => CompareValuesAsync(context.Entity))">@L["Page.Reconcile.CompareAgain"]</FluentMenuItem>
+                                        </FluentMenuList>
+                                    </FluentMenu>
                                 </div>
                             </TemplateColumn>
                         </FluentDataGrid>
