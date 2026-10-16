@@ -8,16 +8,10 @@
 @inject IStringLocalizer<SharedResource> L
 
 @* Re-sincronizar UNA tabla (Tablas y Conciliación): confirmación, job de re-sync, aviso y registro
-   de actividad. Reload = upsert + borrado de huérfanas; Remerge = solo upsert. Como botón
-   (Conciliación) o como opción de un menú de acciones (Tablas). *@
-@if (AsMenuItem)
-{
-    <FluentMenuItem data-testid="@TestId" IconStart="@(new Icons.Regular.Size20.ArrowSync())" OnClick="ResyncAsync">@Label</FluentMenuItem>
-}
-else
-{
-    <FluentButton Appearance="@Appearance" data-testid="@TestId" OnClick="ResyncAsync">@Label</FluentButton>
-}
+   de actividad. Reload = upsert + borrado de huérfanas; Remerge = solo upsert. Se pinta como opción
+   del menú de acciones de la fila (el padre pone el FluentMenu). *@
+<FluentMenuItem data-testid="@TestId" IconStart="@(Mode == ResyncMode.Reload ? new Icons.Regular.Size20.ArrowSync() : new Icons.Regular.Size20.Merge())"
+                OnClick="ResyncAsync">@Label</FluentMenuItem>
 
 @code {
     [Parameter, EditorRequired]
@@ -30,14 +24,7 @@ else
     public ResyncMode Mode { get; set; } = ResyncMode.Reload;
 
     [Parameter]
-    public ButtonAppearance Appearance { get; set; } = ButtonAppearance.Outline;
-
-    [Parameter]
     public string? TestId { get; set; }
-
-    // true: se pinta como opción de un FluentMenuList (el padre pone el FluentMenu).
-    [Parameter]
-    public bool AsMenuItem { get; set; }
 
     private string Label => (Mode == ResyncMode.Reload ? L["Page.Reconcile.Resync"] : L["Page.Reconcile.Remerge"]).Value;
 
