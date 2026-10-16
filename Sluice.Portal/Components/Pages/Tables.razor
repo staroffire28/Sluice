@@ -96,7 +96,7 @@
                                       Title="@L["Common.Actions"]" data-testid="@($"table-actions-{context.Entity}")" />
                         <FluentMenuList>
                             <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity" TestId="@($"resync-{context.Entity}")"
-                                               ActivityAction="table.resync" AsMenuItem="true" />
+                                               ActivityAction="table.resync" />
                             <FluentMenuItem data-testid="@($"analytics-{context.Entity}")" IconStart="@(new Icons.Regular.Size20.DataTrending())"
                                             OnClick="@(() => Nav.NavigateTo($"/tables/{Uri.EscapeDataString(_pipelineId)}/{Uri.EscapeDataString(context.Entity)}/analytics"))">
                                 @L["Page.Tables.Analytics"]
