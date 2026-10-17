@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Sluice.Portal.Models;
 using Sluice.Portal.Services.Adls;
 
@@ -11,6 +12,17 @@ public static class SqlMergeBuilder
     // conexión) vienen de fuera: se escapan como QUOTENAME (']' -> ']]') en todo el T-SQL, para
     // que una ']' no cierre el identificador e inyecte sentencias.
     public static string Quote(string identifier) => "[" + identifier.Replace("]", "]]") + "]";
+
+    // El tipo de cada columna llega en el schema.json que viaja junto al parquet (y en el sidecar de
+    // sus versiones) y se interpola en CREATE/ALTER: quien pudiera escribir ahí colaría T-SQL. Solo
+    // se aceptan los tipos que produce SqlTypeMapper (más NVARCHAR(n) de tablas antiguas).
+    private static readonly Regex AllowedSqlType = new(
+        @"^(UNIQUEIDENTIFIER|BIT|BIGINT|INT|SMALLINT|FLOAT|DATETIME2(\(\d\))?|DATETIMEOFFSET(\(\d\))?|NVARCHAR\((MAX|\d{1,4})\)|DECIMAL\(\d{1,2},\d{1,2}\))$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static string SqlType(string sqlType) => AllowedSqlType.IsMatch(sqlType)
+        ? sqlType
+        : throw new InvalidOperationException($"Tipo de columna no admitido en el schema: '{sqlType}'.");
 
     private static string Literal(string value) => "N'" + value.Replace("'", "''") + "'";
 
@@ -27,7 +39,7 @@ public static class SqlMergeBuilder
         var columns = string.Join(",\n    ", entity.Attributes.Select(a =>
         {
             var nullability = a.IsNullable ? "NULL" : "NOT NULL";
-            return $"{Quote(a.Name)} {a.SqlType} {nullability}";
+            return $"{Quote(a.Name)} {SqlType(a.SqlType)} {nullability}";
         }));
 
         return $"""
@@ -64,7 +76,7 @@ public static class SqlMergeBuilder
     // columnas [<col>_$label] al activar la traducción de enums sobre tablas ya materializadas).
     // Siempre NULL: una columna nueva sobre una tabla con filas no puede ser NOT NULL sin default.
     public static string BuildAlterAddColumn(string schema, string table, CdmAttribute attr) =>
-        $"ALTER TABLE {Table(schema, table)} ADD {Quote(attr.Name)} {attr.SqlType} NULL;";
+        $"ALTER TABLE {Table(schema, table)} ADD {Quote(attr.Name)} {SqlType(attr.SqlType)} NULL;";
 
     public static string BuildStagingTable(
         string stagingName,
@@ -73,7 +85,7 @@ public static class SqlMergeBuilder
     {
         var columns = string.Join(", ", entity.Attributes.Select(a =>
         {
-            var sqlType = a.SqlType.StartsWith("NVARCHAR", StringComparison.OrdinalIgnoreCase)
+            var sqlType = SqlType(a.SqlType).StartsWith("NVARCHAR", StringComparison.OrdinalIgnoreCase)
                 ? "NVARCHAR(MAX)"
                 : a.SqlType;
             return $"{Quote(a.Name)} {sqlType} NULL";
@@ -126,7 +138,7 @@ public static class SqlMergeBuilder
         string keyTableName,
         string idSqlType,
         SqlServerVersion sqlVersion = SqlServerVersion.SqlServer2022) =>
-        $"CREATE TABLE {keyTableName} ([Id] {idSqlType} NOT NULL);";
+        $"CREATE TABLE {keyTableName} ([Id] {SqlType(idSqlType)} NOT NULL);";
 
     public static string BuildDeleteOrphans(
         string schema,
