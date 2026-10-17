@@ -180,6 +180,8 @@ public sealed class IngestExecutor : IIngestExecutor
         var entityFailures = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         // Primer error conocido (KnownErrors) de cada entidad que falla.
         var entityCodes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Valores del CSV que no se leyeron con el tipo de su columna (cargados como NULL), por entidad.
+        var unreadableValues = new Dictionary<string, CsvValueIssues>(StringComparer.OrdinalIgnoreCase);
         var totalCsvRows = 0;
         var snapshotsProcessed = 0;
         SnapshotIntegrity? incomplete = null;
@@ -235,7 +237,8 @@ public sealed class IngestExecutor : IIngestExecutor
                     // en un string + una lista completa de filas, lo que causaba
                     // OutOfMemoryException en tablas con un único CSV de cientos de MB).
                     var lines = adls.StreamEntityCsvLinesAsync(snapshot, entity, cancellationToken);
-                    var rows = CsvEntityReader.ReadRowsAsync(lines, schema, cancellationToken);
+                    var issues = new CsvValueIssues();
+                    var rows = CsvEntityReader.ReadRowsAsync(lines, schema, cancellationToken, issues);
 
                     var index = transientIndex.GetValueOrDefault(entity);
                     var transientPath = _manifestStore.GetStagingTransientPath(task.JobId, entity, index);
@@ -291,6 +294,14 @@ public sealed class IngestExecutor : IIngestExecutor
                     }
 
                     list.Add(transientPath);
+
+                    if (!unreadableValues.TryGetValue(entity, out var entityIssues))
+                    {
+                        entityIssues = new CsvValueIssues();
+                        unreadableValues[entity] = entityIssues;
+                    }
+
+                    entityIssues.Merge(issues);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
                 {
@@ -555,13 +566,31 @@ public sealed class IngestExecutor : IIngestExecutor
             .OrderBy(entity => entity, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        // Entidades consolidadas con valores del CSV que no se pudieron leer: se cargaron como NULL,
+        // así que el dato en SQL no es el del origen. El snapshot sí se da por procesado (releerlo
+        // daría lo mismo), pero la tabla lo indica y el job queda en Partial.
+        var entitiesWithUnreadableValues = unreadableValues
+            .Where(e => e.Value.Total > 0 && succeededEntities.Contains(e.Key))
+            .OrderBy(e => e.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        foreach (var (entity, issues) in entitiesWithUnreadableValues)
+        {
+            _jobs.AppendEvent(task.JobId, EventLevel.Warning,
+                $"{entity}: {issues.Total} valor(es) del CSV no se pudieron leer con el tipo de su columna y se cargaron como NULL — {issues}.");
+        }
+
         var consolidatedResults = manifestEntities
             .Select(m =>
             {
                 var message = $"{m.FilteredRows} row(s) from snapshot {m.Snapshot}";
                 if (entityFailures.TryGetValue(m.Entity, out var partialFailures))
                 {
-                    message += $" — ADVERTENCIA: fallo parcial, posible dato incompleto ({string.Join("; ", partialFailures)}).";
+                    message += $"{JobEntityResultMerger.WarningMarker} fallo parcial, posible dato incompleto ({string.Join("; ", partialFailures)}).";
+                }
+
+                if (unreadableValues.TryGetValue(m.Entity, out var issues) && issues.Total > 0)
+                {
+                    message += $"{JobEntityResultMerger.WarningMarker} {issues.Total} valor(es) ilegible(s) cargado(s) como NULL ({issues}).";
                 }
 
                 return new JobEntityResult
@@ -587,7 +616,7 @@ public sealed class IngestExecutor : IIngestExecutor
         var hasEntityOk = manifestEntities.Count > 0;
         JobStatus? jobStatusAfterIngest = hasEntityError
             ? hasEntityOk ? JobStatus.Partial : JobStatus.Error
-            : partiallyFailedEntities.Count > 0
+            : partiallyFailedEntities.Count > 0 || entitiesWithUnreadableValues.Count > 0
                 ? JobStatus.Partial
                 : null;
 
@@ -605,6 +634,7 @@ public sealed class IngestExecutor : IIngestExecutor
                 ["entities"] = manifestEntities.Count,
                 ["entityFailures"] = fullyFailedEntities.Count,
                 ["partialEntityFailures"] = partiallyFailedEntities.Count,
+                ["unreadableValues"] = entitiesWithUnreadableValues.Sum(e => e.Value.Total),
                 ["stoppedAtIncompleteSnapshot"] = incomplete?.Reason,
             },
         };
@@ -638,6 +668,11 @@ public sealed class IngestExecutor : IIngestExecutor
         if (partiallyFailedEntities.Count > 0)
         {
             completionNote += $" {partiallyFailedEntities.Count} entity(ies) with partial snapshot failures (possible incomplete data): {string.Join(", ", partiallyFailedEntities)}.";
+        }
+
+        if (entitiesWithUnreadableValues.Count > 0)
+        {
+            completionNote += $" {entitiesWithUnreadableValues.Count} entity(ies) with CSV values loaded as NULL: {string.Join(", ", entitiesWithUnreadableValues.Select(e => e.Key))}.";
         }
 
         var completionLevel = jobStatusAfterIngest == JobStatus.Error
