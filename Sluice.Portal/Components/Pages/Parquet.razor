@@ -126,7 +126,7 @@
                     </TemplateColumn>
                     <TemplateColumn Align="DataGridCellAlignment.End">
                         <FluentButton Appearance="ButtonAppearance.Outline"
-                                      Disabled="@(_jobRunning || _restoring || (context.Plan.Restore.Count == 0 && context.Plan.Archive.Count == 0))"
+                                      Disabled="@(_jobRunning || _restoring || (context.Reload == 0 && context.Plan.Archive.Count == 0))"
                                       data-testid="@($"parquet-restore-{context.Point.Snapshot}")"
                                       OnClick="@(() => _pendingRestore = context)">
                             @L["Page.Parquet.Restore"]
@@ -138,6 +138,10 @@
                 {
                     <FluentMessageBar Intent="MessageBarIntent.Warning" Title="@L["Page.Parquet.ConfirmRestoreTitle"]" data-testid="parquet-restore-confirmation">
                         @L["Page.Parquet.ConfirmRestore", pending.Point.Snapshot, pending.Plan.Restore.Count, pending.Plan.Archive.Count]
+                        @if (pending.Reload > pending.Plan.Restore.Count)
+                        {
+                            @(" ")@L["Page.Parquet.PendingReloadNote", pending.Reload - pending.Plan.Restore.Count]
+                        }
                     </FluentMessageBar>
                     <FluentStack HorizontalGap="8">
                         <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@_restoring" data-testid="parquet-restore-confirm"
@@ -348,9 +352,13 @@
         try
         {
             var versions = await ParquetService.ListAllVersionsAsync(_pipelineId);
-            var tables = PipelineService.GetState(_pipelineId).Tables;
+            var state = PipelineService.GetState(_pipelineId);
             _points = ParquetVersions.KeptPoints(versions, Settings.Get().ParquetVersionDays, DateTimeOffset.UtcNow)
-                .Select(p => new PointRow(p, ParquetVersions.Plan(versions, tables, p.Snapshot)))
+                .Select(p =>
+                {
+                    var plan = ParquetVersions.Plan(versions, state.Tables, p.Snapshot);
+                    return new PointRow(p, plan, ParquetVersions.ToReload(plan, state.PendingReload).Count);
+                })
                 .ToList();
         }
         catch (Exception ex)
@@ -412,5 +420,6 @@
         public bool Missing { get; init; }
     }
 
-    private sealed record PointRow(RestorePoint Point, RestorePlan Plan);
+    // Reload: tablas que se recargan en SQL, incluidas las de un restore anterior que no terminó.
+    private sealed record PointRow(RestorePoint Point, RestorePlan Plan, int Reload);
 }

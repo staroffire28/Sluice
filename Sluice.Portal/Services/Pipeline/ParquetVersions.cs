@@ -191,6 +191,11 @@ public static class ParquetVersions
     // demás ya están en ese punto (no han cambiado desde entonces, o una restauración anterior ya las
     // devolvió o archivó) y se quedan como están. Los nombres de snapshot
     // (yyyy-MM-ddTHH.mm.ssZ) ordenan cronológicamente.
+    // Tablas que restaurar un punto recarga en SQL: las que vuelven atrás y las que un restore
+    // anterior ya movió sin llegar a recargarlas (PipelineState.PendingReload).
+    public static IReadOnlyList<string> ToReload(RestorePlan plan, IEnumerable<string> pendingReload) =>
+        plan.Restore.Select(r => r.Entity).Union(pendingReload, StringComparer.OrdinalIgnoreCase).ToList();
+
     public static RestorePlan Plan(
         IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>> versions,
         IReadOnlyDictionary<string, TableState> tables,

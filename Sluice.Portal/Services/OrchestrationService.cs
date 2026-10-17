@@ -310,16 +310,25 @@ public sealed class OrchestrationService : IOrchestrationService
 
         var state = stateStore.GetOrCreate(pipelineId);
         var plan = ParquetVersions.Plan(await _parquet.ListAllVersionsAsync(pipelineId, cancellationToken), state.Tables, snapshot);
-        if (plan.Restore.Count == 0 && plan.Archive.Count == 0)
+        if (plan.Restore.Count == 0 && plan.Archive.Count == 0 && state.PendingReload.Count == 0)
         {
             throw new InvalidOperationException($"El pipeline ya está en el punto {snapshot}.");
         }
 
+        // Cada tabla queda pendiente de recarga antes de moverla: si el restore falla después, su
+        // versión de entonces ya se consumió y el reintento no la vería en su plan.
         var tables = new Dictionary<string, TableState>(state.Tables, StringComparer.OrdinalIgnoreCase);
-        var rewound = state with { LastProcessedSnapshot = snapshot, Tables = tables };
+        var pendingReload = new List<string>(state.PendingReload);
+        var rewound = state with { LastProcessedSnapshot = snapshot, Tables = tables, PendingReload = pendingReload };
         stateStore.Save(rewound);
         foreach (var (entity, version) in plan.Restore)
         {
+            if (!pendingReload.Contains(entity, StringComparer.OrdinalIgnoreCase))
+            {
+                pendingReload.Add(entity);
+                stateStore.Save(rewound);
+            }
+
             await _parquet.RestoreVersionAsync(pipelineId, entity, version.Id, CurrentAsVersion(state, entity), cancellationToken);
             if (version.Table is { } table)
             {
@@ -340,16 +349,18 @@ public sealed class OrchestrationService : IOrchestrationService
             stateStore.Save(rewound);
         }
 
-        if (plan.Restore.Count == 0)
+        if (pendingReload.Count == 0)
         {
             return null;
         }
 
-        var job = await EnqueueResyncAsync(pipelineId, plan.Restore.Select(r => r.Entity).ToList(), ResyncMode.Reload, AutoRemediation.TriggeredByUser, cancellationToken);
+        // La recarga de SQL vacía PendingReload (SqlExecutor), así que un re-sync fallido las deja
+        // pendientes para el siguiente intento.
+        var job = await EnqueueResyncAsync(pipelineId, pendingReload.ToList(), ResyncMode.Reload, AutoRemediation.TriggeredByUser, cancellationToken);
         _jobs.AppendEvent(job.Id, EventLevel.Info,
             $"Restaurado el punto del snapshot {snapshot}: {plan.Restore.Count} tabla(s) vuelven a su versión de entonces"
             + (plan.Archive.Count > 0 ? $" y {plan.Archive.Count} que aún no existían se archivan ({string.Join(", ", plan.Archive)})" : "")
-            + "; se recargan en SQL las que volvieron atrás.");
+            + $"; se recargan en SQL {pendingReload.Count} tabla(s) ({string.Join(", ", pendingReload)}).");
         return job;
     }
 
