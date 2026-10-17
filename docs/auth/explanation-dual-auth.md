@@ -57,7 +57,7 @@ Form logout without a valid token returns `400`, preventing cross-site logout tr
 
 Outside Development the session cookie is always `Secure` and the app sends HSTS: the portal is expected behind a TLS-terminating proxy, so plain-HTTP access cannot keep a session (browsers treat `localhost` as secure, scripts do not). The app enables `ForwardedHeaders` (`X-Forwarded-Proto`) so HSTS and `IsHttps` reflect the proxy's scheme.
 
-Set `KNOWN_PROXIES` / `KNOWN_NETWORKS` to restrict which proxies may supply `X-Forwarded-For` / `X-Forwarded-Proto`. Without them any source is accepted (the app logs a warning at startup), so the client IP used by the login throttle can be spoofed.
+Set `KNOWN_PROXIES` / `KNOWN_NETWORKS` to restrict which proxies may supply `X-Forwarded-For` / `X-Forwarded-Proto`. Without them only loopback is trusted (the app logs a warning at startup): a client that reaches the app directly cannot spoof its IP, but behind a proxy in another container every user shares the proxy's IP in the login throttle.
 
 ## Trade-offs
 
@@ -66,7 +66,7 @@ Set `KNOWN_PROXIES` / `KNOWN_NETWORKS` to restrict which proxies may supply `X-F
 | Shared UI key (not per-user accounts) | Simple deploy, no user DB | No audit per person |
 | HMAC cookie + revocation epoch | No per-session store; logout revokes stolen cookies | Any logout signs out everyone (including running scripts) |
 | Workers use the shared `DATA_DIR` queue, no HTTP API | No worker secret to rotate or leak | Workers must mount the same volume as the portal |
-| JSON login without CSRF | Easy automation | Brute force limited to 10 failures per client IP per 15 min; spoofable `X-Forwarded-For` (when `KNOWN_PROXIES` / `KNOWN_NETWORKS` are not set) lets an attacker who reaches the app directly rotate IPs |
+| JSON login without CSRF | Easy automation | Brute force limited to 10 failures per client IP per 15 min; behind a proxy not listed in `KNOWN_PROXIES` / `KNOWN_NETWORKS`, all users share one IP and one throttle |
 | `/internal/health` exempt | Docker healthcheck without secret | Endpoint reveals process is up (no sensitive data) |
 
 ## Alternatives considered

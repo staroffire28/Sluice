@@ -88,6 +88,31 @@ Then open `http://localhost:58472/login`, sign in with your `UI_API_KEY` (with `
 > docker run --rm -v <volume>:/data alpine chown -R 1654:1654 /data
 > ```
 
+## Remote access with TLS
+
+By default the compose files publish the portal only on the machine itself (`127.0.0.1:58472`): no certificate is needed, and you reach it at `http://localhost:58472` or through an SSH tunnel or VPN. To open it to other machines, put TLS in front first. The session cookie is `Secure` outside Development, so over plain HTTP from another machine the login does not work.
+
+**Option A, reverse proxy (recommended).** A proxy such as Caddy or nginx terminates HTTPS and forwards to `api:58472` on the Docker network. With a public DNS name and ports 80/443 reachable, Caddy gets and renews a Let's Encrypt certificate by itself; with an internal name, give it your company's certificate. Example `docker-compose.override.yml`:
+
+```yaml
+services:
+  caddy:
+    image: caddy:2
+    ports: ["443:443", "80:80"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+  api:
+    environment:
+      KNOWN_NETWORKS: 172.16.0.0/12   # Docker networks: trust X-Forwarded-For from the proxy
+volumes:
+  caddy-data:
+```
+
+with a `Caddyfile` such as `sluice.example.com { reverse_proxy api:58472 }`. Set `KNOWN_PROXIES` or `KNOWN_NETWORKS` to the proxy: without them `X-Forwarded-For` is only trusted from loopback, and every user shares the proxy's IP in the login throttle.
+
+**Option B, HTTPS in the portal.** Mount a `.pfx` and set `ASPNETCORE_URLS=https://+:58472;http://localhost:58471`, `ASPNETCORE_Kestrel__Certificates__Default__Path=/certs/sluice.pfx` and `ASPNETCORE_Kestrel__Certificates__Default__Password` on the `api` service. The compose healthcheck probes plain HTTP, and the workers do not start until `api` is healthy: override the `api` `healthcheck` with the same `test` as your compose file but the URL `http://localhost:58471/health` (that HTTP listener only answers inside the container). Then publish on all interfaces with `SLUICE_HTTP_BIND=0.0.0.0` in `.env`. You renew the certificate yourself.
+
 ## First run
 
 In the portal:
@@ -134,7 +159,7 @@ Edited in the portal, saved to the volume, applied without restart.
 | `EXECUTION_MODE` | `local` or `distributed`. | set by compose |
 | `DATA_DIR` | JSON persistence root (`/data` Linux, `C:/data` Windows). | set by compose |
 | `WORKER_STAGE` | Stage a worker processes (`ingest`, `sql` or `reconcile`; any other value stops startup); absence = orchestrator. | set by compose |
-| `KNOWN_PROXIES` / `KNOWN_NETWORKS` | Comma-separated IPs and CIDR networks of the trusted reverse proxy for `X-Forwarded-For`/`Proto`. Without them any source is accepted and the client IP used by the login throttle can be spoofed (a warning is logged at startup); an invalid value stops startup. | empty |
+| `KNOWN_PROXIES` / `KNOWN_NETWORKS` | Comma-separated IPs and CIDR networks of the trusted reverse proxy for `X-Forwarded-For`/`Proto`. Without them it is only trusted from loopback; behind a proxy in another container set them, or every user shares the proxy's IP in the login throttle (a warning is logged at startup). An invalid value stops startup. See *Remote access with TLS*. | empty |
 | `HEARTBEAT_MAX_FAILURES` | Heartbeat failures before releasing a task. | 3 |
 | `CHANGELOG_STALL_HOURS` | Hours without changelog update before alerting. | 16 |
 | `LOCAL_SOURCE_ROOT` | Demo and tests only: enables the *Local (UAT)* source type, which reads local folders instead of ADLS. **Never used in production**; only `docker-compose.demo.yml` sets it. | — |
