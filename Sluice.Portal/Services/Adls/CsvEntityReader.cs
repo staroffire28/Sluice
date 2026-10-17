@@ -192,7 +192,7 @@ public static class CsvEntityReader
                 return true;
             }
         }
-        catch (Exception ex) when (ex is FormatException or OverflowException)
+        catch (Exception ex) when (ex is FormatException or OverflowException or ArgumentException)
         {
             return false;
         }
@@ -216,6 +216,16 @@ public sealed class CsvValueIssues
         var sample = raw.Length > MaxSampleLength ? raw[..MaxSampleLength] + "…" : raw;
         _byColumn[column] = _byColumn.TryGetValue(column, out var current) ? (current.Count + 1, current.Sample) : (1, sample);
         Total++;
+    }
+
+    public void Merge(CsvValueIssues other)
+    {
+        foreach (var (column, (count, sample)) in other._byColumn)
+        {
+            _byColumn[column] = _byColumn.TryGetValue(column, out var current) ? (current.Count + count, current.Sample) : (count, sample);
+        }
+
+        Total += other.Total;
     }
 
     public override string ToString() => string.Join("; ", _byColumn

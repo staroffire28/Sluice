@@ -237,12 +237,7 @@ public sealed class IngestExecutor : IIngestExecutor
                     // en un string + una lista completa de filas, lo que causaba
                     // OutOfMemoryException en tablas con un único CSV de cientos de MB).
                     var lines = adls.StreamEntityCsvLinesAsync(snapshot, entity, cancellationToken);
-                    if (!unreadableValues.TryGetValue(entity, out var issues))
-                    {
-                        issues = new CsvValueIssues();
-                        unreadableValues[entity] = issues;
-                    }
-
+                    var issues = new CsvValueIssues();
                     var rows = CsvEntityReader.ReadRowsAsync(lines, schema, cancellationToken, issues);
 
                     var index = transientIndex.GetValueOrDefault(entity);
@@ -299,6 +294,14 @@ public sealed class IngestExecutor : IIngestExecutor
                     }
 
                     list.Add(transientPath);
+
+                    if (!unreadableValues.TryGetValue(entity, out var entityIssues))
+                    {
+                        entityIssues = new CsvValueIssues();
+                        unreadableValues[entity] = entityIssues;
+                    }
+
+                    entityIssues.Merge(issues);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
                 {
@@ -582,12 +585,12 @@ public sealed class IngestExecutor : IIngestExecutor
                 var message = $"{m.FilteredRows} row(s) from snapshot {m.Snapshot}";
                 if (entityFailures.TryGetValue(m.Entity, out var partialFailures))
                 {
-                    message += $" — ADVERTENCIA: fallo parcial, posible dato incompleto ({string.Join("; ", partialFailures)}).";
+                    message += $"{JobEntityResultMerger.WarningMarker} fallo parcial, posible dato incompleto ({string.Join("; ", partialFailures)}).";
                 }
 
                 if (unreadableValues.TryGetValue(m.Entity, out var issues) && issues.Total > 0)
                 {
-                    message += $" — ADVERTENCIA: {issues.Total} valor(es) ilegible(s) cargado(s) como NULL ({issues}).";
+                    message += $"{JobEntityResultMerger.WarningMarker} {issues.Total} valor(es) ilegible(s) cargado(s) como NULL ({issues}).";
                 }
 
                 return new JobEntityResult
