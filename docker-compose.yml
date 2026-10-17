@@ -28,7 +28,8 @@ services:
     image: sluice-portal:local
     platform: windows/amd64
     ports:
-      - "${SLUICE_HTTP_PORT:-58472}:58472"
+      # Solo en la propia máquina por defecto: para acceso remoto, TLS delante (ver la guía de instalación).
+      - "${SLUICE_HTTP_BIND:-127.0.0.1}:${SLUICE_HTTP_PORT:-58472}:58472"
     environment:
       ASPNETCORE_URLS: http://+:58472
       EXECUTION_MODE: distributed

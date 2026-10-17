@@ -88,6 +88,31 @@ Luego abre `http://localhost:58472/login`, inicia sesión con tu `UI_API_KEY` (c
 > docker run --rm -v <volumen>:/data alpine chown -R 1654:1654 /data
 > ```
 
+## Acceso remoto con TLS
+
+Por defecto los compose publican el portal solo en la propia máquina (`127.0.0.1:58472`): no hace falta certificado, y se entra por `http://localhost:58472` o por un túnel SSH o una VPN. Para abrirlo a otras máquinas pon antes TLS delante. La cookie de sesión es `Secure` fuera de Development, así que por HTTP desde otra máquina el login no funciona.
+
+**Opción A, proxy inverso (recomendada).** Un proxy como Caddy o nginx termina el HTTPS y reenvía a `api:58472` por la red de Docker. Con un nombre DNS público y los puertos 80/443 accesibles, Caddy obtiene y renueva solo un certificado de Let's Encrypt; con un nombre interno, dale el certificado de tu empresa. Ejemplo de `docker-compose.override.yml`:
+
+```yaml
+services:
+  caddy:
+    image: caddy:2
+    ports: ["443:443", "80:80"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+  api:
+    environment:
+      KNOWN_NETWORKS: 172.16.0.0/12   # redes de Docker: confiar en el X-Forwarded-For del proxy
+volumes:
+  caddy-data:
+```
+
+con un `Caddyfile` como `sluice.example.com { reverse_proxy api:58472 }`. Pon `KNOWN_PROXIES` o `KNOWN_NETWORKS` con el proxy: sin ellas `X-Forwarded-For` solo se acepta desde loopback, y todos los usuarios comparten la IP del proxy en el límite de intentos de login.
+
+**Opción B, HTTPS en el portal.** Monta un `.pfx` y pon `ASPNETCORE_URLS=https://+:58472`, `ASPNETCORE_Kestrel__Certificates__Default__Path=/certs/sluice.pfx` y `ASPNETCORE_Kestrel__Certificates__Default__Password` en el servicio `api`, y publica en todas las interfaces con `SLUICE_HTTP_BIND=0.0.0.0` en `.env`. La renovación del certificado corre de tu cuenta.
+
 ## Primer arranque
 
 En el portal:
@@ -134,7 +159,7 @@ Se editan en el portal, se guardan en el volumen y aplican sin reiniciar.
 | `EXECUTION_MODE` | `local` o `distributed`. | lo fija compose |
 | `DATA_DIR` | Raíz de persistencia JSON (`/data` Linux, `C:/data` Windows). | lo fija compose |
 | `WORKER_STAGE` | Etapa que procesa un worker (`ingest`, `sql` o `reconcile`; otro valor impide arrancar); ausencia = orquestador. | lo fija compose |
-| `KNOWN_PROXIES` / `KNOWN_NETWORKS` | IPs y redes CIDR (separadas por comas) del proxy inverso de confianza para `X-Forwarded-For`/`Proto`. Sin ellas se acepta de cualquier origen y la IP del límite de intentos de login se puede falsificar (se avisa al arrancar); un valor inválido impide arrancar. | vacío |
+| `KNOWN_PROXIES` / `KNOWN_NETWORKS` | IPs y redes CIDR (separadas por comas) del proxy inverso de confianza para `X-Forwarded-For`/`Proto`. Sin ellas solo se acepta desde loopback; detrás de un proxy en otro contenedor configúralas, o todos los usuarios comparten la IP del proxy en el límite de intentos de login (se avisa al arrancar). Un valor inválido impide arrancar. Ver *Acceso remoto con TLS*. | vacío |
 | `HEARTBEAT_MAX_FAILURES` | Fallos de heartbeat antes de liberar una tarea. | 3 |
 | `CHANGELOG_STALL_HOURS` | Horas sin actualizar el changelog antes de alertar. | 16 |
 | `LOCAL_SOURCE_ROOT` | Solo para la demo y las pruebas: habilita el tipo de origen *Local (UAT)*, que lee carpetas locales en vez de ADLS. **Nunca se usa en producción**; solo lo define `docker-compose.demo.yml`. | — |

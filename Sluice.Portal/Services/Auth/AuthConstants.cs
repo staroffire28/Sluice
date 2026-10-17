@@ -9,6 +9,9 @@ public static class AuthConstants
     public const string WelcomeCookieName = "sluice_welcome";
     public const string DefaultUiApiKeyPlaceholder = "changeme-ui";
 
+    // Por debajo se avisa al arrancar: la clave es la única credencial del portal.
+    public const int RecommendedKeyLength = 32;
+
     public static bool IsPlaceholderKey(string? key) =>
         string.Equals(key, DefaultUiApiKeyPlaceholder, StringComparison.Ordinal);
 }

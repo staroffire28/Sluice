@@ -29,12 +29,17 @@ var builder = WebApplication.CreateBuilder(args);
 var appOptions = AppOptionsConfiguration.Load(builder.Configuration);
 builder.Services.AddSingleton<IOptions<AppOptions>>(new OptionsWrapper<AppOptions>(appOptions));
 
-// Sin KNOWN_PROXIES/KNOWN_NETWORKS las listas quedan vacías y se acepta X-Forwarded-* de
-// cualquier origen (comportamiento previo; se avisa al arrancar). Con ellas, solo de esos
-// proxies: la IP del cliente (límite de intentos de login) deja de poder falsificarse.
+// X-Forwarded-* solo se acepta de proxies de confianza: con KNOWN_PROXIES/KNOWN_NETWORKS, de esos;
+// sin ellos, solo de loopback (el valor por defecto de ASP.NET). Antes, sin configurarlos, se aceptaba
+// de cualquiera y una IP falsa por intento esquivaba el límite de intentos de login.
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    if (appOptions.KnownProxies.Count == 0 && appOptions.KnownNetworks.Count == 0)
+    {
+        return;
+    }
+
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
     foreach (var proxy in appOptions.KnownProxies)
@@ -194,7 +199,14 @@ else if (!appOptions.IsUiAuthEnabled)
 if (!app.Environment.IsDevelopment() && appOptions.KnownProxies.Count == 0 && appOptions.KnownNetworks.Count == 0)
 {
     app.Logger.LogWarning(
-        "KNOWN_PROXIES/KNOWN_NETWORKS not configured: X-Forwarded-For is accepted from any source, so the client IP used by the login throttle can be spoofed.");
+        "KNOWN_PROXIES/KNOWN_NETWORKS not configured: X-Forwarded-For is only trusted from loopback. Behind a proxy in another container, set KNOWN_NETWORKS or every user shares the proxy's IP in the login throttle.");
+}
+
+if (appOptions.IsUiAuthEnabled && appOptions.UiApiKey!.Length < AuthConstants.RecommendedKeyLength)
+{
+    app.Logger.LogWarning(
+        "UI_API_KEY is shorter than {Length} characters: use a long random key (for example `openssl rand -base64 32`).",
+        AuthConstants.RecommendedKeyLength);
 }
 
 if (!app.Environment.IsDevelopment())
