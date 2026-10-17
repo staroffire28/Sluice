@@ -21,9 +21,10 @@ public sealed class OrphanedJobWatchdog
         _tasks = tasks;
     }
 
-    public async Task<int> SweepAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
+    // Devuelve los jobs que marcó, para que el scheduler avise de cada uno.
+    public async Task<IReadOnlyList<Job>> SweepAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
     {
-        var marked = 0;
+        var marked = new List<Job>();
         foreach (var job in _jobs.ListRunning())
         {
             var lastActivity = job.Events.Count > 0
@@ -43,11 +44,12 @@ public sealed class OrphanedJobWatchdog
                 continue;
             }
 
-            _jobs.Update(current.Id, current with { Status = JobStatus.Error, FinishedAt = now });
+            var orphaned = current with { Status = JobStatus.Error, FinishedAt = now };
+            _jobs.Update(current.Id, orphaned);
             _jobs.AppendEvent(current.Id, EventLevel.Error,
                 $"Sin ninguna tarea pendiente ni en curso desde hace más de {Grace.TotalMinutes:0} min " +
                 "(probable caída de un worker entre etapas). Se marca como Error: usa Reintentar para relanzarlo.");
-            marked++;
+            marked.Add(orphaned);
         }
 
         return marked;

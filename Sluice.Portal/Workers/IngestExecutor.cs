@@ -681,6 +681,21 @@ public sealed class IngestExecutor : IIngestExecutor
                 ? EventLevel.Warning
                 : EventLevel.Info;
         _jobs.AppendEvent(task.JobId, completionLevel, completionNote);
+
+        // Como la etapa SQL: un ingest que termina en Partial o Error avisa por el webhook, no solo
+        // en el detalle del job.
+        if (jobStatusAfterIngest is not null && _alerts is not null)
+        {
+            await _alerts.SendPipelineFailureAsync(new PipelineFailureAlert
+            {
+                PipelineId = pipeline.Id,
+                PipelineName = pipeline.Name,
+                JobId = task.JobId,
+                JobType = job.Type.ToString(),
+                Stage = "ingest",
+                Message = completionNote,
+            }, cancellationToken);
+        }
     }
 
     // Cambios de esquema respecto al consolidado anterior (el schema.json que se va a sobrescribir):

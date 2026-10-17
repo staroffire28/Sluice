@@ -143,6 +143,7 @@ builder.Services.AddSingleton<IConnectionService, ConnectionService>();
 builder.Services.AddSingleton<IPipelineService, PipelineService>();
 builder.Services.AddSingleton<IJobService, JobService>();
 builder.Services.AddSingleton<OrphanedJobWatchdog>();
+builder.Services.AddSingleton<QueueStallWatch>();
 builder.Services.AddSingleton<IOrchestrationService, OrchestrationService>();
 builder.Services.AddSingleton<IReconcileService, ReconcileService>();
 builder.Services.AddSingleton<IJobReportPdfService, JobReportPdfService>();
