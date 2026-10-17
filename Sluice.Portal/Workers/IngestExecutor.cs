@@ -111,25 +111,36 @@ public sealed class IngestExecutor : IIngestExecutor
 
         if (selection.ToProcess.Count == 0)
         {
-            _jobs.AppendEvent(task.JobId, EventLevel.Info, JobEventMarkers.NoNewSnapshots);
+            // Re-ejecución de este mismo job (el worker cayó tras registrar el ingest y el lease
+            // venció): su manifest lista lo ingerido y SQL aún no lo ha mergeado. Vaciarlo dejaría
+            // esas filas fuera de SQL para siempre; su Summary también es el bueno.
+            var previous = _manifestStore.Load(task.PipelineId, task.JobId);
+            var alreadyIngested = previous is { Entities.Count: > 0 };
+            _jobs.AppendEvent(task.JobId, EventLevel.Info, alreadyIngested
+                ? $"El ingest de este job ya estaba registrado ({previous!.Entities.Count} tabla(s)): se conserva su manifest para la etapa SQL."
+                : JobEventMarkers.NoNewSnapshots);
             _jobs.Update(job.Id, job with
             {
                 StageStatus = new Dictionary<string, string>(job.StageStatus) { ["ingest"] = "done" },
                 StageTimings = job.StageTimings.Set("ingest", started: stageStart, finished: DateTimeOffset.UtcNow),
                 // Mismas claves que el cierre normal: la UI distingue "sin datos nuevos" por
                 // snapshotsSelected = 0 sin depender del texto del evento.
-                Summary = new Dictionary<string, object?>
+                Summary = alreadyIngested ? job.Summary : new Dictionary<string, object?>
                 {
                     ["snapshotsProcessed"] = 0,
                     ["snapshotsSelected"] = 0,
                 },
             });
-            _manifestStore.Save(new IngestManifest
+            if (!alreadyIngested)
             {
-                JobId = task.JobId,
-                PipelineId = task.PipelineId,
-                LastProcessedSnapshot = pipelineState.LastProcessedSnapshot,
-            });
+                _manifestStore.Save(new IngestManifest
+                {
+                    JobId = task.JobId,
+                    PipelineId = task.PipelineId,
+                    LastProcessedSnapshot = pipelineState.LastProcessedSnapshot,
+                });
+            }
+
             progress.SkipRemaining();
             progress.Finish("done");
             return;
@@ -474,19 +485,22 @@ public sealed class IngestExecutor : IIngestExecutor
                 $"{entityFailures.Count} tabla(s) con fallos: el snapshot {lastSnapshot} no se marca como procesado y se reintentará en el próximo run.");
         }
 
-        _stateStore.Save(pipelineState with
-        {
-            LastProcessedSnapshot = processedUpTo,
-            GlobalWatermark = manifestEntities.Select(e => e.Watermark).Where(w => w.HasValue).Max(),
-            Tables = updatedTables,
-        });
-
+        // El manifest antes que el estado: el estado es el commit. Si el proceso cae entre ambos,
+        // el snapshot no consta como procesado y la re-ejecución lo vuelve a leer (idempotente);
+        // al revés, la re-ejecución vería el estado avanzado sin manifest y SQL no recibiría nada.
         _manifestStore.Save(new IngestManifest
         {
             JobId = task.JobId,
             PipelineId = task.PipelineId,
             LastProcessedSnapshot = lastSnapshot,
             Entities = manifestEntities,
+        });
+
+        _stateStore.Save(pipelineState with
+        {
+            LastProcessedSnapshot = processedUpTo,
+            GlobalWatermark = manifestEntities.Select(e => e.Watermark).Where(w => w.HasValue).Max(),
+            Tables = updatedTables,
         });
         progress.CompleteStep(JobStepCatalog.Register);
 
