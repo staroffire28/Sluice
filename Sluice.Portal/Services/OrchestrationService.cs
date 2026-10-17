@@ -88,9 +88,9 @@ public sealed class OrchestrationService : IOrchestrationService
 
     public IReadOnlyList<Job> GetActiveJobs() => _jobs.ListRunning();
 
-    // Cancelación cooperativa: purga las tareas Pending/Claimed del job
-    // para que no se procesen/encolen más stages, y marca el job Cancelled. El stage en
-    // vuelo termina su trabajo actual; al completar, el router ve Cancelled y no avanza.
+    // Cancelación cooperativa: purga las tareas Pending del job para que no se procesen más
+    // stages, y marca el job Cancelled. La tarea Claimed sigue siendo de su worker: su latido ve
+    // Cancelled, detiene el stage y la libera; el router no avanza un job cancelado.
     public async Task CancelAsync(string jobId, CancellationToken cancellationToken = default)
     {
         // Partial sin FinishedAt también está en curso (ingest parcial que sigue con SQL).

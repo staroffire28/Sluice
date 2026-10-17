@@ -271,41 +271,38 @@ public sealed class TaskStore : ITaskStore
         // ya son terminales.
         foreach (var stage in Enum.GetValues<PipelineStage>())
         {
-            foreach (var status in new[] { PipelineTaskStatus.Pending })
+            var directory = GetDirectory(stage, PipelineTaskStatus.Pending);
+            if (!Directory.Exists(directory))
             {
-                var directory = GetDirectory(stage, status);
-                if (!Directory.Exists(directory))
+                continue;
+            }
+
+            foreach (var file in Directory.GetFiles(directory, "*.json"))
+            {
+                PipelineTask? task;
+                try
+                {
+                    task = await ReadTaskAsync(file, cancellationToken);
+                }
+                catch
                 {
                     continue;
                 }
 
-                foreach (var file in Directory.GetFiles(directory, "*.json"))
+                if (task?.JobId != jobId)
                 {
-                    PipelineTask? task;
-                    try
-                    {
-                        task = await ReadTaskAsync(file, cancellationToken);
-                    }
-                    catch
-                    {
-                        continue;
-                    }
+                    continue;
+                }
 
-                    if (task?.JobId != jobId)
-                    {
-                        continue;
-                    }
-
-                    try
-                    {
-                        File.Delete(file);
-                        removed++;
-                    }
-                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                    {
-                        // Otra réplica la reclamó/movió a la vez: la verá el guard del router
-                        // (job Cancelled) y no avanzará. No es fatal para la cancelación.
-                    }
+                try
+                {
+                    File.Delete(file);
+                    removed++;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Otra réplica la reclamó/movió a la vez: la verá el guard del router
+                    // (job Cancelled) y no avanzará. No es fatal para la cancelación.
                 }
             }
         }
@@ -331,9 +328,10 @@ public sealed class TaskStore : ITaskStore
                 {
                     task = await ReadTaskAsync(file, cancellationToken);
                 }
-                catch (FileNotFoundException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    // Se completó o se reclamó entre el listado y la lectura: ya no está en curso.
+                    // Se completó, se reclamó o se está recuperando (lease vencido) entre el listado
+                    // y la lectura: ya no está en curso.
                     continue;
                 }
 

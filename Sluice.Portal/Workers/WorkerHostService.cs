@@ -229,6 +229,7 @@ public sealed class WorkerHostService : BackgroundService
     {
         var leaseSeconds = Math.Max(15, _settings.Get().TaskLeaseSeconds);
         using var timer = new PeriodicTimer(interval ?? TimeSpan.FromSeconds(Math.Max(5, leaseSeconds / 3)));
+        var cancelSignalled = false;
         try
         {
             while (await timer.WaitForNextTickAsync(ct))
@@ -247,11 +248,12 @@ public sealed class WorkerHostService : BackgroundService
                     _workers.Touch(workerId);
 
                     // Cancelado desde la UI o la API: la cancelación ya no borra la tarea en vuelo,
-                    // es el latido quien la ve y detiene el stage.
-                    if (_jobs.Get(jobId)?.Status == JobStatus.Cancelled)
+                    // es el latido quien la ve y detiene el stage. Sigue renovando el lease hasta que
+                    // el stage se detenga de verdad, para que el pipeline siga ocupado mientras tanto.
+                    if (!cancelSignalled && _jobs.Get(jobId)?.Status == JobStatus.Cancelled)
                     {
+                        cancelSignalled = true;
                         onJobCancelled();
-                        return;
                     }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
