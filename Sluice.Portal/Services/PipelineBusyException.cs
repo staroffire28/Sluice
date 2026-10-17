@@ -4,8 +4,8 @@ namespace Sluice.Portal.Services;
 // InvalidOperationException para quien ya las trata así; el scheduler la distingue para no alertar.
 public sealed class PipelineBusyException(string message) : InvalidOperationException(message)
 {
-    // Un solo job activo por pipeline. Un job cancelado cuyo stage aún corre también cuenta: hasta su
-    // próximo latido ese stage sigue escribiendo parquet y estado, y otro job lo pisaría.
+    // Un solo job activo por pipeline. Un job cancelado cuyo stage aún corre también cuenta: hasta que se
+    // detiene de verdad ese stage sigue escribiendo parquet y estado, y otro job lo pisaría.
     public static async Task ThrowIfBusyAsync(
         IJobService jobs, ITaskStore tasks, string pipelineId, string runningMessage, CancellationToken cancellationToken)
     {
