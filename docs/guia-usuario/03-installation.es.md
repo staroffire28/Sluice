@@ -111,7 +111,7 @@ volumes:
 
 con un `Caddyfile` como `sluice.example.com { reverse_proxy api:58472 }`. Pon `KNOWN_PROXIES` o `KNOWN_NETWORKS` con el proxy: sin ellas `X-Forwarded-For` solo se acepta desde loopback, y todos los usuarios comparten la IP del proxy en el límite de intentos de login.
 
-**Opción B, HTTPS en el portal.** Monta un `.pfx` y pon `ASPNETCORE_URLS=https://+:58472`, `ASPNETCORE_Kestrel__Certificates__Default__Path=/certs/sluice.pfx` y `ASPNETCORE_Kestrel__Certificates__Default__Password` en el servicio `api`, y publica en todas las interfaces con `SLUICE_HTTP_BIND=0.0.0.0` en `.env`. La renovación del certificado corre de tu cuenta.
+**Opción B, HTTPS en el portal.** Monta un `.pfx` y pon `ASPNETCORE_URLS=https://+:58472;http://localhost:58471`, `ASPNETCORE_Kestrel__Certificates__Default__Path=/certs/sluice.pfx` y `ASPNETCORE_Kestrel__Certificates__Default__Password` en el servicio `api`. El healthcheck del compose sondea HTTP plano, y los workers no arrancan hasta que `api` está sano: sobrescribe el `healthcheck` de `api` con el mismo `test` de tu compose pero con la URL `http://localhost:58471/health` (ese listener HTTP solo responde dentro del contenedor). Después publica en todas las interfaces con `SLUICE_HTTP_BIND=0.0.0.0` en `.env`. La renovación del certificado corre de tu cuenta.
 
 ## Primer arranque
 
