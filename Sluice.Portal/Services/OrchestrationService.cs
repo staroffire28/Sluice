@@ -346,6 +346,7 @@ public sealed class OrchestrationService : IOrchestrationService
         {
             await _parquet.ArchiveCurrentAsync(pipelineId, entity, CurrentAsVersion(state, entity), cancellationToken);
             tables.Remove(entity);
+            pendingReload.RemoveAll(e => string.Equals(e, entity, StringComparison.OrdinalIgnoreCase));
             stateStore.Save(rewound);
         }
 

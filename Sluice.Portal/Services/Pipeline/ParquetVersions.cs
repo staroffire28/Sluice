@@ -194,7 +194,8 @@ public static class ParquetVersions
     // Tablas que restaurar un punto recarga en SQL: las que vuelven atrás y las que un restore
     // anterior ya movió sin llegar a recargarlas (PipelineState.PendingReload).
     public static IReadOnlyList<string> ToReload(RestorePlan plan, IEnumerable<string> pendingReload) =>
-        plan.Restore.Select(r => r.Entity).Union(pendingReload, StringComparer.OrdinalIgnoreCase).ToList();
+        plan.Restore.Select(r => r.Entity).Union(pendingReload, StringComparer.OrdinalIgnoreCase)
+            .Except(plan.Archive, StringComparer.OrdinalIgnoreCase).ToList();
 
     public static RestorePlan Plan(
         IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>> versions,
