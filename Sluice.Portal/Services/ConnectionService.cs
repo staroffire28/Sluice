@@ -98,14 +98,34 @@ public sealed class ConnectionService : IConnectionService
 
     // Si la edición cambia el tipo, la configuración anterior es de otro tipo (p. ej. la cuenta y
     // el client_secret de Azure en un origen que pasa a local) y no se arrastra.
-    private static Connection Merge(Connection existing, Connection connection) =>
-        connection with
+    private static Connection Merge(Connection existing, Connection connection)
+    {
+        var merged = connection with
         {
             Id = existing.Id,
             Config = SameType(existing, connection)
                 ? MergeConfig(existing.Config, connection.Config)
                 : new Dictionary<string, string?>(connection.Config, StringComparer.OrdinalIgnoreCase),
         };
+
+        // Al guardar, un secreto que no viaja porque cambió su destino es un error explícito, no una
+        // conexión que falla después sin contraseña.
+        if (SameType(existing, connection) && ChangedSecretTarget(existing.Config, connection.Config) is { } target)
+        {
+            var missing = existing.Config
+                .Where(e => SecretMasker.IsSecretKey(e.Key) && !string.IsNullOrEmpty(e.Value)
+                    && string.IsNullOrEmpty(merged.Config.GetValueOrDefault(e.Key)))
+                .Select(e => e.Key)
+                .ToList();
+            if (missing.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Has cambiado '{target}': vuelve a escribir {string.Join(", ", missing)} (el guardado no se envía a otro destino).");
+            }
+        }
+
+        return merged;
+    }
 
     private static bool SameType(Connection a, Connection b) =>
         string.Equals(a.Type, b.Type, StringComparison.OrdinalIgnoreCase);
@@ -177,11 +197,45 @@ public sealed class ConnectionService : IConnectionService
         return copied;
     }
 
+    // Claves que dicen a dónde viaja el secreto (alias en el mismo grupo). Si cambian, el secreto
+    // guardado no se reutiliza: probar con otro host y la contraseña en blanco mandaba la guardada a
+    // ese host (y en ADLS, el token de Entra que se obtiene con el client_secret).
+    private static readonly string[][] SecretTargetKeys = [["host", "server"], ["account", "storage_account"], ["tenant_id"], ["client_id"]];
+
+    private static string? ChangedSecretTarget(
+        IReadOnlyDictionary<string, string?> existing,
+        IReadOnlyDictionary<string, string?> incoming)
+    {
+        static string? First(IReadOnlyDictionary<string, string?> config, string[] aliases) =>
+            aliases.Select(key => config.TryGetValue(key, out var value) ? value?.Trim() : null)
+                .FirstOrDefault(value => !string.IsNullOrEmpty(value));
+
+        foreach (var aliases in SecretTargetKeys)
+        {
+            var after = First(incoming, aliases);
+            if (after is not null && !string.Equals(First(existing, aliases), after, StringComparison.OrdinalIgnoreCase))
+            {
+                return aliases[0];
+            }
+        }
+
+        return null;
+    }
+
     private static Dictionary<string, string?> MergeConfig(
         IReadOnlyDictionary<string, string?> existing,
         IReadOnlyDictionary<string, string?> incoming)
     {
-        var merged = new Dictionary<string, string?>(existing, StringComparer.OrdinalIgnoreCase);
+        var keepSecrets = ChangedSecretTarget(existing, incoming) is null;
+        var merged = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in existing)
+        {
+            if (keepSecrets || !SecretMasker.IsSecretKey(key))
+            {
+                merged[key] = value;
+            }
+        }
+
         foreach (var (key, value) in incoming)
         {
             if (SecretMasker.IsSecretKey(key)

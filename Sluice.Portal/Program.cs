@@ -217,6 +217,10 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+// Una vez: las conexiones SQL anteriores siguen confiando en el certificado (ver ConnectionMigrations).
+Sluice.Portal.Services.Connections.ConnectionMigrations.PinTrustServerCertificate(
+    app.Services.GetRequiredService<ConnectionStore>(), appOptions.DataDir);
+
 app.UseForwardedHeaders();
 app.UseRequestLocalization();
 app.UseStaticFiles();

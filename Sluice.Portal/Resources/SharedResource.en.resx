@@ -178,6 +178,8 @@
   <data name="Page.Destinations.CredentialsSection" xml:space="preserve"><value>Credentials</value></data>
   <data name="Page.Destinations.Host" xml:space="preserve"><value>Host</value></data>
   <data name="Page.Destinations.Database" xml:space="preserve"><value>Database</value></data>
+  <data name="Page.Destinations.TrustServerCertificate" xml:space="preserve"><value>Trust the server certificate (insecure)</value></data>
+  <data name="Page.Destinations.TrustServerCertificateHint" xml:space="preserve"><value>Only if the SQL Server uses a self-signed certificate you cannot replace: the connection stays encrypted, but the server it reaches is not verified.</value></data>
   <data name="Page.Destinations.User" xml:space="preserve"><value>User</value></data>
   <data name="Page.Destinations.Password" xml:space="preserve"><value>Password</value></data>
   <data name="Page.Destinations.DeleteDestination" xml:space="preserve"><value>Delete destination</value></data>
