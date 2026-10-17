@@ -128,7 +128,7 @@ public sealed class SqlExecutor : ISqlExecutor
 
         var failedEntities = 0;
         progress.StartStep(JobStepCatalog.Merge, total: manifest.Entities.Count);
-        using var stallWatch = new SqlStallWatch(StallAlertAfter, (step, elapsed) => WarnPossibleBlock(pipeline, task.JobId, step, elapsed));
+        using var stallWatch = new SqlStallWatch(StallAlertAfter, (step, elapsed) => WarnPossibleBlock(pipeline, task.JobId, step, elapsed), _logger);
         foreach (var entry in manifest.Entities)
         {
             stallWatch.Touch($"{entry.Entity} · ensureTable");
