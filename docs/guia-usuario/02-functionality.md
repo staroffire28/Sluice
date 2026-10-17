@@ -58,7 +58,7 @@ Status is shown everywhere as a colored badge: **Running/Claimed** (accent), **O
 
 **Run a pipeline.** From the run menu on Dashboard or Pipelines: **Run** (Incremental: only new data, the usual one), **Force** (reload SQL from consolidated Parquet — all tables), **Reconcile** (verify counts only), **Diff** (report differences only). Confirm in the dialog.
 
-**Follow / cancel a run.** Open the job detail to watch stages, tables and timeline live; its canvas also shows the step where the consolidated Parquet is stored: *Consolidate and publish to ADLS*, or *Consolidate and save to the portal disk* when the source keeps its Parquet on the portal disk. **Cancel** is available only while the job is running.
+**Follow / cancel a run.** Open the job detail to watch stages, tables and timeline live; its canvas also shows the step where the consolidated Parquet is stored: *Consolidate and publish to ADLS*, or *Consolidate and save to the portal disk* when the source keeps its Parquet on the portal disk. **Cancel** is available only while the job is running. The worker asks the stage in progress to stop at its next heartbeat (up to a third of the task lease, 40 s by default); until the stage has actually stopped, the pipeline rejects any other run, re-sync, restore or reset, saying the cancelled job is still stopping.
 
 **Retry a job.** From the job menu on Jobs, or **Retry** in the job detail, for jobs in Error, Partial or Stalled. It creates a new job; the original stays in history.
 

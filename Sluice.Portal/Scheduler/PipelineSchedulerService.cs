@@ -151,6 +151,11 @@ public sealed class PipelineSchedulerService : BackgroundService
                 var job = await _orchestration.RunPipelineAsync(pipeline.Id, JobType.Incremental, ct);
                 _activity.LogSystem("scheduler.run", $"Auto-run del scheduler en el pipeline {pipeline.Id} ({catalog.PendingSnapshots.Count} snapshot(s), job {job.Id}).", pipeline.Id, job.Id);
             }
+            catch (PipelineBusyException ex)
+            {
+                // Un job recién cancelado aún detiene su stage: se reintenta en el próximo poll.
+                _logger.LogInformation("Scheduler skip {PipelineId}: {Reason}", pipeline.Id, ex.Message);
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Scheduler failed for pipeline {PipelineId}", pipeline.Id);

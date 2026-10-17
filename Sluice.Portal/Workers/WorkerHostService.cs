@@ -117,12 +117,23 @@ public sealed class WorkerHostService : BackgroundService
         return Enum.GetValues<PipelineStage>();
     }
 
+    // Intervalo del latido; solo lo fijan los tests (en producción, un tercio del lease).
+    internal TimeSpan? HeartbeatInterval { get; set; }
+
     // internal: los tests ejercitan el flujo de una tarea sin el bucle de polling.
     internal async Task ProcessStageAsync(PipelineStage stage, string workerId, CancellationToken ct)
     {
         var task = await _tasks.TryClaimAsync(stage, workerId, ct);
         if (task is null)
         {
+            return;
+        }
+
+        // Job cancelado mientras la tarea esperaba, o reclamada tras caer el worker que la ejecutaba:
+        // se libera sin ejecutarla (el router no avanza un job cancelado).
+        if (_jobs.Get(task.JobId)?.Status == JobStatus.Cancelled)
+        {
+            await _tasks.CompleteAsync(task.Id, stage, workerId, ct);
             return;
         }
 
@@ -133,7 +144,16 @@ public sealed class WorkerHostService : BackgroundService
         // dejó de ser nuestra, cancela el stage (stageCts) para no ejecutarlo en paralelo.
         using var heartbeatCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         using var stageCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var heartbeat = HeartbeatLoopAsync(task.Id, stage, workerId, stageCts.Cancel, heartbeatCts.Token);
+        // Dos motivos para cortar el stage: lease perdido (la tarea ya es de otro worker) o job
+        // cancelado (sigue siendo nuestra y hay que liberarla).
+        var jobCancelled = false;
+        var heartbeat = HeartbeatLoopAsync(
+            task.Id, stage, workerId, task.JobId, stageCts.Cancel, () =>
+            {
+                jobCancelled = true;
+                stageCts.Cancel();
+            },
+            heartbeatCts.Token, HeartbeatInterval);
 
         // El latido se detiene ANTES de completar o fallar la tarea: un latido tardío podría
         // reescribir claimed/X después de que la tarea pasara a done/ o error/.
@@ -165,6 +185,16 @@ public sealed class WorkerHostService : BackgroundService
                 await _router.RouteCompletedTaskAsync(job, ct);
             }
         }
+        catch (Exception) when (jobCancelled && !ct.IsCancellationRequested)
+        {
+            // Job cancelado: el stage se cortó (por la cancelación o por cómo la tradujo el driver,
+            // p. ej. una SqlException). Ni es un fallo ni avanza; se libera la tarea para que el
+            // pipeline admita otro job.
+            await StopHeartbeatAsync();
+            await _tasks.CompleteAsync(task.Id, stage, workerId, ct);
+            _jobs.AppendEvent(task.JobId, EventLevel.Warning, $"Etapa {stage} detenida por la cancelación del job.");
+            _logger.LogInformation("Stage {Stage} de la tarea {TaskId} detenido: job cancelado.", stage, task.Id);
+        }
         catch (OperationCanceledException) when (stageCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
             // Lease perdido: la tarea la continúa quien la reclamó; no se marca el job como fallido.
@@ -191,12 +221,15 @@ public sealed class WorkerHostService : BackgroundService
         string taskId,
         PipelineStage stage,
         string workerId,
+        string jobId,
         Action onLeaseLost,
+        Action onJobCancelled,
         CancellationToken ct,
         TimeSpan? interval = null)
     {
         var leaseSeconds = Math.Max(15, _settings.Get().TaskLeaseSeconds);
         using var timer = new PeriodicTimer(interval ?? TimeSpan.FromSeconds(Math.Max(5, leaseSeconds / 3)));
+        var cancelSignalled = false;
         try
         {
             while (await timer.WaitForNextTickAsync(ct))
@@ -213,6 +246,15 @@ public sealed class WorkerHostService : BackgroundService
                     }
 
                     _workers.Touch(workerId);
+
+                    // Cancelado desde la UI o la API: la cancelación ya no borra la tarea en vuelo,
+                    // es el latido quien la ve y detiene el stage. Sigue renovando el lease hasta que
+                    // el stage se detenga de verdad, para que el pipeline siga ocupado mientras tanto.
+                    if (!cancelSignalled && _jobs.Get(jobId)?.Status == JobStatus.Cancelled)
+                    {
+                        cancelSignalled = true;
+                        onJobCancelled();
+                    }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

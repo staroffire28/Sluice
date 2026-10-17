@@ -88,9 +88,9 @@ public sealed class OrchestrationService : IOrchestrationService
 
     public IReadOnlyList<Job> GetActiveJobs() => _jobs.ListRunning();
 
-    // Cancelación cooperativa: purga las tareas Pending/Claimed del job
-    // para que no se procesen/encolen más stages, y marca el job Cancelled. El stage en
-    // vuelo termina su trabajo actual; al completar, el router ve Cancelled y no avanza.
+    // Cancelación cooperativa: purga las tareas Pending del job para que no se procesen más
+    // stages, y marca el job Cancelled. La tarea Claimed sigue siendo de su worker: su latido ve
+    // Cancelled, detiene el stage y la libera; el router no avanza un job cancelado.
     public async Task CancelAsync(string jobId, CancellationToken cancellationToken = default)
     {
         // Partial sin FinishedAt también está en curso (ingest parcial que sigue con SQL).
@@ -153,10 +153,7 @@ public sealed class OrchestrationService : IOrchestrationService
         // otro (evita dos jobs concurrentes pisándose). Mismo criterio que usa el scheduler.
         // El lock hace atómico "comprobar + crear" frente a otros Run simultáneos.
         using var runLock = await AcquireRunLockAsync(pipelineId, cancellationToken);
-        if (_jobs.ListRunning().Any(j => j.PipelineId == pipelineId))
-        {
-            throw new InvalidOperationException("Ya hay un job en ejecución para este pipeline.");
-        }
+        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
 
         // Reconcile y Diff solo comparan conteos (parquet consolidado vs SQL) y CompareValues compara
         // valores: no ingieren ni mergean. Arrancan directamente en la etapa de conciliación con las
@@ -278,10 +275,7 @@ public sealed class OrchestrationService : IOrchestrationService
 
         // Misma guardia anti-doble-run que el Run completo: un solo job activo por pipeline.
         using var runLock = await AcquireRunLockAsync(pipelineId, cancellationToken);
-        if (_jobs.ListRunning().Any(j => j.PipelineId == pipelineId))
-        {
-            throw new InvalidOperationException("Ya hay un job en ejecución para este pipeline.");
-        }
+        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
 
         return await EnqueueResyncAsync(pipelineId, entities, mode, triggeredBy, cancellationToken);
     }
@@ -303,10 +297,7 @@ public sealed class OrchestrationService : IOrchestrationService
             ?? throw new InvalidOperationException("Restoring a restore point requires the pipeline state store.");
 
         using var runLock = await AcquireRunLockAsync(pipelineId, cancellationToken);
-        if (_jobs.ListRunning().Any(j => j.PipelineId == pipelineId))
-        {
-            throw new InvalidOperationException("Ya hay un job en ejecución para este pipeline.");
-        }
+        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
 
         var state = stateStore.GetOrCreate(pipelineId);
         var plan = ParquetVersions.Plan(await _parquet.ListAllVersionsAsync(pipelineId, cancellationToken), state.Tables, snapshot);
@@ -499,10 +490,7 @@ public sealed class OrchestrationService : IOrchestrationService
             ?? throw new InvalidOperationException("Pipeline not found.");
 
         using var runLock = await AcquireRunLockAsync(pipelineId, cancellationToken);
-        if (_jobs.ListRunning().Any(j => j.PipelineId == pipelineId))
-        {
-            throw new InvalidOperationException("Ya hay un job en ejecución para este pipeline.");
-        }
+        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
 
         var artifacts = await _parquet.ListAsync(pipelineId, cancellationToken);
         var entities = artifacts
