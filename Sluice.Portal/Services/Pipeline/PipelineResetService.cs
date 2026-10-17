@@ -39,6 +39,7 @@ public sealed class PipelineResetService : IPipelineResetService
     private readonly ISqlConnectionFactory _sqlFactory;
     private readonly ISqlMergeExecutor _mergeExecutor;
     private readonly IJobService _jobs;
+    private readonly ITaskStore _tasks;
 
     public PipelineResetService(
         IPipelineService pipelines,
@@ -46,7 +47,8 @@ public sealed class PipelineResetService : IPipelineResetService
         IParquetArtifactService parquet,
         ISqlConnectionFactory sqlFactory,
         ISqlMergeExecutor mergeExecutor,
-        IJobService jobs)
+        IJobService jobs,
+        ITaskStore tasks)
     {
         _pipelines = pipelines;
         _stateStore = stateStore;
@@ -54,6 +56,7 @@ public sealed class PipelineResetService : IPipelineResetService
         _sqlFactory = sqlFactory;
         _mergeExecutor = mergeExecutor;
         _jobs = jobs;
+        _tasks = tasks;
     }
 
     public async Task<PipelineResetResult> ResetAsync(string pipelineId, bool truncateSql, CancellationToken cancellationToken = default)
@@ -63,11 +66,8 @@ public sealed class PipelineResetService : IPipelineResetService
 
         // Mismo criterio que Run/Resync: resetear bajo un job en curso truncaría tablas y borraría
         // parquets que el job está usando, y al terminar este pisaría el estado reseteado.
-        if (_jobs.ListRunning().Any(j => j.PipelineId == pipelineId))
-        {
-            throw new InvalidOperationException(
-                "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de resetear.");
-        }
+        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId,
+            "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de resetear.", cancellationToken);
 
         // Entidades a truncar: las que el pipeline ya llegó a cargar (PipelineState.Tables),
         // tomadas ANTES de tocar nada — si truncar falla a medio camino, el estado sigue

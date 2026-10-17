@@ -13,9 +13,13 @@ public interface ITaskStore
     Task ReclaimExpiredLeasesAsync(CancellationToken cancellationToken = default);
     int CountByStatus(PipelineStage stage, PipelineTaskStatus status);
 
-    // Cancelación cooperativa: elimina de la cola las tareas Pending/Claimed de un job
-    // (todas las stages) para que no se procesen ni se encolen las siguientes. Devuelve
-    // cuántas se eliminaron. La tarea en vuelo termina su trabajo actual; al completar,
-    // CompleteAsync no la encuentra y el router no avanza al siguiente stage.
+    // Cancelación cooperativa: elimina de la cola las tareas Pending de un job (todas las stages)
+    // para que no se procesen. Devuelve cuántas se eliminaron. La Claimed sigue siendo de su worker:
+    // su latido ve el job cancelado, detiene el stage y la libera (el router no avanza un job
+    // cancelado). Mientras tanto FindLiveClaimAsync la encuentra y el pipeline no admite otro job.
     Task<int> CancelJobTasksAsync(string jobId, CancellationToken cancellationToken = default);
+
+    // Tarea reclamada del pipeline con lease vigente: un worker aún ejecuta ese stage, también el de
+    // un job ya cancelado que todavía no se ha detenido. null si no hay ninguna.
+    Task<PipelineTask?> FindLiveClaimAsync(string pipelineId, CancellationToken cancellationToken = default);
 }

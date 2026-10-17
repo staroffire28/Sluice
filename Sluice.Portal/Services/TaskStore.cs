@@ -130,6 +130,11 @@ public sealed class TaskStore : ITaskStore
 
     public async Task<PipelineTask?> HeartbeatAsync(string taskId, PipelineStage stage, string workerId, CancellationToken cancellationToken = default)
     {
+        // Bajo el lock de la tarea, como el reclaim: si este ya la devolvió a pending, reescribir
+        // claimed/X la dejaría a la vez en pending/ y en claimed/, y se ejecutaría dos veces. Con el
+        // lock ocupado se lanza (el bucle del latido lo reintenta); null diría "ya no es tuya".
+        using var taskLock = await TryLockTaskAsync(stage, taskId, cancellationToken)
+            ?? throw new IOException($"La tarea {taskId} está ocupada por otro proceso.");
         var path = GetPath(stage, PipelineTaskStatus.Claimed, taskId);
         if (!File.Exists(path))
         {
@@ -262,10 +267,11 @@ public sealed class TaskStore : ITaskStore
     public async Task<int> CancelJobTasksAsync(string jobId, CancellationToken cancellationToken = default)
     {
         var removed = 0;
-        // Solo Pending y Claimed: las Done/Error ya son terminales y no deben tocarse.
+        // Solo Pending: la Claimed la detiene y libera su worker (ver ITaskStore), y las Done/Error
+        // ya son terminales.
         foreach (var stage in Enum.GetValues<PipelineStage>())
         {
-            foreach (var status in new[] { PipelineTaskStatus.Pending, PipelineTaskStatus.Claimed })
+            foreach (var status in new[] { PipelineTaskStatus.Pending })
             {
                 var directory = GetDirectory(stage, status);
                 if (!Directory.Exists(directory))
@@ -305,6 +311,40 @@ public sealed class TaskStore : ITaskStore
         }
 
         return removed;
+    }
+
+    public async Task<PipelineTask?> FindLiveClaimAsync(string pipelineId, CancellationToken cancellationToken = default)
+    {
+        var now = _time.GetUtcNow();
+        foreach (var stage in Enum.GetValues<PipelineStage>())
+        {
+            var directory = GetDirectory(stage, PipelineTaskStatus.Claimed);
+            if (!Directory.Exists(directory))
+            {
+                continue;
+            }
+
+            foreach (var file in Directory.GetFiles(directory, "*.json"))
+            {
+                PipelineTask? task;
+                try
+                {
+                    task = await ReadTaskAsync(file, cancellationToken);
+                }
+                catch (FileNotFoundException)
+                {
+                    // Se completó o se reclamó entre el listado y la lectura: ya no está en curso.
+                    continue;
+                }
+
+                if (task?.PipelineId == pipelineId && task.LeaseExpiresAt > now)
+                {
+                    return task;
+                }
+            }
+        }
+
+        return null;
     }
 
     private async Task<PipelineTask?> MoveClaimedAsync(
