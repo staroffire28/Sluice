@@ -7,7 +7,7 @@ namespace Sluice.Portal.Services.Adls;
 
 public static class CsvEntityReader
 {
-    // Lee filas en streaming: el parseo por línea (ParseCsvLine/CoerceValue) no depende de tener
+    // Lee filas en streaming: el parseo por línea (ParseCsvLine/TryCoerceValue) no depende de tener
     // el CSV completo en memoria, así que consume un IAsyncEnumerable<string> de líneas — la
     // fuente (AdlsClient) nunca tiene que juntar un archivo grande en un solo string.
     public static async IAsyncEnumerable<Dictionary<string, object?>> ReadRowsAsync(
