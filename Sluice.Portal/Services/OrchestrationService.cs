@@ -350,18 +350,19 @@ public sealed class OrchestrationService : IOrchestrationService
             stateStore.Save(rewound);
         }
 
-        if (pendingReload.Count == 0)
+        var toReload = ParquetVersions.ToReload(plan, state.PendingReload);
+        if (toReload.Count == 0)
         {
             return null;
         }
 
         // La recarga de SQL vacía PendingReload (SqlExecutor), así que un re-sync fallido las deja
         // pendientes para el siguiente intento.
-        var job = await EnqueueResyncAsync(pipelineId, pendingReload.ToList(), ResyncMode.Reload, AutoRemediation.TriggeredByUser, cancellationToken);
+        var job = await EnqueueResyncAsync(pipelineId, toReload, ResyncMode.Reload, AutoRemediation.TriggeredByUser, cancellationToken);
         _jobs.AppendEvent(job.Id, EventLevel.Info,
             $"Restaurado el punto del snapshot {snapshot}: {plan.Restore.Count} tabla(s) vuelven a su versión de entonces"
             + (plan.Archive.Count > 0 ? $" y {plan.Archive.Count} que aún no existían se archivan ({string.Join(", ", plan.Archive)})" : "")
-            + $"; se recargan en SQL {pendingReload.Count} tabla(s) ({string.Join(", ", pendingReload)}).");
+            + $"; se recargan en SQL {toReload.Count} tabla(s) ({string.Join(", ", toReload)}).");
         return job;
     }
 
