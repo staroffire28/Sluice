@@ -113,22 +113,43 @@ public sealed class IngestExecutor : IIngestExecutor
         {
             // Re-ejecución de este mismo job (el worker cayó tras registrar el ingest y el lease
             // venció): su manifest lista lo ingerido y SQL aún no lo ha mergeado. Vaciarlo dejaría
-            // esas filas fuera de SQL para siempre; su Summary también es el bueno.
+            // esas filas fuera de SQL para siempre. Si cayó antes de escribir su Summary (p. ej.
+            // durante la poda), Summary y Entities se rehacen desde ese manifest.
             var previous = _manifestStore.Load(task.PipelineId, task.JobId);
             var alreadyIngested = previous is { Entities.Count: > 0 };
             _jobs.AppendEvent(task.JobId, EventLevel.Info, alreadyIngested
                 ? $"El ingest de este job ya estaba registrado ({previous!.Entities.Count} tabla(s)): se conserva su manifest para la etapa SQL."
                 : JobEventMarkers.NoNewSnapshots);
+            var summaryWritten = job.Summary.ContainsKey("snapshotsSelected");
             _jobs.Update(job.Id, job with
             {
                 StageStatus = new Dictionary<string, string>(job.StageStatus) { ["ingest"] = "done" },
                 StageTimings = job.StageTimings.Set("ingest", started: stageStart, finished: DateTimeOffset.UtcNow),
+                Entities = alreadyIngested && !summaryWritten
+                    ? previous!.Entities.Select(m => new JobEntityResult
+                    {
+                        Entity = m.Entity,
+                        CsvRows = m.CsvRows,
+                        Status = "ok",
+                        Watermark = m.Watermark,
+                        Message = $"{m.FilteredRows} row(s) from snapshot {m.Snapshot}",
+                    }).ToList()
+                    : job.Entities,
                 // Mismas claves que el cierre normal: la UI distingue "sin datos nuevos" por
                 // snapshotsSelected = 0 sin depender del texto del evento.
-                Summary = alreadyIngested ? job.Summary : new Dictionary<string, object?>
+                Summary = (alreadyIngested, summaryWritten) switch
                 {
-                    ["snapshotsProcessed"] = 0,
-                    ["snapshotsSelected"] = 0,
+                    (false, _) => new Dictionary<string, object?>
+                    {
+                        ["snapshotsProcessed"] = 0,
+                        ["snapshotsSelected"] = 0,
+                    },
+                    (true, false) => new Dictionary<string, object?>
+                    {
+                        ["csvRows"] = previous!.Entities.Sum(m => m.CsvRows),
+                        ["entities"] = previous.Entities.Count,
+                    },
+                    (true, true) => job.Summary,
                 },
             });
             if (!alreadyIngested)
