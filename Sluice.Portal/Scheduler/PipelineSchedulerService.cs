@@ -138,11 +138,18 @@ public sealed class PipelineSchedulerService : BackgroundService
         // esperan para siempre y el job sigue "en curso" sin que nada lo delate.
         if (_options.IsDistributed)
         {
-            foreach (var stall in _queueStall.Check())
+            try
             {
-                var message = $"Cola parada: {stall.PendingTasks} tarea(s) de la etapa {stall.Stage} pendiente(s) desde hace más de {QueueStallWatch.Threshold.TotalMinutes:0} min sin ningún worker vivo de esa etapa. Comprueba el contenedor del worker {stall.Stage}.";
-                _activity.LogSystem("queue.stalled", message, level: "error");
-                await _alerts.SendAsync(message, ct);
+                foreach (var stall in _queueStall.Check())
+                {
+                    var message = $"Cola parada: {stall.PendingTasks} tarea(s) de la etapa {stall.Stage} pendiente(s) desde hace más de {QueueStallWatch.Threshold.TotalMinutes:0} min sin ningún worker vivo de esa etapa. Comprueba el contenedor del worker {stall.Stage}.";
+                    _activity.LogSystem("queue.stalled", message, level: "error");
+                    await _alerts.SendAsync(message, ct);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "La vigilancia de colas paradas falló; se reintenta en el próximo poll.");
             }
         }
 
