@@ -303,6 +303,7 @@
   <data name="Page.Parquet.Restore" xml:space="preserve"><value>Restaurar</value></data>
   <data name="Page.Parquet.ConfirmRestoreTitle" xml:space="preserve"><value>Restaurar punto</value></data>
   <data name="Page.Parquet.ConfirmRestore" xml:space="preserve"><value>¿Volver al snapshot {0}? {1} tabla(s) recuperan el parquet que tenían y {2} que aún no existían se archivan. Las copias actuales pasan a ser versiones (el punto más reciente deshace la restauración) y SQL se recarga para las tablas que vuelven.</value></data>
+  <data name="Page.Parquet.PendingReloadNote" xml:space="preserve"><value>También se recargan en SQL {0} tabla(s) de una restauración anterior que no terminó.</value></data>
   <data name="Page.Parquet.Restored" xml:space="preserve"><value>Punto del snapshot {0} restaurado; se están recargando las tablas en SQL.</value></data>
   <data name="Page.Catalog.Title" xml:space="preserve"><value>Catálogo de tablas</value></data>
   <data name="Page.Catalog.Subtitle" xml:space="preserve"><value>Qué tablas y columnas del lago se cargan en SQL</value></data>

@@ -216,6 +216,12 @@ public static class ParquetVersions
         return new RestorePlan(restore, archive);
     }
 
+    // Tablas que restaurar un punto recarga en SQL: las que vuelven atrás y las que un restore
+    // anterior ya movió sin llegar a recargarlas (PipelineState.PendingReload).
+    public static IReadOnlyList<string> ToReload(RestorePlan plan, IEnumerable<string> pendingReload) =>
+        plan.Restore.Select(r => r.Entity).Union(pendingReload, StringComparer.OrdinalIgnoreCase)
+            .Except(plan.Archive, StringComparer.OrdinalIgnoreCase).ToList();
+
     // Los puntos que la poda conserva enteros, los únicos que se ofrecen: los de snapshots de los
     // últimos keepDays días y siempre el más reciente. Cuenta la fecha del snapshot y no cuándo se
     // archivaron sus versiones, que cambia al podar: así un punto que se deja caer no vuelve a la

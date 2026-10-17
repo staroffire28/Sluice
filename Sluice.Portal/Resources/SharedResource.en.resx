@@ -304,6 +304,7 @@
   <data name="Page.Parquet.Restore" xml:space="preserve"><value>Restore</value></data>
   <data name="Page.Parquet.ConfirmRestoreTitle" xml:space="preserve"><value>Restore point</value></data>
   <data name="Page.Parquet.ConfirmRestore" xml:space="preserve"><value>Go back to snapshot {0}? {1} table(s) get back the Parquet they had and {2} that did not exist yet are archived. The current copies become versions (the most recent point undoes the restore) and SQL is reloaded for the tables that go back.</value></data>
+  <data name="Page.Parquet.PendingReloadNote" xml:space="preserve"><value>SQL is also reloaded for {0} table(s) from an earlier restore that did not finish.</value></data>
   <data name="Page.Parquet.Restored" xml:space="preserve"><value>Restore point of snapshot {0} restored; the tables are being reloaded in SQL.</value></data>
   <data name="Page.Catalog.Title" xml:space="preserve"><value>Table catalog</value></data>
   <data name="Page.Catalog.Subtitle" xml:space="preserve"><value>Which lake tables and columns are loaded into SQL</value></data>

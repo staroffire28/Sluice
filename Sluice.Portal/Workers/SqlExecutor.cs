@@ -329,7 +329,12 @@ public sealed class SqlExecutor : ISqlExecutor
                 }
             }
 
-            _stateStore.Save(state with { Tables = tables });
+            // Las tablas recargadas ya no esperan la recarga de un punto de restauración.
+            _stateStore.Save(state with
+            {
+                Tables = tables,
+                PendingReload = state.PendingReload.Where(e => !entitySqlRows.ContainsKey(e)).ToList(),
+            });
         }
 
         // El delta solo sirve dentro de este job: se borra al terminar la etapa (vaya bien o mal;
