@@ -22,6 +22,7 @@ public sealed class PipelineSchedulerService : BackgroundService
     private readonly ILogger<PipelineSchedulerService> _logger;
     private readonly IActivityLog _activity;
     private readonly OrphanedJobWatchdog _watchdog;
+    private readonly QueueStallWatch _queueStall;
     private readonly Dictionary<string, DateTimeOffset> _stallAlertsSent = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _lagAlertsSent = new(StringComparer.OrdinalIgnoreCase);
 
@@ -37,9 +38,11 @@ public sealed class PipelineSchedulerService : BackgroundService
         IAdlsClientFactory adlsFactory,
         ILogger<PipelineSchedulerService> logger,
         IActivityLog activity,
-        OrphanedJobWatchdog watchdog)
+        OrphanedJobWatchdog watchdog,
+        QueueStallWatch queueStall)
     {
         _watchdog = watchdog;
+        _queueStall = queueStall;
         _options = options.Value;
         _settings = settings;
         _pipelines = pipelines;
@@ -108,14 +111,39 @@ public sealed class PipelineSchedulerService : BackgroundService
         try
         {
             var orphaned = await _watchdog.SweepAsync(DateTimeOffset.UtcNow, ct);
-            if (orphaned > 0)
+            if (orphaned.Count > 0)
             {
-                _activity.LogSystem("job.orphaned", $"{orphaned} job(s) sin tareas vivas marcado(s) como Error.", level: "warning");
+                _activity.LogSystem("job.orphaned", $"{orphaned.Count} job(s) sin tareas vivas marcado(s) como Error.", level: "warning");
+            }
+
+            foreach (var job in orphaned)
+            {
+                await _alerts.SendPipelineFailureAsync(new PipelineFailureAlert
+                {
+                    PipelineId = job.PipelineId,
+                    PipelineName = _pipelines.Get(job.PipelineId)?.Name,
+                    JobId = job.Id,
+                    JobType = job.Type.ToString(),
+                    Stage = job.CurrentStage?.ToString().ToLowerInvariant() ?? "unknown",
+                    Message = $"Sin ninguna tarea pendiente ni en curso desde hace más de {OrphanedJobWatchdog.Grace.TotalMinutes:0} min (probable caída de un worker entre etapas): marcado como Error. Usa Reintentar para relanzarlo.",
+                }, ct);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "El vigilante de jobs huérfanos falló; se reintenta en el próximo poll.");
+        }
+
+        // En distribuido cada etapa tiene sus workers: si una se queda sin ninguno vivo, sus tareas
+        // esperan para siempre y el job sigue "en curso" sin que nada lo delate.
+        if (_options.IsDistributed)
+        {
+            foreach (var stall in _queueStall.Check())
+            {
+                var message = $"Cola parada: {stall.PendingTasks} tarea(s) de la etapa {stall.Stage} pendiente(s) desde hace más de {QueueStallWatch.Threshold.TotalMinutes:0} min sin ningún worker vivo de esa etapa. Comprueba el contenedor del worker {stall.Stage}.";
+                _activity.LogSystem("queue.stalled", message, level: "error");
+                await _alerts.SendAsync(message, ct);
+            }
         }
 
         foreach (var pipeline in _pipelines.List().Where(p => p.Enabled))
