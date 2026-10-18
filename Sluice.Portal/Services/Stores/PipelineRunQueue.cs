@@ -24,13 +24,18 @@ public sealed class PipelineRunQueue
 
     public QueuedRun? Get(string pipelineId)
     {
+        if (!EntityIds.IsValid(pipelineId))
+        {
+            return null;
+        }
+
         var path = GetPath(pipelineId);
         try
         {
             using var stream = File.OpenRead(path);
             return JsonSerializer.Deserialize<QueuedRun>(stream, JsonDefaults.Options);
         }
-        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return null;
         }
@@ -38,7 +43,14 @@ public sealed class PipelineRunQueue
         {
             // Solo editándolo a mano (se escribe atómicamente): se descarta, o el scheduler fallaría
             // en cada poll y el hueco quedaría ocupado para siempre.
-            File.Delete(path);
+            try
+            {
+                File.Delete(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+
             return null;
         }
     }
@@ -62,6 +74,11 @@ public sealed class PipelineRunQueue
 
     public bool Remove(string pipelineId)
     {
+        if (!EntityIds.IsValid(pipelineId))
+        {
+            return false;
+        }
+
         var path = GetPath(pipelineId);
         if (!File.Exists(path))
         {
@@ -73,5 +90,7 @@ public sealed class PipelineRunQueue
     }
 
     private string GetPath(string pipelineId) =>
-        Path.Combine(_options.DataDir, pipelineId, "state", "queued_run.json");
+        EntityIds.IsValid(pipelineId)
+            ? Path.Combine(_options.DataDir, pipelineId, "state", "queued_run.json")
+            : throw new ArgumentException($"Id no válido: '{pipelineId}'.", nameof(pipelineId));
 }
