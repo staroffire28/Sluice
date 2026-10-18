@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
@@ -23,6 +24,7 @@ public sealed class PipelineSchedulerService : BackgroundService
     private readonly IActivityLog _activity;
     private readonly OrphanedJobWatchdog _watchdog;
     private readonly QueueStallWatch _queueStall;
+    private readonly PipelineRunQueue _runQueue;
     private readonly Dictionary<string, DateTimeOffset> _stallAlertsSent = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _lagAlertsSent = new(StringComparer.OrdinalIgnoreCase);
 
@@ -39,10 +41,12 @@ public sealed class PipelineSchedulerService : BackgroundService
         ILogger<PipelineSchedulerService> logger,
         IActivityLog activity,
         OrphanedJobWatchdog watchdog,
-        QueueStallWatch queueStall)
+        QueueStallWatch queueStall,
+        PipelineRunQueue runQueue)
     {
         _watchdog = watchdog;
         _queueStall = queueStall;
+        _runQueue = runQueue;
         _options = options.Value;
         _settings = settings;
         _pipelines = pipelines;
@@ -153,6 +157,8 @@ public sealed class PipelineSchedulerService : BackgroundService
             }
         }
 
+        await StartQueuedRunsAsync(ct);
+
         foreach (var pipeline in _pipelines.List().Where(p => p.Enabled))
         {
             if (_jobs.ListRunning().Any(j => j.PipelineId == pipeline.Id))
@@ -196,6 +202,46 @@ public sealed class PipelineSchedulerService : BackgroundService
                 _logger.LogWarning(ex, "Scheduler failed for pipeline {PipelineId}", pipeline.Id);
                 _activity.LogSystem("scheduler.error", $"El scheduler falló en el pipeline {pipeline.Id}: {ex.Message}", pipeline.Id, level: "error");
                 await _alerts.SendAsync($"Scheduler failed for {pipeline.Id}: {ex.Message}", ct);
+            }
+        }
+    }
+
+    // Lo que se dejó en cola con el pipeline ocupado arranca en cuanto queda libre, antes que el
+    // auto-run (que ya no lo lanza: el pipeline pasa a tener un job en curso). También en pipelines
+    // con el scheduler desactivado, porque la ejecución manual siempre se permite, y aunque el job
+    // anterior fallara o se cancelara. Se saca de la cola después de crear el job: si el proceso cae
+    // entre medias, el peor caso es lanzarlo dos veces, mejor que perder la petición.
+    private async Task StartQueuedRunsAsync(CancellationToken ct)
+    {
+        foreach (var pipeline in _pipelines.List())
+        {
+            if (_runQueue.Get(pipeline.Id) is not { } queued || _jobs.ListRunning().Any(j => j.PipelineId == pipeline.Id))
+            {
+                continue;
+            }
+
+            try
+            {
+                var job = await _orchestration.RunPipelineAsync(pipeline.Id, queued.Type, ct);
+                _runQueue.Remove(pipeline.Id);
+                var requestedAt = queued.RequestedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+                _jobs.AppendEvent(job.Id, EventLevel.Info, $"Lanzado desde la cola (pedido el {requestedAt} UTC).");
+                _activity.LogSystem("pipeline.queue.started", $"Arranca {queued.Type} en cola del pipeline {pipeline.Id} (job {job.Id}).", pipeline.Id, job.Id);
+            }
+            catch (PipelineBusyException ex)
+            {
+                // Un job recién cancelado aún detiene su stage: sigue en cola para el próximo poll.
+                _logger.LogInformation("Queued run waits {PipelineId}: {Reason}", pipeline.Id, ex.Message);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Como un Run manual que falla al arrancar: se avisa y se quita, para no reintentarlo
+                // (y alertar) en cada poll.
+                _runQueue.Remove(pipeline.Id);
+                var message = $"No se pudo lanzar {queued.Type} en cola del pipeline {pipeline.Id}: {ex.Message}";
+                _logger.LogWarning(ex, "Queued run failed for pipeline {PipelineId}", pipeline.Id);
+                _activity.LogSystem("pipeline.queue.failed", message, pipeline.Id, level: "error");
+                await _alerts.SendAsync(message, ct);
             }
         }
     }

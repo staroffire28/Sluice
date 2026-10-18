@@ -130,6 +130,7 @@ builder.Services.AddSingleton<PipelineStore>();
 builder.Services.AddSingleton<JobStore>();
 builder.Services.AddSingleton<PipelineStateStore>();
 builder.Services.AddSingleton<TablePauseStore>();
+builder.Services.AddSingleton<PipelineRunQueue>();
 builder.Services.AddSingleton<ColumnSelectionStore>();
 builder.Services.AddSingleton<ReportStore>();
 builder.Services.AddSingleton<SettingsStore>();

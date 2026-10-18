@@ -231,6 +231,14 @@
   <data name="Page.Pipelines.NewTitle" xml:space="preserve"><value>Nuevo pipeline</value></data>
   <data name="Page.Pipelines.EditTitle" xml:space="preserve"><value>Editar pipeline</value></data>
   <data name="Page.Pipelines.JobStarted" xml:space="preserve"><value>Job {0} iniciado ({1}).</value></data>
+  <data name="Page.Pipelines.QueueConfirmTitle" xml:space="preserve"><value>Pipeline ocupado</value></data>
+  <data name="Page.Pipelines.QueueConfirm" xml:space="preserve"><value>Este pipeline tiene un job en curso. ¿Ejecutar {0} cuando termine?</value></data>
+  <data name="Page.Pipelines.QueueForceNote" xml:space="preserve"><value>Forzar recarga SQL desde los parquet consolidados (todas las tablas).</value></data>
+  <data name="Page.Pipelines.QueueAction" xml:space="preserve"><value>Poner en cola</value></data>
+  <data name="Page.Pipelines.Queued" xml:space="preserve"><value>{0} en cola: arrancará cuando termine el job en curso.</value></data>
+  <data name="Page.Pipelines.QueuedBadge" xml:space="preserve"><value>En cola: {0}</value></data>
+  <data name="Page.Pipelines.Unqueue" xml:space="preserve"><value>Quitar de la cola</value></data>
+  <data name="Page.Pipelines.Unqueued" xml:space="preserve"><value>{0} quitado de la cola.</value></data>
   <data name="Page.Jobs.AllPipelines" xml:space="preserve"><value>Todos los pipelines</value></data>
   <data name="Page.Jobs.AllStatuses" xml:space="preserve"><value>Todos los estados</value></data>
   <data name="Page.Jobs.Empty" xml:space="preserve"><value>No se encontraron trabajos. Ejecuta un pipeline desde Dashboard o Pipelines para poblar el historial.</value></data>

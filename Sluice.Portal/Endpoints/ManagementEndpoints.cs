@@ -172,18 +172,29 @@ public static class ManagementEndpoints
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid operation.");
             }
         });
-        api.MapPost("/pipelines/{id}/run", async (string id, JobType? type, IOrchestrationService o, CancellationToken ct) =>
+        // Con queue=true y el pipeline ocupado, la ejecución queda en cola (202 con lo encolado) y la
+        // lanza el scheduler cuando el pipeline queda libre.
+        api.MapPost("/pipelines/{id}/run", async (string id, JobType? type, bool? queue, IOrchestrationService o, CancellationToken ct) =>
         {
             try
             {
-                var job = await o.RunPipelineAsync(id, type ?? JobType.Incremental, ct);
-                return Results.Accepted($"/api/jobs/{job.Id}", job);
+                try
+                {
+                    var job = await o.RunPipelineAsync(id, type ?? JobType.Incremental, ct);
+                    return Results.Accepted($"/api/jobs/{job.Id}", job);
+                }
+                catch (PipelineBusyException) when (queue == true)
+                {
+                    return Results.Accepted(uri: null, o.QueueRun(id, type ?? JobType.Incremental));
+                }
             }
             catch (InvalidOperationException ex)
             {
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid operation.");
             }
         });
+        api.MapDelete("/pipelines/{id}/queue", (string id, PipelineRunQueue runQueue) =>
+            runQueue.Remove(id) ? Results.NoContent() : Results.NotFound());
         api.MapPost("/pipelines/{id}/reconcile", async (string id, IOrchestrationService o, CancellationToken ct) =>
         {
             try

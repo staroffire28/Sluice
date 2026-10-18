@@ -13,6 +13,7 @@
 @inject INotificationService NotificationService
 @inject IDialogService DialogService
 @inject IActivityLog ActivityLog
+@inject PipelineRunQueue RunQueue
 @inject NavigationManager Nav
 
 @inject IStringLocalizer<SharedResource> L
@@ -47,13 +48,14 @@
                 <PropertyColumn Property="@(p => p.SourceId)" Title="@L["Page.Pipelines.Source"]" />
                 <PropertyColumn Property="@(p => p.DestinationId)" Title="@L["Page.Pipelines.Destination"]" />
                 <TemplateColumn Title="@L["Page.Pipelines.Scheduler"]">
-                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center" Wrap="true" VerticalGap="4">
                         <FluentBadge data-testid="@($"sched-{context.Id}-{(context.Enabled ? "on" : "off")}")" Appearance="@(context.Enabled ? BadgeAppearance.Filled : BadgeAppearance.Tint)" Color="@(context.Enabled ? BadgeColor.Brand : BadgeColor.Informative)">
                             @(context.Enabled ? L["Page.Pipelines.SchedulerActive"] : L["Page.Pipelines.SchedulerInactive"])
                         </FluentBadge>
                         <FluentButton Appearance="ButtonAppearance.Subtle" data-testid="@($"toggle-{context.Id}")" OnClick="@(() => Toggle(context))">
                             @(context.Enabled ? L["Page.Pipelines.SchedulerOff"] : L["Page.Pipelines.SchedulerOn"])
                         </FluentButton>
+                        <QueuedRunBadge PipelineId="@context.Id" Queued="@RunQueue.Get(context.Id)" OnChanged="@OnRunCompleted" />
                     </FluentStack>
                 </TemplateColumn>
                 <TemplateColumn Title="@L["Common.Actions"]">

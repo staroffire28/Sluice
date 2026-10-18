@@ -21,6 +21,13 @@
 
     private async Task RunAsync(JobType type)
     {
+        // Con el pipeline ocupado, en vez de rechazarlo se ofrece dejarlo en cola.
+        if (await Orchestration.IsBusyAsync(PipelineId))
+        {
+            await QueueAsync(type);
+            return;
+        }
+
         if (!await ConfirmRunAsync(type))
         {
             return;
@@ -37,6 +44,40 @@
         {
             await NotificationService.ShowErrorToastAsync(ex.Message);
             ActivityLog.LogUser("pipeline.run", $"No se pudo iniciar {type} en {PipelineId}: {ex.Message}", PipelineId, level: "error");
+        }
+    }
+
+    // El scheduler la lanza en su siguiente vuelta tras quedar libre el pipeline.
+    private async Task QueueAsync(JobType type)
+    {
+        var label = JobTypeLabels.Get(L, type);
+        var message = string.Format(L["Page.Pipelines.QueueConfirm"].Value, label);
+        if (type == JobType.Force)
+        {
+            message += " " + L["Page.Pipelines.QueueForceNote"].Value;
+        }
+
+        var result = await DialogService.ShowConfirmationAsync(
+            message,
+            L["Page.Pipelines.QueueConfirmTitle"].Value,
+            L["Page.Pipelines.QueueAction"].Value,
+            L["Common.Cancel"].Value);
+        if (result.Cancelled)
+        {
+            return;
+        }
+
+        try
+        {
+            Orchestration.QueueRun(PipelineId, type);
+            await NotificationService.ShowSuccessToastAsync(string.Format(L["Page.Pipelines.Queued"].Value, label));
+            ActivityLog.LogUser("pipeline.queue", $"{type} en cola en el pipeline {PipelineId}: arranca cuando termine el job en curso.", PipelineId);
+            await OnCompleted.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            await NotificationService.ShowErrorToastAsync(ex.Message);
+            ActivityLog.LogUser("pipeline.queue", $"No se pudo dejar {type} en cola en {PipelineId}: {ex.Message}", PipelineId, level: "error");
         }
     }
 
