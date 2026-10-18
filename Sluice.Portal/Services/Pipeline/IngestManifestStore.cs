@@ -49,6 +49,10 @@ public sealed class IngestManifestStore
     public string GetStagingConsolidatedPath(string jobId, string entity) =>
         Path.Combine(GetStagingRoot(jobId), $"{entity}.consolidated.parquet");
 
+    // Copia local del consolidado anterior cuando vive en ADLS: la consolidación lo lee dos veces.
+    public string GetStagingPreviousConsolidatedPath(string jobId, string entity) =>
+        Path.Combine(GetStagingRoot(jobId), $"{entity}.previous.parquet");
+
     // Delta de un Incremental: solo las filas de los snapshots de esta corrida, deduplicadas. Va al
     // volumen compartido (no a ADLS: lo lee una vez la etapa SQL del mismo job y luego se borra).
     public string GetDeltaDirectory(string pipelineId, string jobId) =>

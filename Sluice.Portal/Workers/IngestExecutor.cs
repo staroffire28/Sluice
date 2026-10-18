@@ -369,7 +369,7 @@ public sealed class IngestExecutor : IIngestExecutor
             var hasPreviousConsolidated = !isForce && consolidatedExists;
             if (hasPreviousConsolidated)
             {
-                sources.Add(ct => parquetStore.OpenParquetReadAsync(consolidatedBlobPath, ct));
+                sources.Add(await PreviousConsolidatedSourceAsync(parquetStore, consolidatedBlobPath, task.JobId, entity, cancellationToken));
             }
             else if (!isForce
                 && pipelineState.Tables.ContainsKey(entity)
@@ -696,6 +696,28 @@ public sealed class IngestExecutor : IIngestExecutor
                 Message = completionNote,
             }, cancellationToken);
         }
+    }
+
+    // La consolidación lee cada fuente dos veces. En ADLS, abrir el consolidado anterior es descargarlo
+    // entero, así que se baja una sola vez a staging (se borra con el resto al terminar el job) y las
+    // dos pasadas leen esa copia. En el disco del portal ya es un fichero local y se lee tal cual.
+    private async Task<Func<CancellationToken, Task<Stream>>> PreviousConsolidatedSourceAsync(
+        IParquetStore parquetStore, string consolidatedBlobPath, string jobId, string entity, CancellationToken cancellationToken)
+    {
+        if (parquetStore is LocalParquetStore)
+        {
+            return ct => parquetStore.OpenParquetReadAsync(consolidatedBlobPath, ct);
+        }
+
+        var local = _manifestStore.GetStagingPreviousConsolidatedPath(jobId, entity);
+        Directory.CreateDirectory(Path.GetDirectoryName(local)!);
+        await using (var remote = await parquetStore.OpenParquetReadAsync(consolidatedBlobPath, cancellationToken))
+        await using (var file = File.Create(local))
+        {
+            await remote.CopyToAsync(file, cancellationToken);
+        }
+
+        return _ => Task.FromResult<Stream>(File.OpenRead(local));
     }
 
     // Cambios de esquema respecto al consolidado anterior (el schema.json que se va a sobrescribir):
