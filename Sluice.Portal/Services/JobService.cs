@@ -30,16 +30,21 @@ public sealed class JobService : IJobService
         _logger = logger ?? NullLogger<JobService>.Instance;
     }
 
+    // Se filtra y pagina sobre el índice; solo se leen enteros los jobs de la página.
     public IReadOnlyList<Job> List(int page = 1, int pageSize = 20, string? pipelineId = null, JobStatus? status = null, DateRange? range = null) =>
-        Filter(pipelineId, status, range).Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        Load(Filter(pipelineId, status, range).Skip((page - 1) * pageSize).Take(pageSize));
 
     public int Count(string? pipelineId = null, JobStatus? status = null, DateRange? range = null) =>
         Filter(pipelineId, status, range).Count();
 
+    // Un job borrado entre el índice y la lectura simplemente no se devuelve.
+    private List<Job> Load(IEnumerable<JobIndexEntry> entries) =>
+        entries.Select(e => _store.GetById(e.Id)).OfType<Job>().ToList();
+
     // List y Count filtran igual: la paginación (y la exportación CSV) no pueden desfasarse.
-    private IEnumerable<Job> Filter(string? pipelineId, JobStatus? status, DateRange? range)
+    private IEnumerable<JobIndexEntry> Filter(string? pipelineId, JobStatus? status, DateRange? range)
     {
-        var query = _store.ListAll().AsEnumerable();
+        var query = _store.ListIndex().AsEnumerable();
         if (!string.IsNullOrWhiteSpace(pipelineId))
         {
             query = query.Where(j => j.PipelineId == pipelineId);
@@ -62,7 +67,9 @@ public sealed class JobService : IJobService
     // parcial que sigue con SQL/Reconcile). De esto dependen la guarda anti doble run, el
     // scheduler, el watchdog, la retención y los contadores de "activos".
     public IReadOnlyList<Job> ListRunning() =>
-        _store.ListAll().Where(JobProgressHelper.IsActive).ToList();
+        Load(_store.ListIndex().Where(e => JobProgressHelper.IsActive(e.Status, e.FinishedAt)))
+            .Where(JobProgressHelper.IsActive)
+            .ToList();
 
     public Job? Get(string id) => _store.GetById(id);
 

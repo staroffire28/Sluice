@@ -11,6 +11,8 @@ public sealed class JobStore : JsonFileStore<Job>
     // DATA_DIR (modo distribuido: el api cancela y los workers actualizan el mismo job).
     private readonly object _writeLock = new();
     private readonly string _locksDir;
+    private readonly object _indexLock = new();
+    private readonly Dictionary<string, (DateTime WriteTime, long Length, JobIndexEntry Entry)> _index = new(StringComparer.Ordinal);
 
     public JobStore(IOptions<AppOptions> options) : base(options, "jobs")
     {
@@ -23,11 +25,85 @@ public sealed class JobStore : JsonFileStore<Job>
     public IReadOnlyList<Job> ListAll() =>
         ListAll(Read).OrderByDescending(j => j.StartedAt).ToList();
 
+    // Índice de los campos con que se filtran los jobs, del más reciente al más antiguo. Listar todos
+    // los job.json (cada uno con todos sus eventos y tablas) costaba segundos con unos miles de jobs,
+    // y el Dashboard, el scheduler y las guardas lo hacían en cada consulta. El índice solo vuelve a
+    // leer los ficheros cuya fecha o tamaño cambió, así que también ve lo que escriben otros procesos
+    // (los workers) sobre el mismo DATA_DIR. Quien necesite el job completo lo pide con GetById.
+    public IReadOnlyList<JobIndexEntry> ListIndex()
+    {
+        lock (_indexLock)
+        {
+            var directory = new DirectoryInfo(GetDirectory());
+            if (!directory.Exists)
+            {
+                return [];
+            }
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var file in directory.EnumerateFiles("*.json"))
+            {
+                var id = Path.GetFileNameWithoutExtension(file.Name);
+                seen.Add(id);
+                if (_index.TryGetValue(id, out var cached) && cached.WriteTime == file.LastWriteTimeUtc && cached.Length == file.Length)
+                {
+                    continue;
+                }
+
+                Job? job;
+                try
+                {
+                    job = Read(file.FullName);
+                }
+                catch (Exception ex) when (ex is System.Text.Json.JsonException or IOException or UnauthorizedAccessException)
+                {
+                    // Corrupto o a medio mover por otro proceso: se omite, como en ListAll.
+                    job = null;
+                }
+
+                if (job is null)
+                {
+                    _index.Remove(id);
+                    continue;
+                }
+
+                _index[id] = (file.LastWriteTimeUtc, file.Length,
+                    new JobIndexEntry(job.Id, job.PipelineId, job.Type, job.Status, job.StartedAt, job.FinishedAt));
+            }
+
+            foreach (var gone in _index.Keys.Where(id => !seen.Contains(id)).ToList())
+            {
+                _index.Remove(gone);
+            }
+
+            return _index.Values.Select(v => v.Entry).OrderByDescending(e => e.StartedAt).ToList();
+        }
+    }
+
     public Job? GetById(string id) => Get(id);
 
-    public void Save(Job job) => Save(job.Id, job);
+    // Una escritura de este proceso invalida su entrada: la fecha del fichero podría no cambiar si dos
+    // escrituras caen en el mismo instante.
+    public void Save(Job job)
+    {
+        Save(job.Id, job);
+        Forget(job.Id);
+    }
 
-    public new bool Delete(string id) => base.Delete(id);
+    public new bool Delete(string id)
+    {
+        var deleted = base.Delete(id);
+        Forget(id);
+        return deleted;
+    }
+
+    private void Forget(string id)
+    {
+        lock (_indexLock)
+        {
+            _index.Remove(id);
+        }
+    }
 
     // Lee, aplica la mutación y guarda bajo un único lock: ninguna otra llamada a
     // MutateAtomic/SaveWithVersionCheck puede intercalarse a mitad del ciclo. Usado por
@@ -75,3 +151,6 @@ public sealed class JobStore : JsonFileStore<Job>
         }
     }
 }
+
+// Lo que necesitan los listados para filtrar y ordenar, sin los eventos ni las tablas del job.
+public sealed record JobIndexEntry(string Id, string PipelineId, JobType Type, JobStatus Status, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt);
