@@ -107,13 +107,21 @@ public static class ParquetVersions
 
     private static string EntityOf(string pipelineId, string parquetPath) => parquetPath[Prefix(pipelineId).Length..].Split('/')[0];
 
-    // Versiones de una tabla, la más reciente primero.
-    public static async Task<IReadOnlyList<ParquetVersion>> ListAsync(
-        IParquetStore store, string pipelineId, string entity, CancellationToken cancellationToken = default) =>
-        (await ReadAsync(store, await store.ListParquetAsync(EntityPrefix(pipelineId, entity), cancellationToken), cancellationToken))
-            .Select(v => v.Version)
-            .OrderByDescending(v => v.Id, StringComparer.Ordinal)
-            .ToList();
+    // Una versión con su schema, de su sidecar; null si ya no existe.
+    public static async Task<ParquetVersion?> GetAsync(
+        IParquetStore store, string pipelineId, string entity, string id, CancellationToken cancellationToken = default)
+    {
+        var path = ParquetPath(pipelineId, entity, id);
+        if (!await store.ParquetExistsAsync(path, cancellationToken))
+        {
+            return null;
+        }
+
+        var json = await store.ReadTextAsync(SidecarPath(path), cancellationToken);
+        return json is not null && JsonSerializer.Deserialize<ParquetVersion>(json, JsonDefaults.Options) is { } version
+            ? version with { Id = id }
+            : null;
+    }
 
     // Lee los sidecars en paralelo: con cientos de tablas son miles de lecturas.
     private static async Task<IReadOnlyList<(string Path, ParquetVersion Version)>> ReadAsync(
@@ -136,6 +144,56 @@ public static class ParquetVersions
         return versions.Where(v => v is not null).Select(v => v!.Value).ToList();
     }
 
+    // Índice de los sidecars del pipeline sin el schema, en _versions/{pipeline}.index.json (fuera de
+    // {pipeline}/ para no listarse como versión). Leer todos los sidecars costaba miles de lecturas en
+    // cada ingesta, cada una con su schema. Es una caché derivada: manda el listado de .parquet, las
+    // versiones que no están en el índice se leen de su sidecar y las que ya no se listan se
+    // descartan, así que un índice que falta, está corrupto o se quedó atrás (otro proceso archivó,
+    // restauró o podó) se repara en la siguiente lectura. Un sidecar no cambia una vez escrito, así
+    // que una entrada del índice nunca queda desfasada.
+    private static string IndexPath(string pipelineId) => $"{Root}/{pipelineId}.index.json";
+
+    private static async Task<IReadOnlyList<(string Path, ParquetVersion Version)>> ReadIndexedAsync(
+        IParquetStore store, string pipelineId, IReadOnlyList<ParquetArtifact> artifacts, CancellationToken cancellationToken)
+    {
+        var index = await ReadIndexAsync(store, pipelineId, cancellationToken);
+        var listed = artifacts.Select(a => a.Path).ToHashSet(StringComparer.Ordinal);
+        var cached = index.Where(e => listed.Contains(e.Key)).Select(e => (Path: e.Key, Version: e.Value with { Id = IdOf(e.Key) })).ToList();
+        var read = (await ReadAsync(store, artifacts.Where(a => !index.ContainsKey(a.Path)).ToList(), cancellationToken))
+            .Select(v => (v.Path, Version: v.Version with { SchemaJson = null }))
+            .ToList();
+        var versions = cached.Concat(read).ToList();
+
+        if (read.Count > 0 || cached.Count != index.Count)
+        {
+            var updated = versions.ToDictionary(v => v.Path, v => v.Version, StringComparer.Ordinal);
+            await store.UploadTextAsync(IndexPath(pipelineId), JsonSerializer.Serialize(updated, JsonDefaults.Options), cancellationToken);
+        }
+
+        return versions;
+    }
+
+    private static async Task<Dictionary<string, ParquetVersion>> ReadIndexAsync(
+        IParquetStore store, string pipelineId, CancellationToken cancellationToken)
+    {
+        var json = await store.ReadTextAsync(IndexPath(pipelineId), cancellationToken);
+        if (json is null)
+        {
+            return new(StringComparer.Ordinal);
+        }
+
+        try
+        {
+            var index = JsonSerializer.Deserialize<Dictionary<string, ParquetVersion?>>(json, JsonDefaults.Options) ?? [];
+            return index.Where(e => e.Value is not null).ToDictionary(e => e.Key, e => e.Value!, StringComparer.Ordinal);
+        }
+        catch (JsonException)
+        {
+            // Corrupto: se reconstruye desde los sidecars.
+            return new(StringComparer.Ordinal);
+        }
+    }
+
     // Tablas del pipeline con alguna versión, aunque ya no tengan consolidado: la página Parquet
     // las lista igualmente para poder restaurar cuando la ingesta se para porque falta el consolidado.
     public static async Task<IReadOnlyList<string>> ListEntitiesAsync(
@@ -154,9 +212,10 @@ public static class ParquetVersions
         IParquetStore store, string pipelineId, CancellationToken cancellationToken = default) =>
         await ListAllAsync(store, pipelineId, await store.ListParquetAsync(Prefix(pipelineId), cancellationToken), cancellationToken);
 
+    // Sin el schema (SchemaJson null): quien restaura una versión la lee entera con GetAsync.
     private static async Task<IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>>> ListAllAsync(
         IParquetStore store, string pipelineId, IReadOnlyList<ParquetArtifact> artifacts, CancellationToken cancellationToken) =>
-        (await ReadAsync(store, artifacts, cancellationToken))
+        (await ReadIndexedAsync(store, pipelineId, artifacts, cancellationToken))
             .GroupBy(v => EntityOf(pipelineId, v.Path), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 g => g.Key,
@@ -262,9 +321,13 @@ public static class ParquetVersions
         var versions = await ListAllAsync(store, pipelineId, artifacts, cancellationToken);
         var kept = KeptPoints(versions, keepDays, now);
         var expired = versions
-            .SelectMany(e => e.Value
-                .Where(v => v.ArchivedAt < cutoff && !kept.Any(p => VersionAt(e.Value, p.Snapshot) == v))
-                .Select(v => ParquetPath(pipelineId, e.Key, v.Id)))
+            .SelectMany(e =>
+            {
+                var needed = NeededBy(e.Value, kept);
+                return e.Value
+                    .Where(v => v.ArchivedAt < cutoff && !needed.Contains(v.Id))
+                    .Select(v => ParquetPath(pipelineId, e.Key, v.Id));
+            })
             .ToList();
 
         foreach (var path in expired)
@@ -275,13 +338,48 @@ public static class ParquetVersions
         return expired.Count;
     }
 
-    // Reset del pipeline: también se van sus versiones.
+    // Ids de las versiones de una tabla que usan los puntos conservados: VersionAt de cada punto, en
+    // una sola pasada (con miles de versiones, repetir VersionAt por punto y versión no acababa).
+    internal static HashSet<string> NeededBy(IEnumerable<ParquetVersion> versions, IEnumerable<RestorePoint> points)
+    {
+        var ordered = versions
+            .Where(v => v.PipelineSnapshot is not null)
+            .OrderBy(v => v.PipelineSnapshot, StringComparer.Ordinal)
+            .ThenBy(v => v.Id, StringComparer.Ordinal)
+            .ToList();
+        var needed = new HashSet<string>(StringComparer.Ordinal);
+        var i = 0;
+        foreach (var snapshot in points.Select(p => p.Snapshot).Order(StringComparer.Ordinal))
+        {
+            while (i < ordered.Count && string.CompareOrdinal(ordered[i].PipelineSnapshot, snapshot) < 0)
+            {
+                i++;
+            }
+
+            if (i == ordered.Count)
+            {
+                break;
+            }
+
+            needed.Add(ordered[i].Id);
+        }
+
+        return needed;
+    }
+
+    // Reset del pipeline: también se van sus versiones y su índice.
     public static async Task<int> DeleteAllAsync(IParquetStore store, string pipelineId, CancellationToken cancellationToken = default)
     {
         var artifacts = await store.ListParquetAsync(Prefix(pipelineId), cancellationToken);
         foreach (var artifact in artifacts)
         {
             await DeleteAsync(store, artifact.Path, cancellationToken);
+        }
+
+        // Si nunca se archivó nada no hay _versions/ y LocalParquetStore no borra en una carpeta que no existe.
+        if (await store.ParquetExistsAsync(IndexPath(pipelineId), cancellationToken))
+        {
+            await store.DeleteParquetAsync(IndexPath(pipelineId), cancellationToken);
         }
 
         return artifacts.Count;
