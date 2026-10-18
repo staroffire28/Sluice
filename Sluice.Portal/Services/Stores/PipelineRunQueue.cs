@@ -62,15 +62,20 @@ public sealed class PipelineRunQueue
     public QueuedRun? TryEnqueue(string pipelineId, QueuedRun run)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(GetPath(pipelineId))!);
-        while (!AtomicJsonFile.WriteNew(GetPath(pipelineId), run))
+        for (var attempt = 0; attempt < 3; attempt++)
         {
+            if (AtomicJsonFile.WriteNew(GetPath(pipelineId), run))
+            {
+                return null;
+            }
+
             if (Get(pipelineId) is { } queued)
             {
                 return queued;
             }
         }
 
-        return null;
+        throw new InvalidOperationException("La cola del pipeline está ocupada; inténtalo de nuevo.");
     }
 
     public bool Remove(string pipelineId)
