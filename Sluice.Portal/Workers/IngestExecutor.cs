@@ -386,9 +386,14 @@ public sealed class IngestExecutor : IIngestExecutor
             var stagingConsolidated = _manifestStore.GetStagingConsolidatedPath(task.JobId, entity);
             Directory.CreateDirectory(Path.GetDirectoryName(stagingConsolidated)!);
             ParquetConsolidator.ConsolidationResult result;
-            await using (var output = File.Create(stagingConsolidated))
+            try
             {
+                await using var output = File.Create(stagingConsolidated);
                 result = await ParquetConsolidator.ConsolidateAsync(sources, schema, output, cancellationToken: cancellationToken);
+            }
+            finally
+            {
+                File.Delete(_manifestStore.GetStagingPreviousConsolidatedPath(task.JobId, entity));
             }
 
             if (result.RowsWithoutId > 0)
@@ -699,7 +704,7 @@ public sealed class IngestExecutor : IIngestExecutor
     }
 
     // La consolidación lee cada fuente dos veces. En ADLS, abrir el consolidado anterior es descargarlo
-    // entero, así que se baja una sola vez a staging (se borra con el resto al terminar el job) y las
+    // entero, así que se baja una sola vez a staging (se borra al consolidar la entidad) y las
     // dos pasadas leen esa copia. En el disco del portal ya es un fichero local y se lee tal cual.
     private async Task<Func<CancellationToken, Task<Stream>>> PreviousConsolidatedSourceAsync(
         IParquetStore parquetStore, string consolidatedBlobPath, string jobId, string entity, CancellationToken cancellationToken)
@@ -711,10 +716,16 @@ public sealed class IngestExecutor : IIngestExecutor
 
         var local = _manifestStore.GetStagingPreviousConsolidatedPath(jobId, entity);
         Directory.CreateDirectory(Path.GetDirectoryName(local)!);
-        await using (var remote = await parquetStore.OpenParquetReadAsync(consolidatedBlobPath, cancellationToken))
-        await using (var file = File.Create(local))
+        try
         {
+            await using var remote = await parquetStore.OpenParquetReadAsync(consolidatedBlobPath, cancellationToken);
+            await using var file = File.Create(local);
             await remote.CopyToAsync(file, cancellationToken);
+        }
+        catch
+        {
+            File.Delete(local);
+            throw;
         }
 
         return _ => Task.FromResult<Stream>(File.OpenRead(local));
