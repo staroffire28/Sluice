@@ -34,11 +34,16 @@
             return;
         }
 
-        // Si el scheduler ya lo lanzó, no hay nada que quitar: se refresca para que se vea el job.
+        // Si el scheduler ya lo reservó para lanzarlo, no se puede quitar: se avisa y se refresca.
+        var label = JobTypeLabels.Get(L, queued.Type);
         if (RunQueue.Remove(PipelineId))
         {
-            await NotificationService.ShowSuccessToastAsync(string.Format(L["Page.Pipelines.Unqueued"].Value, JobTypeLabels.Get(L, queued.Type)));
+            await NotificationService.ShowSuccessToastAsync(string.Format(L["Page.Pipelines.Unqueued"].Value, label));
             ActivityLog.LogUser("pipeline.queue.removed", $"{queued.Type} quitado de la cola del pipeline {PipelineId}.", PipelineId);
+        }
+        else
+        {
+            await NotificationService.ShowInfoToastAsync(string.Format(L["Page.Pipelines.QueueAlreadyStarted"].Value, label));
         }
 
         await OnChanged.InvokeAsync();

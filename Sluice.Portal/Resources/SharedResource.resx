@@ -239,6 +239,7 @@
   <data name="Page.Pipelines.QueuedBadge" xml:space="preserve"><value>En cola: {0}</value></data>
   <data name="Page.Pipelines.Unqueue" xml:space="preserve"><value>Quitar de la cola</value></data>
   <data name="Page.Pipelines.Unqueued" xml:space="preserve"><value>{0} quitado de la cola.</value></data>
+  <data name="Page.Pipelines.QueueAlreadyStarted" xml:space="preserve"><value>{0} ya ha arrancado y no se puede quitar de la cola.</value></data>
   <data name="Page.Jobs.AllPipelines" xml:space="preserve"><value>Todos los pipelines</value></data>
   <data name="Page.Jobs.AllStatuses" xml:space="preserve"><value>Todos los estados</value></data>
   <data name="Page.Jobs.Empty" xml:space="preserve"><value>No se encontraron trabajos. Ejecuta un pipeline desde Dashboard o Pipelines para poblar el historial.</value></data>

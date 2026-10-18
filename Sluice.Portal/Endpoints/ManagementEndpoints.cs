@@ -193,8 +193,11 @@ public static class ManagementEndpoints
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid operation.");
             }
         });
+        // 409 si el scheduler ya la reservó para arrancar: ya no se puede quitar.
         api.MapDelete("/pipelines/{id}/queue", (string id, PipelineRunQueue runQueue) =>
-            runQueue.Remove(id) ? Results.NoContent() : Results.NotFound());
+            runQueue.Remove(id) ? Results.NoContent()
+            : runQueue.Get(id) is not null ? Results.Problem(detail: "La ejecución en cola ya está arrancando.", statusCode: StatusCodes.Status409Conflict)
+            : Results.NotFound());
         api.MapPost("/pipelines/{id}/reconcile", async (string id, IOrchestrationService o, CancellationToken ct) =>
         {
             try

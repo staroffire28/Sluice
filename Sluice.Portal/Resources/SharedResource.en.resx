@@ -240,6 +240,7 @@
   <data name="Page.Pipelines.QueuedBadge" xml:space="preserve"><value>Queued: {0}</value></data>
   <data name="Page.Pipelines.Unqueue" xml:space="preserve"><value>Remove from queue</value></data>
   <data name="Page.Pipelines.Unqueued" xml:space="preserve"><value>{0} removed from the queue.</value></data>
+  <data name="Page.Pipelines.QueueAlreadyStarted" xml:space="preserve"><value>{0} has already started and can no longer be removed from the queue.</value></data>
   <data name="Page.Jobs.AllPipelines" xml:space="preserve"><value>All pipelines</value></data>
   <data name="Page.Jobs.AllStatuses" xml:space="preserve"><value>All statuses</value></data>
   <data name="Page.Jobs.Empty" xml:space="preserve"><value>No jobs found. Run a pipeline from Dashboard or Pipelines to populate history.</value></data>

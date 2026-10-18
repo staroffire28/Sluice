@@ -209,13 +209,16 @@ public sealed class PipelineSchedulerService : BackgroundService
     // Lo que se dejó en cola con el pipeline ocupado arranca en cuanto queda libre, antes que el
     // auto-run (que ya no lo lanza: el pipeline pasa a tener un job en curso). También en pipelines
     // con el scheduler desactivado, porque la ejecución manual siempre se permite, y aunque el job
-    // anterior fallara o se cancelara. Se saca de la cola después de crear el job: si el proceso cae
-    // entre medias, el peor caso es lanzarlo dos veces, mejor que perder la petición.
+    // anterior fallara o se cancelara. Se reserva antes de crear el job (ya no se puede quitar de la
+    // cola) y la reserva se descarta después: si el proceso cae entre medias, la siguiente vuelta la
+    // retoma, así que el peor caso es lanzarla dos veces, mejor que perder la petición.
     private async Task StartQueuedRunsAsync(CancellationToken ct)
     {
         foreach (var pipeline in _pipelines.List())
         {
-            if (_runQueue.Get(pipeline.Id) is not { } queued || _jobs.ListRunning().Any(j => j.PipelineId == pipeline.Id))
+            if (_runQueue.Get(pipeline.Id) is null
+                || _jobs.ListRunning().Any(j => j.PipelineId == pipeline.Id)
+                || _runQueue.TryClaim(pipeline.Id) is not { } queued)
             {
                 continue;
             }
@@ -223,21 +226,22 @@ public sealed class PipelineSchedulerService : BackgroundService
             try
             {
                 var job = await _orchestration.RunPipelineAsync(pipeline.Id, queued.Type, ct);
-                _runQueue.Remove(pipeline.Id);
+                _runQueue.Complete(pipeline.Id);
                 var requestedAt = queued.RequestedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
                 _jobs.AppendEvent(job.Id, EventLevel.Info, $"Lanzado desde la cola (pedido el {requestedAt} UTC).");
                 _activity.LogSystem("pipeline.queue.started", $"Arranca {queued.Type} en cola del pipeline {pipeline.Id} (job {job.Id}).", pipeline.Id, job.Id);
             }
             catch (PipelineBusyException ex)
             {
-                // Un job recién cancelado aún detiene su stage: sigue en cola para el próximo poll.
+                // Un job recién cancelado aún detiene su stage: vuelve a la cola para el próximo poll.
+                _runQueue.Release(pipeline.Id);
                 _logger.LogInformation("Queued run waits {PipelineId}: {Reason}", pipeline.Id, ex.Message);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // Como un Run manual que falla al arrancar: se avisa y se quita, para no reintentarlo
                 // (y alertar) en cada poll.
-                _runQueue.Remove(pipeline.Id);
+                _runQueue.Complete(pipeline.Id);
                 var message = $"No se pudo lanzar {queued.Type} en cola del pipeline {pipeline.Id}: {ex.Message}";
                 _logger.LogWarning(ex, "Queued run failed for pipeline {PipelineId}", pipeline.Id);
                 _activity.LogSystem("pipeline.queue.failed", message, pipeline.Id, level: "error");
