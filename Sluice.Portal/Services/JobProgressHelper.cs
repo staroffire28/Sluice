@@ -97,8 +97,10 @@ public static class JobProgressHelper
     // ¿El job sigue en curso? Partial no es terminal: un ingest con entidades fallidas deja el
     // job en Partial y el pipeline sigue con SQL/Reconcile; lo que lo cierra es FinishedAt.
     // Criterio único para el builder del flujo, el refresco de la página y Cancelar/Reintentar.
-    public static bool IsActive(Job job) =>
-        job.Status == JobStatus.Running || (job.Status == JobStatus.Partial && job.FinishedAt is null);
+    public static bool IsActive(Job job) => IsActive(job.Status, job.FinishedAt);
+
+    public static bool IsActive(JobStatus status, DateTimeOffset? finishedAt) =>
+        status == JobStatus.Running || (status == JobStatus.Partial && finishedAt is null);
 
     // Etiqueta de la etapa actualmente en curso (para acompañar el %), o null si el job no está
     // corriendo o no hay una etapa "running"/"claimed" identificable en este momento.
