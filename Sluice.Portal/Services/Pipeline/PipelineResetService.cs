@@ -151,6 +151,7 @@ public sealed class PipelineResetService : IPipelineResetService
 
         // Lo pedido antes del reset contaba con el estado que se acaba de descartar.
         _runQueue?.Remove(pipelineId);
+        _runQueue?.Complete(pipelineId);
 
         return new PipelineResetResult
         {

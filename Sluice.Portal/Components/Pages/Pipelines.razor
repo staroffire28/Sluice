@@ -194,7 +194,7 @@
     // cola es el último (así se quita la etiqueta) y el timer se detiene hasta que se encole otra.
     private void WatchQueue()
     {
-        if (_watchingQueue || !HasQueued())
+        if (!RendererInfo.IsInteractive || _watchingQueue || !HasQueued())
         {
             return;
         }

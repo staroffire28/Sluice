@@ -76,6 +76,7 @@ public sealed class PipelineService : IPipelineService
 
         // Sin pipeline no hay nada que ejecutar, y otro creado luego con el mismo id no debe heredarlo.
         _runQueue?.Remove(id);
+        _runQueue?.Complete(id);
         return true;
     }
 
