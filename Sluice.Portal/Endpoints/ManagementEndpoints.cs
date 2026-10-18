@@ -52,7 +52,16 @@ public static class ManagementEndpoints
             }
         });
         api.MapPut("/connections/{id}", async (string id, Connection connection, IConnectionService svc, CancellationToken ct) =>
-            (await svc.UpdateAsync(id, connection, ct)).Connection is { } c ? Results.Ok(c) : Results.NotFound());
+        {
+            try
+            {
+                return (await svc.UpdateAsync(id, connection, ct)).Connection is { } c ? Results.Ok(c) : Results.NotFound();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
         api.MapDelete("/connections/{id}", (string id, IConnectionService svc) =>
         {
             if (!svc.Delete(id, out var error))

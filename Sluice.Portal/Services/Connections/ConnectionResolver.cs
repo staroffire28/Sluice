@@ -60,6 +60,12 @@ public sealed record SqlConnectionSettings(
 
 public static class ConnectionSettingsFactory
 {
+    // La cuenta y los containers se interpolan en la URL de ADLS: un "atacante.com/" o un "x#" en la
+    // cuenta mandaba el token de Entra (obtenido con el secreto guardado) a otro host. Solo se aceptan
+    // nombres válidos de Azure Storage.
+    private static readonly System.Text.RegularExpressions.Regex AccountName = new("^[a-z0-9]{3,24}$");
+    private static readonly System.Text.RegularExpressions.Regex ContainerName = new("^(?!.*--)[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$");
+
     public static AdlsConnectionSettings ResolveAdls(Connection connection)
     {
         var config = connection.Config;
@@ -76,6 +82,18 @@ public static class ConnectionSettingsFactory
         // Container de destino del parquet (durable, separado del origen Synapse Link).
         // Opcional aquí; se exige solo al usarse (ver IParquetStore en AdlsClient).
         var parquetContainer = Get(config, "parquet_container", "destination_container");
+        if (!AccountName.IsMatch(account))
+        {
+            throw new InvalidOperationException($"'{account}' no es un nombre de cuenta de Azure Storage válido (3-24 minúsculas o dígitos).");
+        }
+
+        foreach (var name in new[] { container, parquetContainer }.OfType<string>())
+        {
+            if (!ContainerName.IsMatch(name))
+            {
+                throw new InvalidOperationException($"'{name}' no es un nombre de container válido (3-63 minúsculas, dígitos o guiones).");
+            }
+        }
 
         return new AdlsConnectionSettings(account, container, tenantId, clientId, clientSecret, parquetContainer);
     }
@@ -109,7 +127,9 @@ public static class ConnectionSettingsFactory
             UserID = user,
             Password = password,
             Encrypt = Microsoft.Data.SqlClient.SqlConnectionEncryptOption.Mandatory,
-            TrustServerCertificate = !bool.TryParse(trust, out var trustValue) || trustValue,
+            // Se valida el certificado del servidor salvo que la conexión pida confiar en él (un SQL
+            // con certificado autofirmado): sin validarlo, un MITM capturaría el login.
+            TrustServerCertificate = bool.TryParse(trust, out var trustValue) && trustValue,
         };
 
         return new SqlConnectionSettings(builder.ConnectionString, version);

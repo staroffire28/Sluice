@@ -98,6 +98,8 @@
         <p class="dialog-form-subtitle">@L["Page.Destinations.ConnectionSection"]</p>
         <FluentTextInput @bind-Value="_host" data-testid="dst-host" Label="@L["Page.Destinations.Host"]" Style="width:100%;" />
         <FluentTextInput @bind-Value="_database" data-testid="dst-database" Label="@L["Page.Destinations.Database"]" Style="width:100%;" />
+        <FluentCheckbox @bind-Value="_trustServerCertificate" data-testid="dst-trust-cert" Label="@L["Page.Destinations.TrustServerCertificate"]" />
+        <p class="field-hint">@L["Page.Destinations.TrustServerCertificateHint"]</p>
 
         <p class="dialog-form-subtitle">@L["Page.Destinations.CredentialsSection"]</p>
         @* El pipeline crea y altera tablas e índices, hace MERGE/DELETE y TRUNCATE (restablecer); no crea la base. *@
@@ -138,6 +140,7 @@
     private string _database = "";
     private string _user = "";
     private string _password = "";
+    private bool _trustServerCertificate;
     private bool _detecting;
     private SqlVersionDetection? _detection;
     private Guid _versionKey = Guid.NewGuid();
@@ -163,6 +166,7 @@
                     ["database"] = _database,
                     ["user"] = _user,
                     ["password"] = _password,
+                    ["trust_server_certificate"] = _trustServerCertificate ? "true" : "false",
                     [SqlServerVersions.ConfigKey] = _sqlVersion,
                 },
             };
@@ -218,6 +222,7 @@
         _database = "";
         _user = "";
         _password = "";
+        _trustServerCertificate = false;
         _detection = null;
         _editorKey = Guid.NewGuid();
         _showEditor = true;
@@ -239,6 +244,7 @@
         _database = GetConfig(connection, "database");
         _user = GetConfig(connection, "user", "username");
         _password = GetConfig(connection, "password");
+        _trustServerCertificate = bool.TryParse(GetConfig(connection, "trust_server_certificate"), out var trust) && trust;
         _detection = null;
         _editorKey = Guid.NewGuid();
         _showEditor = true;
@@ -252,6 +258,7 @@
             ["database"] = _database,
             ["user"] = _user,
             ["password"] = _password,
+            ["trust_server_certificate"] = _trustServerCertificate ? "true" : "false",
             [SqlServerVersions.ConfigKey] = _sqlVersion,
         };
 

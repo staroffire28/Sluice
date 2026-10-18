@@ -178,6 +178,8 @@
   <data name="Page.Destinations.CredentialsSection" xml:space="preserve"><value>Credenciales</value></data>
   <data name="Page.Destinations.Host" xml:space="preserve"><value>Host</value></data>
   <data name="Page.Destinations.Database" xml:space="preserve"><value>Base de datos</value></data>
+  <data name="Page.Destinations.TrustServerCertificate" xml:space="preserve"><value>Confiar en el certificado del servidor (inseguro)</value></data>
+  <data name="Page.Destinations.TrustServerCertificateHint" xml:space="preserve"><value>Márcalo solo si el SQL Server usa un certificado autofirmado que no puedes sustituir: la conexión sigue cifrada, pero no se comprueba a qué servidor llega.</value></data>
   <data name="Page.Destinations.User" xml:space="preserve"><value>Usuario</value></data>
   <data name="Page.Destinations.Password" xml:space="preserve"><value>Contraseña</value></data>
   <data name="Page.Destinations.DeleteDestination" xml:space="preserve"><value>Eliminar destino</value></data>
