@@ -108,8 +108,7 @@ public sealed class ParquetArtifactService : IParquetArtifactService
     {
         EnsureEntityName(entity);
         var store = await StoreFor(pipelineId, cancellationToken);
-        var version = (await ParquetVersions.ListAsync(store, pipelineId, entity, cancellationToken))
-            .FirstOrDefault(v => v.Id == versionId)
+        var version = await ParquetVersions.GetAsync(store, pipelineId, entity, versionId, cancellationToken)
             ?? throw new InvalidOperationException($"La versión '{versionId}' de {entity} no existe.");
 
         if (await store.ParquetExistsAsync(IngestManifestStore.GetConsolidatedBlobPath(pipelineId, entity), cancellationToken))
