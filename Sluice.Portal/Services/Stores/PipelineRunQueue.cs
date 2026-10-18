@@ -66,7 +66,18 @@ public sealed class PipelineRunQueue
             return false;
         }
 
-        return Delete(GetPath(pipelineId));
+        var removed = $"{GetPath(pipelineId)}.{Guid.NewGuid():N}.removed";
+        try
+        {
+            File.Move(GetPath(pipelineId), removed, overwrite: false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+
+        Delete(removed);
+        return true;
     }
 
     // Reserva lo encolado para arrancarlo (null si ya no hay nada: lo quitaron entre medias). Una
