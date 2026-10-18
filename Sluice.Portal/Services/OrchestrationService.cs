@@ -33,6 +33,14 @@ public interface IOrchestrationService
     Task<Job> CompareValuesAsync(string pipelineId, string? entity, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
     Task CancelAsync(string jobId, CancellationToken cancellationToken = default);
+
+    // Si el pipeline tiene un job activo (o uno cancelado que aún se detiene): un Run se rechazaría.
+    Task<bool> IsBusyAsync(string pipelineId, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
+
+    // Deja una ejecución en cola para cuando el pipeline quede libre; la lanza el scheduler.
+    QueuedRun QueueRun(string pipelineId, JobType type) =>
+        throw new NotSupportedException();
 }
 
 public sealed class OrchestrationService : IOrchestrationService
@@ -46,6 +54,7 @@ public sealed class OrchestrationService : IOrchestrationService
     private readonly ReportStore _reports;
     private readonly IParquetArtifactService _parquet;
     private readonly PipelineStateStore? _stateStore;
+    private readonly PipelineRunQueue? _runQueue;
 
     public OrchestrationService(
         IOptions<AppOptions> options,
@@ -56,9 +65,11 @@ public sealed class OrchestrationService : IOrchestrationService
         IngestManifestStore manifests,
         ReportStore reports,
         IParquetArtifactService parquet,
-        PipelineStateStore? stateStore = null)
+        PipelineStateStore? stateStore = null,
+        PipelineRunQueue? runQueue = null)
     {
         _stateStore = stateStore;
+        _runQueue = runQueue;
         _options = options.Value;
         _pipelines = pipelines;
         _jobs = jobs;
@@ -130,6 +141,42 @@ public sealed class OrchestrationService : IOrchestrationService
 
     public Task<Job> RunPipelineAsync(string pipelineId, JobType type, CancellationToken cancellationToken = default) =>
         StartAsync(pipelineId, type, entity: null, cancellationToken);
+
+    public async Task<bool> IsBusyAsync(string pipelineId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "", cancellationToken);
+            return false;
+        }
+        catch (PipelineBusyException)
+        {
+            return true;
+        }
+    }
+
+    // Un hueco por pipeline: pedir de nuevo lo mismo avisa de que ya está, y otra cosa se rechaza
+    // nombrando lo que hay, para que nada se sustituya sin saberlo.
+    public QueuedRun QueueRun(string pipelineId, JobType type)
+    {
+        var queue = _runQueue
+            ?? throw new InvalidOperationException("Queueing a run requires the run queue.");
+        _ = _pipelines.Get(pipelineId)
+            ?? throw new InvalidOperationException("Pipeline not found.");
+        if (!PipelineRunQueue.QueueableTypes.Contains(type))
+        {
+            throw new InvalidOperationException($"{type} no se puede dejar en cola.");
+        }
+
+        var run = new QueuedRun(type, DateTimeOffset.UtcNow);
+        return queue.TryEnqueue(pipelineId, run) switch
+        {
+            null => run,
+            { } queued when queued.Type == type => throw new InvalidOperationException($"{type} ya está en cola para este pipeline."),
+            { } queued => throw new InvalidOperationException(
+                $"Ya hay {queued.Type} en cola para este pipeline: quítalo de la cola antes de encolar {type}."),
+        };
+    }
 
     // Comparación de valores bajo demanda: de una tabla o, sin entity, de todas las del pipeline.
     public Task<Job> CompareValuesAsync(string pipelineId, string? entity, CancellationToken cancellationToken = default) =>

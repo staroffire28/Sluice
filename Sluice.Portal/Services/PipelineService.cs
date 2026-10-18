@@ -20,12 +20,14 @@ public sealed class PipelineService : IPipelineService
     private readonly PipelineStore _store;
     private readonly PipelineStateStore _stateStore;
     private readonly ConnectionStore _connections;
+    private readonly PipelineRunQueue? _runQueue;
 
-    public PipelineService(PipelineStore store, PipelineStateStore stateStore, ConnectionStore connections)
+    public PipelineService(PipelineStore store, PipelineStateStore stateStore, ConnectionStore connections, PipelineRunQueue? runQueue = null)
     {
         _store = store;
         _stateStore = stateStore;
         _connections = connections;
+        _runQueue = runQueue;
     }
 
     public IReadOnlyList<PipelineModel> List() => _store.ListAll();
@@ -72,6 +74,9 @@ public sealed class PipelineService : IPipelineService
             _stateStore.Delete(id);
         }
 
+        // Sin pipeline no hay nada que ejecutar, y otro creado luego con el mismo id no debe heredarlo.
+        _runQueue?.Remove(id);
+        _runQueue?.Complete(id);
         return true;
     }
 

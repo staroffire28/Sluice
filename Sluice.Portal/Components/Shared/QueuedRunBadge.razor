@@ -1,0 +1,51 @@
+@using Sluice.Portal.Services
+@using Sluice.Portal.Services.Logging
+@using Sluice.Portal.Services.Stores
+@inject PipelineRunQueue RunQueue
+@inject INotificationService NotificationService
+@inject IActivityLog ActivityLog
+@inject IStringLocalizer<SharedResource> L
+
+@* La ejecución que espera a que termine el job en curso, con la opción de quitarla. *@
+@if (Queued is { } queued)
+{
+    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" VerticalAlignment="VerticalAlignment.Center" Width="auto" data-testid="@($"queued-{PipelineId}")">
+        <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning" Style="white-space:nowrap;">@L["Page.Pipelines.QueuedBadge", JobTypeLabels.Get(L, queued.Type)]</FluentBadge>
+        <FluentButton Appearance="ButtonAppearance.Subtle" Style="white-space:nowrap;" data-testid="@($"unqueue-{PipelineId}")" OnClick="RemoveAsync">@L["Page.Pipelines.Unqueue"]</FluentButton>
+    </FluentStack>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public string PipelineId { get; set; } = "";
+
+    // Lo lee la página en cada render: con solo el id (un string que no cambia) Blazor no volvería a
+    // pintar el componente al encolar o al arrancar lo encolado.
+    [Parameter]
+    public QueuedRun? Queued { get; set; }
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private async Task RemoveAsync()
+    {
+        if (Queued is not { } queued)
+        {
+            return;
+        }
+
+        // Si el scheduler ya lo reservó para lanzarlo, no se puede quitar: se avisa y se refresca.
+        var label = JobTypeLabels.Get(L, queued.Type);
+        if (RunQueue.Remove(PipelineId))
+        {
+            await NotificationService.ShowSuccessToastAsync(string.Format(L["Page.Pipelines.Unqueued"].Value, label));
+            ActivityLog.LogUser("pipeline.queue.removed", $"{queued.Type} quitado de la cola del pipeline {PipelineId}.", PipelineId);
+        }
+        else
+        {
+            await NotificationService.ShowInfoToastAsync(string.Format(L["Page.Pipelines.QueueAlreadyStarted"].Value, label));
+        }
+
+        await OnChanged.InvokeAsync();
+    }
+}

@@ -13,7 +13,10 @@
 @inject INotificationService NotificationService
 @inject IDialogService DialogService
 @inject IActivityLog ActivityLog
+@inject PipelineRunQueue RunQueue
 @inject NavigationManager Nav
+@inject ILogger<Pipelines> Logger
+@implements IAsyncDisposable
 
 @inject IStringLocalizer<SharedResource> L
 
@@ -47,13 +50,14 @@
                 <PropertyColumn Property="@(p => p.SourceId)" Title="@L["Page.Pipelines.Source"]" />
                 <PropertyColumn Property="@(p => p.DestinationId)" Title="@L["Page.Pipelines.Destination"]" />
                 <TemplateColumn Title="@L["Page.Pipelines.Scheduler"]">
-                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center" Wrap="true" VerticalGap="4">
                         <FluentBadge data-testid="@($"sched-{context.Id}-{(context.Enabled ? "on" : "off")}")" Appearance="@(context.Enabled ? BadgeAppearance.Filled : BadgeAppearance.Tint)" Color="@(context.Enabled ? BadgeColor.Brand : BadgeColor.Informative)">
                             @(context.Enabled ? L["Page.Pipelines.SchedulerActive"] : L["Page.Pipelines.SchedulerInactive"])
                         </FluentBadge>
                         <FluentButton Appearance="ButtonAppearance.Subtle" data-testid="@($"toggle-{context.Id}")" OnClick="@(() => Toggle(context))">
                             @(context.Enabled ? L["Page.Pipelines.SchedulerOff"] : L["Page.Pipelines.SchedulerOn"])
                         </FluentButton>
+                        <QueuedRunBadge PipelineId="@context.Id" Queued="@RunQueue.Get(context.Id)" OnChanged="@OnRunCompleted" />
                     </FluentStack>
                 </TemplateColumn>
                 <TemplateColumn Title="@L["Common.Actions"]">
@@ -159,6 +163,8 @@
     private string? _resetName;
     private bool _truncateSql;
     private ReconcileReport? _latestReconcile;
+    private PageRefreshTimer? _queueTimer;
+    private bool _watchingQueue;
 
     protected override void OnInitialized() => Load();
 
@@ -178,6 +184,40 @@
             .OrderByDescending(r => r!.CreatedAt)
             .FirstOrDefault();
         ApplyPaging();
+        WatchQueue();
+    }
+
+    private bool HasQueued() => _allItems.Any(p => RunQueue.Get(p.Id) is not null);
+
+    // Lo encolado lo lanza el scheduler sin pasar por esta página: mientras haya algo en cola se
+    // repinta para que la etiqueta desaparezca sola al arrancar. El repintado que ya no ve nada en
+    // cola es el último (así se quita la etiqueta) y el timer se detiene hasta que se encole otra.
+    private void WatchQueue()
+    {
+        if (!RendererInfo.IsInteractive || _watchingQueue || !HasQueued())
+        {
+            return;
+        }
+
+        _watchingQueue = true;
+        _queueTimer ??= new PageRefreshTimer(
+            TimeSpan.FromSeconds(10),
+            _ => InvokeAsync(() =>
+            {
+                _watchingQueue = HasQueued();
+                StateHasChanged();
+            }),
+            () => _watchingQueue,
+            onError: ex => Logger.LogWarning(ex, "Refresco de la cola en Pipelines falló; se reintenta."));
+        _queueTimer.Start();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_queueTimer is not null)
+        {
+            await _queueTimer.DisposeAsync();
+        }
     }
 
     // La lista ya se carga entera en memoria (PipelineStore.ListAll); paginar aquí es

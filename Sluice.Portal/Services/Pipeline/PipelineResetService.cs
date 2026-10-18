@@ -40,6 +40,7 @@ public sealed class PipelineResetService : IPipelineResetService
     private readonly ISqlMergeExecutor _mergeExecutor;
     private readonly IJobService _jobs;
     private readonly ITaskStore _tasks;
+    private readonly PipelineRunQueue? _runQueue;
 
     public PipelineResetService(
         IPipelineService pipelines,
@@ -48,8 +49,10 @@ public sealed class PipelineResetService : IPipelineResetService
         ISqlConnectionFactory sqlFactory,
         ISqlMergeExecutor mergeExecutor,
         IJobService jobs,
-        ITaskStore tasks)
+        ITaskStore tasks,
+        PipelineRunQueue? runQueue = null)
     {
+        _runQueue = runQueue;
         _pipelines = pipelines;
         _stateStore = stateStore;
         _parquet = parquet;
@@ -145,6 +148,10 @@ public sealed class PipelineResetService : IPipelineResetService
         deleted += await _parquet.DeleteVersionsAsync(pipelineId, cancellationToken);
 
         _stateStore.Save(new PipelineState { PipelineId = pipelineId });
+
+        // Lo pedido antes del reset contaba con el estado que se acaba de descartar.
+        _runQueue?.Remove(pipelineId);
+        _runQueue?.Complete(pipelineId);
 
         return new PipelineResetResult
         {

@@ -232,6 +232,15 @@
   <data name="Page.Pipelines.NewTitle" xml:space="preserve"><value>New pipeline</value></data>
   <data name="Page.Pipelines.EditTitle" xml:space="preserve"><value>Edit pipeline</value></data>
   <data name="Page.Pipelines.JobStarted" xml:space="preserve"><value>Job {0} started ({1}).</value></data>
+  <data name="Page.Pipelines.QueueConfirmTitle" xml:space="preserve"><value>Pipeline busy</value></data>
+  <data name="Page.Pipelines.QueueConfirm" xml:space="preserve"><value>This pipeline has a job running. Run {0} when it finishes?</value></data>
+  <data name="Page.Pipelines.QueueForceNote" xml:space="preserve"><value>Force reloads SQL from consolidated parquet (all tables).</value></data>
+  <data name="Page.Pipelines.QueueAction" xml:space="preserve"><value>Queue</value></data>
+  <data name="Page.Pipelines.Queued" xml:space="preserve"><value>{0} queued: it will start when the running job finishes.</value></data>
+  <data name="Page.Pipelines.QueuedBadge" xml:space="preserve"><value>Queued: {0}</value></data>
+  <data name="Page.Pipelines.Unqueue" xml:space="preserve"><value>Remove from queue</value></data>
+  <data name="Page.Pipelines.Unqueued" xml:space="preserve"><value>{0} removed from the queue.</value></data>
+  <data name="Page.Pipelines.QueueAlreadyStarted" xml:space="preserve"><value>{0} has already started and can no longer be removed from the queue.</value></data>
   <data name="Page.Jobs.AllPipelines" xml:space="preserve"><value>All pipelines</value></data>
   <data name="Page.Jobs.AllStatuses" xml:space="preserve"><value>All statuses</value></data>
   <data name="Page.Jobs.Empty" xml:space="preserve"><value>No jobs found. Run a pipeline from Dashboard or Pipelines to populate history.</value></data>
