@@ -32,7 +32,8 @@ public sealed class PipelineRunQueue
         var path = GetPath(pipelineId);
         try
         {
-            using var stream = File.OpenRead(path);
+            using var stream = new FileStream(
+                path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             return JsonSerializer.Deserialize<QueuedRun>(stream, JsonDefaults.Options);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -85,8 +86,15 @@ public sealed class PipelineRunQueue
             return false;
         }
 
-        File.Delete(path);
-        return true;
+        try
+        {
+            File.Delete(path);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return !File.Exists(path);
+        }
     }
 
     private string GetPath(string pipelineId) =>
