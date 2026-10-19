@@ -76,6 +76,11 @@ public sealed class PipelineService : IPipelineService
 
     public async Task<string?> DeleteAsync(string id, bool wipeState, CancellationToken cancellationToken = default)
     {
+        if (!_store.Exists(id))
+        {
+            return "Pipeline not found.";
+        }
+
         // Borrarlo bajo un job en curso dejaría a ese job sin pipeline a mitad de etapa y, con
         // wipeState, su cierre volvería a escribir el estado recién borrado. El lock de ejecución
         // evita además borrarlo a mitad de un arranque o de un reset.
