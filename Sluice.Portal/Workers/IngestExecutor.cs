@@ -92,7 +92,14 @@ public sealed class IngestExecutor : IIngestExecutor
             isForce ? null : pipelineState.LastProcessedSnapshot,
             settled);
 
-        if (selection.Blocked)
+        // Re-ejecución de este mismo job (el worker cayó tras registrar el ingest y el lease venció):
+        // su manifest lista lo ingerido y SQL aún no lo ha mergeado. Se conserva sea cual sea el lago
+        // ahora: reingerir reescribiría el manifest solo con los snapshots nuevos y las filas del
+        // primer intento no llegarían nunca a SQL. Los snapshots nuevos son del siguiente job.
+        var previous = _manifestStore.Load(task.PipelineId, task.JobId);
+        var alreadyIngested = previous is { Entities.Count: > 0 };
+
+        if (selection.Blocked && !alreadyIngested)
         {
             _jobs.Update(job.Id, job with
             {
@@ -109,14 +116,11 @@ public sealed class IngestExecutor : IIngestExecutor
 
         progress.CompleteStep(JobStepCatalog.Discover);
 
-        if (selection.ToProcess.Count == 0)
+        if (alreadyIngested || selection.ToProcess.Count == 0)
         {
-            // Re-ejecución de este mismo job (el worker cayó tras registrar el ingest y el lease
-            // venció): su manifest lista lo ingerido y SQL aún no lo ha mergeado. Vaciarlo dejaría
-            // esas filas fuera de SQL para siempre. Si cayó antes de escribir su Summary (p. ej.
-            // durante la poda), Summary y Entities se rehacen desde ese manifest.
-            var previous = _manifestStore.Load(task.PipelineId, task.JobId);
-            var alreadyIngested = previous is { Entities.Count: > 0 };
+            // Sin nada nuevo, o el ingest de este job ya estaba registrado (ver arriba). Si cayó
+            // antes de escribir su Summary (p. ej. durante la poda), Summary y Entities se rehacen
+            // desde ese manifest.
             _jobs.AppendEvent(task.JobId, EventLevel.Info, alreadyIngested
                 ? $"El ingest de este job ya estaba registrado ({previous!.Entities.Count} tabla(s)): se conserva su manifest para la etapa SQL."
                 : JobEventMarkers.NoNewSnapshots);
@@ -523,8 +527,10 @@ public sealed class IngestExecutor : IIngestExecutor
         }
 
         // El manifest antes que el estado: el estado es el commit. Si el proceso cae entre ambos,
-        // el snapshot no consta como procesado y la re-ejecución lo vuelve a leer (idempotente);
-        // al revés, la re-ejecución vería el estado avanzado sin manifest y SQL no recibiría nada.
+        // el snapshot no consta como procesado: la re-ejecución conserva el manifest ya registrado y
+        // el siguiente job vuelve a leer esos snapshots (idempotente: el parquet consolidado
+        // deduplica por Id y el MERGE de SQL es un upsert); al revés, la re-ejecución vería el estado
+        // avanzado sin manifest y SQL no recibiría nada.
         _manifestStore.Save(new IngestManifest
         {
             JobId = task.JobId,
