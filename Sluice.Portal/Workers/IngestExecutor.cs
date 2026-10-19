@@ -527,8 +527,10 @@ public sealed class IngestExecutor : IIngestExecutor
         }
 
         // El manifest antes que el estado: el estado es el commit. Si el proceso cae entre ambos,
-        // el snapshot no consta como procesado y la re-ejecución lo vuelve a leer (idempotente);
-        // al revés, la re-ejecución vería el estado avanzado sin manifest y SQL no recibiría nada.
+        // el snapshot no consta como procesado: la re-ejecución conserva el manifest ya registrado y
+        // el siguiente job vuelve a leer esos snapshots (idempotente: el parquet consolidado
+        // deduplica por Id y el MERGE de SQL es un upsert); al revés, la re-ejecución vería el estado
+        // avanzado sin manifest y SQL no recibiría nada.
         _manifestStore.Save(new IngestManifest
         {
             JobId = task.JobId,
@@ -546,12 +548,10 @@ public sealed class IngestExecutor : IIngestExecutor
         progress.CompleteStep(JobStepCatalog.Register);
 
         // La poda va por puntos de restauración (todas las tablas a la vez), así que una vez por job.
-        // Si falla, la ingesta ya está hecha: solo se avisa y se reintenta en la siguiente. Sin el
-        // token del job: un apagado a mitad de la poda no debe dejar la tarea reclamada con el
-        // ingest ya registrado.
+        // Si falla, la ingesta ya está hecha: solo se avisa y se reintenta en la siguiente.
         try
         {
-            await ParquetVersions.PruneAsync(parquetStore, task.PipelineId, _settings?.Get().ParquetVersionDays ?? 0, DateTimeOffset.UtcNow, CancellationToken.None);
+            await ParquetVersions.PruneAsync(parquetStore, task.PipelineId, _settings?.Get().ParquetVersionDays ?? 0, DateTimeOffset.UtcNow, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
