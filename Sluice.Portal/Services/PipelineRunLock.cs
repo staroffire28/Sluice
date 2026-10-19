@@ -7,6 +7,10 @@ namespace Sluice.Portal.Services;
 // en DATA_DIR/locks, así que vale entre hilos y entre procesos que comparten el volumen.
 public static class PipelineRunLock
 {
+    // Quien espera el lock lo hace mientras el otro arranque termina (Force incluye un listado
+    // de ADLS); pasado este margen se rechaza igual que si ya hubiera un job en curso.
+    public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(15);
+
     public static async Task<IDisposable> AcquireAsync(
         string dataDir,
         string pipelineId,
@@ -18,9 +22,9 @@ public static class PipelineRunLock
             return await FileLock.AcquireAsync(
                 Path.Combine(dataDir, "locks", $"run-{pipelineId}.lock"), timeout, cancellationToken);
         }
-        catch (TimeoutException ex)
+        catch (TimeoutException)
         {
-            throw new InvalidOperationException("Ya se está arrancando un job para este pipeline.", ex);
+            throw new PipelineBusyException("Ya se está arrancando un job para este pipeline.");
         }
     }
 }

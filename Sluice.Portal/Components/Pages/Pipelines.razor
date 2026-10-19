@@ -337,9 +337,17 @@
             return;
         }
 
-        if (!PipelineService.Delete(_deleteId, _wipeState, out var error))
+        try
         {
-            _ = NotificationService.ShowErrorToastAsync(error ?? L["Common.DeleteFailed"].Value);
+            if (!PipelineService.Delete(_deleteId, _wipeState, out var error))
+            {
+                _ = NotificationService.ShowErrorToastAsync(error ?? L["Common.DeleteFailed"].Value);
+                return;
+            }
+        }
+        catch (PipelineBusyException ex)
+        {
+            _ = NotificationService.ShowErrorToastAsync(ex.Message);
             return;
         }
 

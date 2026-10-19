@@ -21,13 +21,15 @@ public sealed class PipelineService : IPipelineService
     private readonly PipelineStateStore _stateStore;
     private readonly ConnectionStore _connections;
     private readonly PipelineRunQueue? _runQueue;
+    private readonly IJobService? _jobs;
 
-    public PipelineService(PipelineStore store, PipelineStateStore stateStore, ConnectionStore connections, PipelineRunQueue? runQueue = null)
+    public PipelineService(PipelineStore store, PipelineStateStore stateStore, ConnectionStore connections, PipelineRunQueue? runQueue = null, IJobService? jobs = null)
     {
         _store = store;
         _stateStore = stateStore;
         _connections = connections;
         _runQueue = runQueue;
+        _jobs = jobs;
     }
 
     public IReadOnlyList<PipelineModel> List() => _store.ListAll();
@@ -69,6 +71,14 @@ public sealed class PipelineService : IPipelineService
     public bool Delete(string id, bool wipeState, out string? error)
     {
         error = null;
+
+        // Borrarlo bajo un job en curso dejaría a ese job sin pipeline a mitad de etapa y, con
+        // wipeState, su cierre volvería a escribir el estado recién borrado.
+        if (_jobs?.ListRunning().Any(j => j.PipelineId == id) == true)
+        {
+            throw new PipelineBusyException("Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de borrarlo.");
+        }
+
         if (!_store.Delete(id))
         {
             error = "Pipeline not found.";

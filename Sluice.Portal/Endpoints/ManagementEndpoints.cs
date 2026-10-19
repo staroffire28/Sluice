@@ -110,9 +110,16 @@ public static class ManagementEndpoints
         });
         api.MapDelete("/pipelines/{id}", (string id, bool wipe, IPipelineService svc) =>
         {
-            if (!svc.Delete(id, wipe, out var error))
+            try
             {
-                return Results.NotFound(new { error });
+                if (!svc.Delete(id, wipe, out var error))
+                {
+                    return Results.NotFound(new { error });
+                }
+            }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
             }
 
             return Results.NoContent();

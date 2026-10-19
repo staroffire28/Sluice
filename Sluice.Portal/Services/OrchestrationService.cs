@@ -505,12 +505,8 @@ public sealed class OrchestrationService : IOrchestrationService
         return job;
     }
 
-    // Quien espera el lock lo hace mientras el otro arranque termina (Force incluye un listado
-    // de ADLS); pasado este margen se rechaza igual que si ya hubiera un job en curso.
-    private static readonly TimeSpan RunLockTimeout = TimeSpan.FromSeconds(15);
-
     private Task<IDisposable> AcquireRunLockAsync(string pipelineId, CancellationToken cancellationToken) =>
-        PipelineRunLock.AcquireAsync(_options.DataDir, pipelineId, RunLockTimeout, cancellationToken);
+        PipelineRunLock.AcquireAsync(_options.DataDir, pipelineId, PipelineRunLock.DefaultTimeout, cancellationToken);
 
     // Sufijo aleatorio tras la marca de tiempo: con resolución de segundo, dos jobs del mismo
     // pipeline en el mismo segundo compartían id y se pisaban los archivos.
