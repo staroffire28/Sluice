@@ -69,7 +69,7 @@ public sealed class PipelineResetService : IPipelineResetService
 
     public async Task<PipelineResetResult> ResetAsync(string pipelineId, bool truncateSql, CancellationToken cancellationToken = default)
     {
-        var pipeline = _pipelines.Get(pipelineId)
+        _ = _pipelines.Get(pipelineId)
             ?? throw new InvalidOperationException($"Pipeline '{pipelineId}' not found.");
 
         // Mismo criterio que Run/Resync: resetear bajo un job en curso truncaría tablas y borraría
@@ -77,6 +77,8 @@ public sealed class PipelineResetService : IPipelineResetService
         // ejecución dura todo el reset: sin él, lo encolado o el auto-run arrancaban a mitad y su
         // ingest guardaba un estado avanzado sobre parquets borrados y SQL truncado.
         using var runLock = await PipelineRunLock.AcquireAsync(_options.DataDir, pipelineId, PipelineRunLock.DefaultTimeout, cancellationToken);
+        var pipeline = _pipelines.Get(pipelineId)
+            ?? throw new InvalidOperationException($"Pipeline '{pipelineId}' not found.");
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId,
             "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de resetear.", cancellationToken);
 
