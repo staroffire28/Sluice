@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
+using Sluice.Portal.Services.Logging;
 using Sluice.Portal.Services.Stores;
 
 namespace Sluice.Portal.Services;
@@ -14,37 +15,48 @@ public sealed class AlertService
     private readonly SettingsStore _settings;
     private readonly ILogger<AlertService> _logger;
     private readonly IHttpClientFactory _httpFactory;
+    private readonly AlertDeliveryStatusStore _status;
+    private readonly IActivityLog? _activity;
 
     public AlertService(
         IOptions<AppOptions> options,
         SettingsStore settings,
         ILogger<AlertService> logger,
-        IHttpClientFactory httpFactory)
+        IHttpClientFactory httpFactory,
+        AlertDeliveryStatusStore? status = null,
+        IActivityLog? activity = null)
     {
         _options = options.Value;
         _settings = settings;
         _logger = logger;
         _httpFactory = httpFactory;
+        _status = status ?? new AlertDeliveryStatusStore(options);
+        _activity = activity;
     }
 
-    public async Task SendAsync(string message, CancellationToken cancellationToken = default)
+    // Espera antes del único reintento (5xx o timeout). internal: los tests no esperan.
+    internal TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(2);
+
+    public async Task<AlertDeliveryResult> SendAsync(string message, CancellationToken cancellationToken = default)
     {
         _logger.LogWarning("ALERT: {Message}", message);
 
         var url = ResolveWebhookUrl();
-        if (url is not null)
+        if (url is null)
         {
-            await TryPostJsonAsync(url, new
-            {
-                eventType = "system.alert",
-                timestamp = DateTimeOffset.UtcNow,
-                text = message,
-                message,
-            }, cancellationToken);
+            return AlertDeliveryResult.NotConfigured;
         }
+
+        return await DeliverAsync(url, "system.alert", new
+        {
+            eventType = "system.alert",
+            timestamp = DateTimeOffset.UtcNow,
+            text = message,
+            message,
+        }, cancellationToken);
     }
 
-    public async Task SendPipelineFailureAsync(PipelineFailureAlert alert, CancellationToken cancellationToken = default)
+    public async Task<AlertDeliveryResult> SendPipelineFailureAsync(PipelineFailureAlert alert, CancellationToken cancellationToken = default)
     {
         _logger.LogWarning(
             "PIPELINE FAILURE: pipeline={PipelineId} job={JobId} stage={Stage} message={Message}",
@@ -53,10 +65,10 @@ public sealed class AlertService
         var url = ResolveWebhookUrl();
         if (url is null)
         {
-            return;
+            return AlertDeliveryResult.NotConfigured;
         }
 
-        await TryPostJsonAsync(url, new
+        return await DeliverAsync(url, "pipeline.failure", new
         {
             eventType = "pipeline.failure",
             timestamp = DateTimeOffset.UtcNow,
@@ -73,14 +85,14 @@ public sealed class AlertService
     // Conciliación: estructurado para que el receptor (p. ej. la Logic App de correo) pinte la tabla
     // de entidades y el estado de la corrección automática. text/message se conservan para los
     // consumidores que solo leen el texto.
-    public async Task SendReconcileAlertAsync(ReconcileAlert alert, CancellationToken cancellationToken = default)
+    public async Task<AlertDeliveryResult> SendReconcileAlertAsync(ReconcileAlert alert, CancellationToken cancellationToken = default)
     {
         _logger.LogWarning("ALERT: {Message}", alert.Message);
 
         var url = ResolveWebhookUrl();
         if (url is null)
         {
-            return;
+            return AlertDeliveryResult.NotConfigured;
         }
 
         // off = corrección automática desactivada; scheduled = se lanzará al cerrar el job;
@@ -89,7 +101,7 @@ public sealed class AlertService
             : !alert.AutoFixEligible ? "none"
             : _settings.Get().AutoRemediate ? "scheduled" : "off";
 
-        await TryPostJsonAsync(url, new
+        return await DeliverAsync(url, alert.EventType, new
         {
             eventType = alert.EventType,
             timestamp = DateTimeOffset.UtcNow,
@@ -105,6 +117,7 @@ public sealed class AlertService
         }, cancellationToken);
     }
 
+    // No reintenta ni toca el estado de entrega: una prueba a mano no debe tapar una caída real.
     public async Task<AlertDeliveryResult> SendTestAlertAsync(string? webhookUrl, CancellationToken cancellationToken = default)
     {
         var url = string.IsNullOrWhiteSpace(webhookUrl) ? ResolveWebhookUrl() : webhookUrl.Trim();
@@ -120,41 +133,13 @@ public sealed class AlertService
             return new AlertDeliveryResult(false, "Webhook URL must be an absolute https:// URL.", null);
         }
 
-        try
+        var (result, _) = await PostOnceAsync(url, new
         {
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            cts.CancelAfter(HttpTimeout);
-
-            using var response = await PostJsonInternalAsync(url, new
-            {
-                eventType = "test.ping",
-                timestamp = DateTimeOffset.UtcNow,
-                message = "Sluice portal alert test",
-            }, cts.Token);
-
-            if (response.IsSuccessStatusCode)
-            {
-                return new AlertDeliveryResult(true, $"HTTP {(int)response.StatusCode}", (int)response.StatusCode);
-            }
-
-            // Basta un fragmento para diagnosticar (p. ej. "invalid_payload"); no se devuelve la
-            // respuesta entera del servidor remoto a la UI.
-            var body = await response.Content.ReadAsStringAsync(cts.Token);
-            if (body.Length > MaxResponseBodyInDetail)
-            {
-                body = body[..MaxResponseBodyInDetail] + "…";
-            }
-
-            var detail = string.IsNullOrWhiteSpace(body)
-                ? $"HTTP {(int)response.StatusCode}"
-                : $"HTTP {(int)response.StatusCode}: {body}";
-            return new AlertDeliveryResult(false, detail, (int)response.StatusCode);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Test alert failed for webhook");
-            return new AlertDeliveryResult(false, ex.Message, null);
-        }
+            eventType = "test.ping",
+            timestamp = DateTimeOffset.UtcNow,
+            message = "Sluice portal alert test",
+        }, cancellationToken);
+        return result;
     }
 
     private string? ResolveWebhookUrl()
@@ -173,32 +158,103 @@ public sealed class AlertService
         return null;
     }
 
-    private async Task TryPostJsonAsync(string url, object payload, CancellationToken cancellationToken)
+    // Un reintento ante 5xx o timeout (un 4xx o un fallo de red/DNS no se arreglan reintentando al
+    // momento). El resultado queda en el estado compartido; el activity log solo registra las
+    // transiciones (empieza a fallar / se recupera), no cada alerta perdida.
+    private async Task<AlertDeliveryResult> DeliverAsync(string url, string eventType, object payload, CancellationToken cancellationToken)
+    {
+        var (result, retryable) = await PostOnceAsync(url, payload, cancellationToken);
+        if (retryable)
+        {
+            try
+            {
+                await Task.Delay(RetryDelay, cancellationToken);
+                (result, _) = await PostOnceAsync(url, payload, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+        }
+
+        // Cancelado por quien llama (apagado, job cancelado): no dice nada del webhook.
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return result;
+        }
+
+        try
+        {
+            var previous = _status.Record(eventType, result, DateTimeOffset.UtcNow);
+            var host = WebhookHost(url);
+            if (!result.Success && previous?.LastSucceeded != false)
+            {
+                _activity?.LogSystem("alert.delivery.failed",
+                    $"No se pudo entregar la alerta {eventType} al webhook ({host}): {result.Detail}. Las alertas no llegan hasta que se avise de que se ha recuperado.",
+                    level: "error");
+            }
+            else if (result.Success && previous is { LastSucceeded: false })
+            {
+                _activity?.LogSystem("alert.delivery.recovered",
+                    $"El webhook de alertas ({host}) vuelve a responder (alerta {eventType}).");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // El estado es informativo: no poder guardarlo no cambia el resultado del envío.
+            _logger.LogWarning(ex, "No se pudo guardar el estado de entrega de alertas.");
+        }
+
+        return result;
+    }
+
+    // Un POST con su propio timeout. Distingue la respuesta HTTP (con el cuerpo recortado), el
+    // timeout y el error de red; retryable = 5xx o timeout.
+    private async Task<(AlertDeliveryResult Result, bool Retryable)> PostOnceAsync(string url, object payload, CancellationToken cancellationToken)
     {
         try
         {
-            using var response = await PostJsonInternalAsync(url, payload, cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(HttpTimeout);
+
+            using var response = await _httpFactory.CreateClient().PostAsJsonAsync(url, payload, cts.Token);
+            var status = (int)response.StatusCode;
+            if (response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Alert webhook returned HTTP {Status} for host {Host}", (int)response.StatusCode, WebhookHost(url));
+                return (new AlertDeliveryResult(true, $"HTTP {status}", status), false);
             }
+
+            _logger.LogWarning("Alert webhook returned HTTP {Status} for host {Host}", status, WebhookHost(url));
+
+            // Basta un fragmento para diagnosticar (p. ej. "invalid_payload"); no se guarda ni se
+            // muestra la respuesta entera del servidor remoto.
+            var body = await response.Content.ReadAsStringAsync(cts.Token);
+            if (body.Length > MaxResponseBodyInDetail)
+            {
+                body = body[..MaxResponseBodyInDetail] + "…";
+            }
+
+            var detail = string.IsNullOrWhiteSpace(body) ? $"HTTP {status}" : $"HTTP {status}: {body}";
+            return (new AlertDeliveryResult(false, detail, status), status >= 500);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("Alert webhook timed out after {Seconds} s for host {Host}", HttpTimeout.TotalSeconds, WebhookHost(url));
+            return (new AlertDeliveryResult(false, $"Timeout ({HttpTimeout.TotalSeconds:0} s)", null), true);
+        }
+        catch (OperationCanceledException)
+        {
+            return (new AlertDeliveryResult(false, "Cancelled.", null), false);
         }
         catch (Exception ex)
         {
+            // HttpRequestException = DNS, conexión rechazada, TLS: la red, no el receptor.
             _logger.LogWarning(ex, "Alert webhook POST failed for host {Host}", WebhookHost(url));
+            var detail = ex is HttpRequestException ? $"Network error: {ex.Message}" : ex.Message;
+            return (new AlertDeliveryResult(false, detail, null), false);
         }
     }
 
     // La URL lleva la firma (sig=...) en la query: es un secreto, en los logs solo el host.
     private static string WebhookHost(string url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : "(invalid URL)";
-
-    private async Task<HttpResponseMessage> PostJsonInternalAsync(string url, object payload, CancellationToken cancellationToken)
-    {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(HttpTimeout);
-
-        var client = _httpFactory.CreateClient();
-        return await client.PostAsJsonAsync(url, payload, cts.Token);
-    }
 }

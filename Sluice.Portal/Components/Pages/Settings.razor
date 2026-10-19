@@ -6,6 +6,7 @@
 @using Sluice.Portal.Services.Stores
 @inject SettingsStore SettingsStore
 @inject AlertService AlertService
+@inject AlertDeliveryStatusStore DeliveryStatusStore
 @inject IStringLocalizer<SharedResource> L
 
 <PageTitle>@L["Nav.Settings"]</PageTitle>
@@ -60,6 +61,28 @@
                     @_testResult.Detail
                 </FluentMessageBar>
             }
+
+            @* Última entrega real (no las pruebas), la registre la api o un worker. *@
+            <div data-testid="settings-alert-delivery">
+                <p class="field-hint"><strong>@L["Page.Settings.Alerts.LastDelivery"]</strong></p>
+                @if (_delivery is null)
+                {
+                    <p class="field-hint">@L["Page.Settings.Alerts.LastDelivery.None"]</p>
+                }
+                else if (_delivery.LastSucceeded)
+                {
+                    <p class="field-hint">@L["Page.Settings.Alerts.LastDelivery.Ok", FormatTime(_delivery.LastAttemptAt), _delivery.LastEventType ?? "", _delivery.LastDetail ?? ""]</p>
+                }
+                else
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning">
+                        @L["Page.Settings.Alerts.LastDelivery.Failed", FormatTime(_delivery.LastAttemptAt), _delivery.LastEventType ?? "", _delivery.LastDetail ?? ""]
+                        @(_delivery.LastSuccessAt is { } ok
+                            ? L["Page.Settings.Alerts.LastDelivery.LastSuccess", FormatTime(ok)]
+                            : L["Page.Settings.Alerts.LastDelivery.NeverSucceeded"])
+                    </FluentMessageBar>
+                }
+            </div>
         </div>
     </PageSection>
 
@@ -135,9 +158,13 @@
     private string? _saveError;
     private bool _testingAlert;
     private AlertDeliveryResult? _testResult;
+    private AlertDeliveryStatus? _delivery;
+
+    private static string FormatTime(DateTimeOffset at) => at.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
 
     protected override void OnInitialized()
     {
+        _delivery = DeliveryStatusStore.Get();
         var settings = SettingsStore.Get();
         _pollMinutes = settings.SchedulerPollMinutes;
         _leaseSeconds = settings.TaskLeaseSeconds;

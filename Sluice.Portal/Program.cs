@@ -165,6 +165,7 @@ builder.Services.AddSingleton<IStageRouter, StageRouter>();
 builder.Services.AddSingleton<IIngestExecutor, IngestExecutor>();
 builder.Services.AddSingleton<ISqlExecutor, SqlExecutor>();
 builder.Services.AddSingleton<IReconcileExecutor, ReconcileExecutor>();
+builder.Services.AddSingleton<AlertDeliveryStatusStore>();
 builder.Services.AddSingleton<AlertService>();
 builder.Services.AddSingleton<DeadmanService>();
 

@@ -32,4 +32,20 @@ public sealed record ReconcileAlert
     public bool AutoFixAttempted { get; init; }
 }
 
-public sealed record AlertDeliveryResult(bool Success, string? Detail, int? StatusCode);
+public sealed record AlertDeliveryResult(bool Success, string? Detail, int? StatusCode)
+{
+    // Sin webhook configurado la alerta solo va al log: cuenta como atendida, no hay nada que reintentar.
+    public static readonly AlertDeliveryResult NotConfigured = new(true, "No webhook configured.", null);
+}
+
+// Última entrega al webhook (DATA_DIR/alerts/status.json), compartida por la api y los workers.
+public sealed record AlertDeliveryStatus
+{
+    public required DateTimeOffset LastAttemptAt { get; init; }
+    public required bool LastSucceeded { get; init; }
+    public string? LastEventType { get; init; }
+    public string? LastDetail { get; init; }
+    public int? LastStatusCode { get; init; }
+    public DateTimeOffset? LastSuccessAt { get; init; }
+    public DateTimeOffset? LastFailureAt { get; init; }
+}
