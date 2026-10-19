@@ -41,6 +41,12 @@ public sealed class PipelineService : IPipelineService
             throw new InvalidOperationException($"Id de pipeline no válido: '{pipeline.Id}'.");
         }
 
+        if (EntityIds.IsReservedPipelineId(pipeline.Id))
+        {
+            throw new InvalidOperationException(
+                $"Id de pipeline reservado: '{pipeline.Id}' coincide con una carpeta del sistema o empieza por '_' o '.'.");
+        }
+
         ValidateRefs(pipeline);
         _store.SaveNew(pipeline);
         _stateStore.GetOrCreate(pipeline.Id);
