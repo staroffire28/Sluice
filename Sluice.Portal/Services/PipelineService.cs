@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
 using Sluice.Portal.Services.Stores;
 using PipelineModel = Sluice.Portal.Models.Pipeline;
@@ -10,7 +12,7 @@ public interface IPipelineService
     PipelineModel? Get(string id);
     PipelineModel Create(PipelineModel pipeline);
     PipelineModel? Update(string id, PipelineModel pipeline);
-    bool Delete(string id, bool wipeState, out string? error);
+    Task<string?> DeleteAsync(string id, bool wipeState, CancellationToken cancellationToken = default);
     PipelineState GetState(string pipelineId);
     IReadOnlyList<object> GetTables(string pipelineId);
 }
@@ -21,15 +23,19 @@ public sealed class PipelineService : IPipelineService
     private readonly PipelineStateStore _stateStore;
     private readonly ConnectionStore _connections;
     private readonly PipelineRunQueue? _runQueue;
-    private readonly IJobService? _jobs;
+    private readonly IJobService _jobs;
+    private readonly ITaskStore _tasks;
+    private readonly AppOptions _options;
 
-    public PipelineService(PipelineStore store, PipelineStateStore stateStore, ConnectionStore connections, PipelineRunQueue? runQueue = null, IJobService? jobs = null)
+    public PipelineService(IOptions<AppOptions> options, PipelineStore store, PipelineStateStore stateStore, ConnectionStore connections, IJobService jobs, ITaskStore tasks, PipelineRunQueue? runQueue = null)
     {
+        _options = options.Value;
         _store = store;
         _stateStore = stateStore;
         _connections = connections;
         _runQueue = runQueue;
         _jobs = jobs;
+        _tasks = tasks;
     }
 
     public IReadOnlyList<PipelineModel> List() => _store.ListAll();
@@ -68,21 +74,18 @@ public sealed class PipelineService : IPipelineService
         return updated;
     }
 
-    public bool Delete(string id, bool wipeState, out string? error)
+    public async Task<string?> DeleteAsync(string id, bool wipeState, CancellationToken cancellationToken = default)
     {
-        error = null;
-
         // Borrarlo bajo un job en curso dejaría a ese job sin pipeline a mitad de etapa y, con
-        // wipeState, su cierre volvería a escribir el estado recién borrado.
-        if (_jobs?.ListRunning().Any(j => j.PipelineId == id) == true)
-        {
-            throw new PipelineBusyException("Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de borrarlo.");
-        }
+        // wipeState, su cierre volvería a escribir el estado recién borrado. El lock de ejecución
+        // evita además borrarlo a mitad de un arranque o de un reset.
+        using var runLock = await PipelineRunLock.AcquireAsync(_options.DataDir, id, PipelineRunLock.DefaultTimeout, cancellationToken);
+        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, id,
+            "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de borrarlo.", cancellationToken);
 
         if (!_store.Delete(id))
         {
-            error = "Pipeline not found.";
-            return false;
+            return "Pipeline not found.";
         }
 
         if (wipeState)
@@ -93,7 +96,7 @@ public sealed class PipelineService : IPipelineService
         // Sin pipeline no hay nada que ejecutar, y otro creado luego con el mismo id no debe heredarlo.
         _runQueue?.Remove(id);
         _runQueue?.Complete(id);
-        return true;
+        return null;
     }
 
     public PipelineState GetState(string pipelineId) => _stateStore.GetOrCreate(pipelineId);

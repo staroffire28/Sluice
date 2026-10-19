@@ -330,7 +330,7 @@
         _showDelete = true;
     }
 
-    private void DeleteConfirmed()
+    private async Task DeleteConfirmed()
     {
         if (_deleteId is null)
         {
@@ -339,9 +339,9 @@
 
         try
         {
-            if (!PipelineService.Delete(_deleteId, _wipeState, out var error))
+            if (await PipelineService.DeleteAsync(_deleteId, _wipeState) is { } error)
             {
-                _ = NotificationService.ShowErrorToastAsync(error ?? L["Common.DeleteFailed"].Value);
+                _ = NotificationService.ShowErrorToastAsync(error);
                 return;
             }
         }

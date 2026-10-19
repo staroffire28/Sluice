@@ -24,7 +24,7 @@ public static class PipelineRunLock
         }
         catch (TimeoutException)
         {
-            throw new PipelineBusyException("Ya se está arrancando un job para este pipeline.");
+            throw new PipelineBusyException("El pipeline está ocupado (arranque o reset en curso).");
         }
     }
 }
