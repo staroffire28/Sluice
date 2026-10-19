@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
@@ -12,12 +13,14 @@ public sealed class TaskStore : ITaskStore
     private readonly SettingsStore _settings;
     private readonly TimeProvider _time;
     private readonly string _locksDir;
+    private readonly ILogger<TaskStore> _logger;
 
-    public TaskStore(IOptions<AppOptions> options, SettingsStore settings, TimeProvider? time = null)
+    public TaskStore(IOptions<AppOptions> options, SettingsStore settings, TimeProvider? time = null, ILogger<TaskStore>? logger = null)
     {
         _options = options.Value;
         _settings = settings;
         _time = time ?? TimeProvider.System;
+        _logger = logger ?? NullLogger<TaskStore>.Instance;
         _locksDir = Path.Combine(_options.DataDir, "locks");
         DataDirectoryInitializer.EnsureLayout(_options);
     }
@@ -93,6 +96,12 @@ public sealed class TaskStore : ITaskStore
             {
                 // Otra réplica reclamó este archivo a la vez, o lock transitorio de Windows:
                 // perdimos la carrera, seguir con el siguiente pendiente.
+                continue;
+            }
+            catch (JsonException ex)
+            {
+                // Ya bajo el lock de la tarea.
+                Quarantine(file, stage, ex);
                 continue;
             }
 
@@ -202,6 +211,11 @@ public sealed class TaskStore : ITaskStore
                     // (claim, heartbeat o complete en curso). Esa tarea ya la maneja otro
                     // worker; saltarla en vez de romper el claim. (FileNotFoundException y
                     // DirectoryNotFoundException heredan de IOException.)
+                    continue;
+                }
+                catch (JsonException ex)
+                {
+                    await QuarantineAsync(file, stage, ex, cancellationToken);
                     continue;
                 }
 
@@ -334,6 +348,11 @@ public sealed class TaskStore : ITaskStore
                     // y la lectura: ya no está en curso.
                     continue;
                 }
+                catch (JsonException ex)
+                {
+                    await QuarantineAsync(file, stage, ex, cancellationToken);
+                    continue;
+                }
 
                 if (task?.PipelineId == pipelineId && task.LeaseExpiresAt > now)
                 {
@@ -379,6 +398,37 @@ public sealed class TaskStore : ITaskStore
 
         await WriteTaskAsync(targetPath, finalTask, cancellationToken);
         return finalTask;
+    }
+
+    // Una tarea ilegible (JSON corrupto, p. ej. editada a mano) hacía lanzar al reclaim de todas las
+    // etapas y a FindLiveClaimAsync, la guarda de Run, Reset y Restore de cualquier pipeline. Se aparta
+    // a error/ con otro nombre (GetAsync no la toma por la tarea, y no pisa otra cuarentena) y se avisa.
+    private async Task QuarantineAsync(string file, PipelineStage stage, JsonException error, CancellationToken cancellationToken)
+    {
+        using var taskLock = await TryLockTaskAsync(stage, Path.GetFileNameWithoutExtension(file), cancellationToken);
+        if (taskLock is not null)
+        {
+            Quarantine(file, stage, error);
+        }
+    }
+
+    // Quien llama ya tiene el lock de la tarea.
+    private void Quarantine(string file, PipelineStage stage, JsonException error)
+    {
+        var target = Path.Combine(
+            GetDirectory(stage, PipelineTaskStatus.Error),
+            $"{Path.GetFileNameWithoutExtension(file)}.unreadable-{_time.GetUtcNow():yyyyMMddHHmmssfff}.json");
+        try
+        {
+            File.Move(file, target);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Otra réplica la apartó a la vez.
+            return;
+        }
+
+        _logger.LogError(error, "Tarea ilegible {File}: apartada en {Target}; revísala y bórrala o reencólala a mano.", file, target);
     }
 
     private string GetDirectory(PipelineStage stage, PipelineTaskStatus status) =>
