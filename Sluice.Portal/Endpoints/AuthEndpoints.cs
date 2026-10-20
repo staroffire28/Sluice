@@ -114,8 +114,14 @@ public static class AuthEndpoints
                 return Results.BadRequest();
             }
 
+            // Igual que el rechazo: sin sesión válida antes de cerrarla no se registra.
+            var hadSession = auth.HasValidUiSession(context);
             auth.SignOut(context);
-            audit.Record(actor, "auth.logout", AuditOutcome.Ok, null, null, null, "Cierre de sesión.");
+            if (hadSession)
+            {
+                audit.Record(actor, "auth.logout", AuditOutcome.Ok, null, null, null, "Cierre de sesión.");
+            }
+
             return Results.Redirect("/login");
         })
         .DisableAntiforgery();
