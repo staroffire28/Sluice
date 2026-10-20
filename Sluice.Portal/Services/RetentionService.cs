@@ -22,6 +22,10 @@ public sealed class RetentionService
     // (el artefacto aparece antes que su job): solo se purga pasado este margen.
     public static readonly TimeSpan OrphanGracePeriod = TimeSpan.FromHours(1);
 
+    // El staging de un job terminado en Error o Cancelled ya no lo lee nadie (un reintento es otro
+    // job): se purga pasado este margen aunque el job siga dentro de la retención.
+    public static readonly TimeSpan FailedStagingRetention = TimeSpan.FromHours(24);
+
     private readonly AppOptions _options;
     private readonly IActivityLog _activity;
     private readonly ILogger<RetentionService> _logger;
@@ -40,14 +44,16 @@ public sealed class RetentionService
     // con un DataDir temporal y un "ahora" inyectado, sin reloj real ni efectos.
     public RetentionPlan Plan(DateTimeOffset now, AppSettings settings)
     {
-        // RetentionDays <= 0 desactiva la purga: no se borra nada.
+        var (jobs, unreadableJobIds) = LoadJobs();
+
+        // RetentionDays <= 0 desactiva la purga: no se borra nada, salvo el staging de los jobs
+        // fallidos o cancelados, que se purga siempre (FailedStagingRetention).
         if (settings.RetentionDays <= 0)
         {
-            return new RetentionPlan();
+            return new RetentionPlan { StagingDirectories = OrphanStagingDirectories(null, FailedJobIds(jobs, now)) };
         }
 
         var cutoff = now - TimeSpan.FromDays(settings.RetentionDays);
-        var (jobs, unreadableJobIds) = LoadJobs();
         // Un job ilegible (corrupto o a medio escribir) se conserva con todos sus artefactos:
         // sin poder leerlo no se sabe si está vivo, y su id sale del nombre del archivo.
         var survivingJobIds = new HashSet<string>(unreadableJobIds, StringComparer.OrdinalIgnoreCase);
@@ -89,7 +95,7 @@ public sealed class RetentionService
             ReportFiles = OrphanReportFiles(orphans),
             TaskFiles = OrphanTerminalTaskFiles(orphans),
             RunDirectories = OrphanRunDirectories(orphans),
-            StagingDirectories = OrphanStagingDirectories(orphans),
+            StagingDirectories = OrphanStagingDirectories(orphans, FailedJobIds(jobs, now)),
         };
     }
 
@@ -215,7 +221,15 @@ public sealed class RetentionService
         return result;
     }
 
-    private List<string> OrphanStagingDirectories(OrphanFilter orphans)
+    // Jobs terminados en Error o Cancelled hace más de FailedStagingRetention: su staging sobra.
+    private static HashSet<string> FailedJobIds(List<Job> jobs, DateTimeOffset now) =>
+        jobs.Where(j => j.Status is JobStatus.Error or JobStatus.Cancelled
+                && (j.FinishedAt ?? j.StartedAt) <= now - FailedStagingRetention)
+            .Select(j => j.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    // orphans null: retención desactivada, solo se purga el staging de los jobs fallidos.
+    private List<string> OrphanStagingDirectories(OrphanFilter? orphans, HashSet<string> failedJobIds)
     {
         var result = new List<string>();
         var stagingRoot = Path.Combine(_options.DataDir, "staging");
@@ -226,7 +240,8 @@ public sealed class RetentionService
 
         foreach (var dir in Directory.GetDirectories(stagingRoot))
         {
-            if (orphans.IsPurgeable(Path.GetFileName(dir), Directory.GetLastWriteTimeUtc(dir)))
+            var jobId = Path.GetFileName(dir);
+            if (failedJobIds.Contains(jobId) || orphans?.IsPurgeable(jobId, Directory.GetLastWriteTimeUtc(dir)) == true)
             {
                 result.Add(dir);
             }

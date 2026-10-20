@@ -73,6 +73,7 @@ Un janitor limita el crecimiento del volumen. El **job es la unidad de retenció
 
 - **Siempre se conservan**: los últimos 50 jobs por pipeline (aunque sean viejos), los jobs en ejecución, las aceptaciones de divergencia y el estado del pipeline.
 - **Perilla**: `RetentionDays` en `/settings` (por defecto 90). `0` o negativo desactiva la purga.
+- **Jobs fallidos o cancelados**: el staging del job se borra cuando el ingest falla o se cancela; lo que quede se purga 24 h después de que el job termine, aunque siga dentro de la retención e incluso con la purga desactivada.
 - **Cadencia**: cada 6 horas, solo en el orquestador; registrado como `retention.sweep`. Los archivos corruptos o bloqueados se omiten sin romper el barrido.
 
 ### Snapshots origen (container Synapse Link en ADLS)

@@ -61,6 +61,41 @@ public sealed class IngestExecutor : IIngestExecutor
 
     public async Task ExecuteAsync(PipelineTask task, CancellationToken cancellationToken = default)
     {
+        // El camino feliz borra el staging al registrar. Si el ingest falla o el usuario cancela el
+        // job, también se borra: si no, sus transitorios se quedaban en el volumen hasta que la
+        // retención purgaba el job. Con el lease perdido o en un apagado (token cancelado, job aún
+        // Running) no: la tarea puede ser ya de otra réplica, que escribe en el mismo staging/{jobId}.
+        // Ese lo limpia la re-ejecución al terminar, o la retención si el job acaba en Error/Cancelled.
+        try
+        {
+            await ExecuteCoreAsync(task, cancellationToken);
+        }
+        catch when (!cancellationToken.IsCancellationRequested || _jobs.Get(task.JobId)?.Status == JobStatus.Cancelled)
+        {
+            DeleteStaging(task.JobId);
+            throw;
+        }
+    }
+
+    // Limpiar el staging local del job (transitorios + consolidados temporales).
+    private void DeleteStaging(string jobId)
+    {
+        try
+        {
+            var stagingRoot = _manifestStore.GetStagingRoot(jobId);
+            if (Directory.Exists(stagingRoot))
+            {
+                Directory.Delete(stagingRoot, recursive: true);
+            }
+        }
+        catch
+        {
+            // El staging es efímero; si no se puede borrar ahora, no es fatal.
+        }
+    }
+
+    private async Task ExecuteCoreAsync(PipelineTask task, CancellationToken cancellationToken)
+    {
         var job = _jobs.Get(task.JobId)
             ?? throw new InvalidOperationException($"Job '{task.JobId}' not found.");
 
@@ -490,19 +525,7 @@ public sealed class IngestExecutor : IIngestExecutor
         progress.CompleteStep(JobStepCatalog.Consolidate);
         progress.StartStep(JobStepCatalog.Register);
 
-        // Limpiar el staging local del job (transitorios + consolidados temporales).
-        try
-        {
-            var stagingRoot = _manifestStore.GetStagingRoot(task.JobId);
-            if (Directory.Exists(stagingRoot))
-            {
-                Directory.Delete(stagingRoot, recursive: true);
-            }
-        }
-        catch
-        {
-            // El staging es efímero; si no se puede borrar ahora, no es fatal.
-        }
+        DeleteStaging(task.JobId);
 
         var updatedTables = new Dictionary<string, TableState>(pipelineState.Tables, StringComparer.OrdinalIgnoreCase);
         foreach (var entry in manifestEntities)
