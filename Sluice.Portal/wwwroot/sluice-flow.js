@@ -159,7 +159,7 @@ void main() {
 
     function start(canvas) {
         started.add(canvas);
-        canvas.dataset.sluiceFlow = 'running'; // solo informativo (lo miran los tests de UI)
+        canvas.dataset.sluiceFlow = 'running'; // solo informativo: la guarda es el WeakSet
         const gl = canvas.getContext('webgl2', { alpha: true, antialias: false, depth: false });
         const program = gl && compile(gl);
         if (!program) {
