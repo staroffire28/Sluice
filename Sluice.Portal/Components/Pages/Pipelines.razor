@@ -29,6 +29,14 @@
         </Actions>
     </PageHeader>
 
+    @* Aviso de página: arriba, bajo la cabecera, como en Conciliación y Snapshots. *@
+    @if (_latestReconcile is not null)
+    {
+        <FluentMessageBar data-testid="pipe-latest-reconcile" Intent="@(_latestReconcile.IsPartial ? MessageBarIntent.Warning : MessageBarIntent.Success)">
+            @L["Page.Pipelines.LatestReconcile"] @_latestReconcile.MaxDivergencePct.ToString("F2")% (@_latestReconcile.Entities.Count @L["Page.Pipelines.Entities"])
+        </FluentMessageBar>
+    }
+
     @* Recién creado: antes de la primera ejecución conviene elegir qué tablas cargar. *@
     @if (_createdPipelineId is { } createdId)
     {
@@ -55,7 +63,9 @@
                     <span title="@context.DestinationId" data-testid="@($"dest-{context.Id}")">@ConnectionName(context.DestinationId)</span>
                 </TemplateColumn>
                 <TemplateColumn Title="@L["Page.Pipelines.Scheduler"]">
-                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center" Wrap="true" VerticalGap="4">
+                    @* En una línea (antes la insignia quedaba encima del botón): la columna toma el
+                       ancho que necesita. *@
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center" Wrap="false" Class="cell-inline">
                         <FluentBadge data-testid="@($"sched-{context.Id}-{(context.Enabled ? "on" : "off")}")" Appearance="@(context.Enabled ? BadgeAppearance.Filled : BadgeAppearance.Tint)" Color="@(context.Enabled ? BadgeColor.Brand : BadgeColor.Informative)">
                             @(context.Enabled ? L["Page.Pipelines.SchedulerActive"] : L["Page.Pipelines.SchedulerInactive"])
                         </FluentBadge>
@@ -82,14 +92,6 @@
     </ListWithEmptyCta>
 
     <PaginationControl Page="_page" TotalPages="_totalPages" TotalCount="_totalCount" PageChanged="OnPageChanged" />
-
-    @if (_latestReconcile is not null)
-    {
-        <FluentMessageBar Intent="@(_latestReconcile.IsPartial ? MessageBarIntent.Warning : MessageBarIntent.Success)" Style="margin-top:0.75rem;">
-            @L["Page.Pipelines.LatestReconcile"] @_latestReconcile.MaxDivergencePct.ToString("F2")% (@_latestReconcile.Entities.Count @L["Page.Pipelines.Entities"])
-        </FluentMessageBar>
-    }
-
     </PageSection>
 </FluentStack>
 

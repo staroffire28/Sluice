@@ -747,3 +747,9 @@ body[data-theme="dark"] fluent-message-bar {
     color: var(--colorPaletteDarkOrangeForeground1, #bc4b09);
     font-weight: 600;
 }
+
+/* Celda con varios controles en fila (insignia + botón del Scheduler en Pipelines): sin saltos
+   dentro de ellos, así la columna toma el ancho del conjunto en vez de encoger la insignia. */
+.cell-inline {
+    white-space: nowrap;
+}
