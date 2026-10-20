@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
+using Sluice.Portal.Services.Logging;
 using Sluice.Portal.Services.Stores;
 
 namespace Sluice.Portal.Services.Pipeline;
@@ -30,7 +31,7 @@ public interface IPipelineResetService
     // pipeline llegó a cargar — evita arrastrar datos de una prueba anterior. NO toca la
     // configuración del pipeline (Source/Destination/Name) ni las pausas de sincronización
     // (TablePauseStore), que son preferencia del usuario, no datos de prueba.
-    Task<PipelineResetResult> ResetAsync(string pipelineId, bool truncateSql, CancellationToken cancellationToken = default);
+    Task<PipelineResetResult> ResetAsync(AuditActor actor, string pipelineId, bool truncateSql, CancellationToken cancellationToken = default);
 }
 
 public sealed class PipelineResetService : IPipelineResetService
@@ -42,7 +43,8 @@ public sealed class PipelineResetService : IPipelineResetService
     private readonly ISqlMergeExecutor _mergeExecutor;
     private readonly IJobService _jobs;
     private readonly ITaskStore _tasks;
-    private readonly PipelineRunQueue? _runQueue;
+    private readonly RunQueueService? _runQueue;
+    private readonly IAuditLog _audit;
     private readonly AppOptions _options;
 
     public PipelineResetService(
@@ -54,8 +56,10 @@ public sealed class PipelineResetService : IPipelineResetService
         ISqlMergeExecutor mergeExecutor,
         IJobService jobs,
         ITaskStore tasks,
-        PipelineRunQueue? runQueue = null)
+        IAuditLog audit,
+        RunQueueService? runQueue = null)
     {
+        _audit = audit;
         _options = options.Value;
         _runQueue = runQueue;
         _pipelines = pipelines;
@@ -67,7 +71,24 @@ public sealed class PipelineResetService : IPipelineResetService
         _tasks = tasks;
     }
 
-    public async Task<PipelineResetResult> ResetAsync(string pipelineId, bool truncateSql, CancellationToken cancellationToken = default)
+    // Una entrada para todo el reset (no una por parquet borrado). Un truncado que falla en alguna
+    // tabla detiene el reset antes de borrar nada: queda como error, con las tablas que fallaron.
+    public Task<PipelineResetResult> ResetAsync(AuditActor actor, string pipelineId, bool truncateSql, CancellationToken cancellationToken = default) =>
+        _audit.AuditAsync(
+            actor,
+            "pipeline.reset",
+            pipelineId,
+            () => ResetCoreAsync(actor, pipelineId, truncateSql, cancellationToken),
+            result => result.Completed
+                ? new AuditResult(
+                    $"Pipeline {pipelineId} reseteado{(truncateSql ? " con truncado de SQL" : "")} " +
+                    $"({result.TablesTruncated.Count} tabla(s) truncada(s), {result.ParquetArtifactsDeleted} parquet(s) borrado(s)).")
+                : new AuditResult(
+                    $"Reset de {pipelineId} detenido: fallo al truncar {string.Join(", ", result.TableTruncateFailures.Select(f => f.Entity))}.",
+                    Outcome: AuditOutcome.Error),
+            $"No se pudo resetear {pipelineId}");
+
+    private async Task<PipelineResetResult> ResetCoreAsync(AuditActor actor, string pipelineId, bool truncateSql, CancellationToken cancellationToken)
     {
         _ = _pipelines.Get(pipelineId)
             ?? throw new InvalidOperationException($"Pipeline '{pipelineId}' not found.");
@@ -131,7 +152,7 @@ public sealed class PipelineResetService : IPipelineResetService
         var deleted = 0;
         foreach (var artifact in artifacts)
         {
-            if (await _parquet.DeleteAsync(pipelineId, artifact.Path, cancellationToken))
+            if (await _parquet.DeleteUnauditedAsync(pipelineId, artifact.Path, cancellationToken))
             {
                 deleted++;
             }
@@ -148,7 +169,7 @@ public sealed class PipelineResetService : IPipelineResetService
         foreach (var entity in entitiesFromParquet)
         {
             var schemaPath = IngestManifestStore.GetConsolidatedSchemaBlobPath(pipelineId, entity);
-            if (await _parquet.DeleteAsync(pipelineId, schemaPath, cancellationToken))
+            if (await _parquet.DeleteUnauditedAsync(pipelineId, schemaPath, cancellationToken))
             {
                 deleted++;
             }
@@ -161,8 +182,7 @@ public sealed class PipelineResetService : IPipelineResetService
 
         // Lo pedido antes del reset contaba con el estado que se acaba de descartar. Solo aquí: un
         // reset que falla al truncar no descarta nada y conserva lo encolado.
-        _runQueue?.Remove(pipelineId);
-        _runQueue?.Complete(pipelineId);
+        _runQueue?.Discard(actor, pipelineId, "el pipeline se reseteó");
 
         return new PipelineResetResult
         {

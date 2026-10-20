@@ -1,6 +1,7 @@
 using Sluice.Portal.Models;
 using Sluice.Portal.Services.Adls;
 using Sluice.Portal.Services.Connections;
+using Sluice.Portal.Services.Logging;
 using Sluice.Portal.Services.Pipeline;
 using Sluice.Portal.Services.Stores;
 
@@ -10,22 +11,26 @@ public interface IConnectionService
 {
     IReadOnlyList<Connection> List(ConnectionRole? role = null);
     Connection? Get(string id);
-    Connection Create(Connection connection);
-    Connection? Update(string id, Connection connection);
+    // Lo que muta o prueba contra la red del cliente recibe quién actúa y queda en el registro de
+    // actividad (ver AuditActor).
+    Connection Create(AuditActor actor, Connection connection);
+    Connection? Update(AuditActor actor, string id, Connection connection);
 
     // Como Update; si un origen cambia dónde guarda el Parquet (parquet_storage), copia antes al
     // sitio nuevo los consolidados de sus pipelines. CopiedTables: cuántos se copiaron.
-    Task<(Connection? Connection, int CopiedTables)> UpdateAsync(string id, Connection connection, CancellationToken cancellationToken = default);
-    bool Delete(string id, out string? error);
-    Task<ConnectionTestResult> TestAsync(string id, CancellationToken cancellationToken = default);
+    Task<(Connection? Connection, int CopiedTables)> UpdateAsync(AuditActor actor, string id, Connection connection, CancellationToken cancellationToken = default);
+
+    // null si se borró; si no, el motivo.
+    string? Delete(AuditActor actor, string id);
+    Task<ConnectionTestResult> TestAsync(AuditActor actor, string id, CancellationToken cancellationToken = default);
 
     // Prueba un destino SQL sin guardarlo (el diálogo de Destinos) y devuelve la versión detectada.
     // existingId: al editar, los secretos que llegan vacíos o enmascarados se toman de la guardada.
-    Task<SqlVersionDetection> DetectSqlVersionAsync(Connection draft, string? existingId, CancellationToken cancellationToken = default);
+    Task<SqlVersionDetection> DetectSqlVersionAsync(AuditActor actor, Connection draft, string? existingId, CancellationToken cancellationToken = default);
 
     // Prueba un origen del formulario sin guardarlo (los secretos vacíos o enmascarados se toman
     // del guardado con existingId).
-    Task<ConnectionTestResult> TestSourceDraftAsync(Connection draft, string? existingId, CancellationToken cancellationToken = default);
+    Task<ConnectionTestResult> TestSourceDraftAsync(AuditActor actor, Connection draft, string? existingId, CancellationToken cancellationToken = default);
 }
 
 // Code: error conocido (KnownErrors) cuando falla; null si no se reconoce.
@@ -47,13 +52,16 @@ public sealed class ConnectionService : IConnectionService
     private readonly PipelineStore _pipelines;
     private readonly IAdlsClientFactory _adlsFactory;
     private readonly ISqlConnectionFactory _sqlFactory;
+    private readonly IAuditLog _audit;
 
     public ConnectionService(
         ConnectionStore store,
         PipelineStore pipelines,
         IAdlsClientFactory adlsFactory,
-        ISqlConnectionFactory sqlFactory)
+        ISqlConnectionFactory sqlFactory,
+        IAuditLog audit)
     {
+        _audit = audit;
         _store = store;
         _pipelines = pipelines;
         _adlsFactory = adlsFactory;
@@ -72,7 +80,17 @@ public sealed class ConnectionService : IConnectionService
         return item is null ? null : SecretMasker.Mask(item);
     }
 
-    public Connection Create(Connection connection)
+    public Connection Create(AuditActor actor, Connection connection) =>
+        _audit.Audit(
+            actor,
+            "connection.create",
+            null,
+            () => CreateCore(connection),
+            created => new AuditResult($"Conexión {RoleLabel(created.Role)} '{created.Name}' creada."),
+            $"No se pudo crear la conexión {RoleLabel(connection.Role)} '{connection.Name}'",
+            target: connection.Id);
+
+    private Connection CreateCore(Connection connection)
     {
         if (!EntityIds.IsValid(connection.Id))
         {
@@ -83,7 +101,17 @@ public sealed class ConnectionService : IConnectionService
         return SecretMasker.Mask(connection);
     }
 
-    public Connection? Update(string id, Connection connection)
+    public Connection? Update(AuditActor actor, string id, Connection connection) =>
+        _audit.Audit(
+            actor,
+            "connection.update",
+            null,
+            () => UpdateCore(id, connection),
+            Updated(id),
+            $"No se pudo guardar la conexión {RoleLabel(connection.Role)} '{connection.Name}'",
+            target: id);
+
+    private Connection? UpdateCore(string id, Connection connection)
     {
         if (!_store.Exists(id))
         {
@@ -133,7 +161,25 @@ public sealed class ConnectionService : IConnectionService
     // Tras la purga de los CSV de Synapse Link, el Parquet consolidado puede ser la única copia de la
     // historia: al cambiar de sitio se copia (sin borrar el original) antes de guardar la conexión y,
     // si la copia falla, no se guarda nada. Un cambio de tipo no mueve el Parquet.
-    public async Task<(Connection? Connection, int CopiedTables)> UpdateAsync(string id, Connection connection, CancellationToken cancellationToken = default)
+    public Task<(Connection? Connection, int CopiedTables)> UpdateAsync(AuditActor actor, string id, Connection connection, CancellationToken cancellationToken = default) =>
+        _audit.AuditAsync(
+            actor,
+            "connection.update",
+            null,
+            () => UpdateCoreAsync(id, connection, cancellationToken),
+            result => result.CopiedTables > 0 && result.Connection is { } updated
+                ? new AuditResult($"Conexión {RoleLabel(updated.Role)} '{updated.Name}' actualizada; Parquet de {result.CopiedTables} tabla(s) copiado al sitio nuevo.")
+                : Updated(id)(result.Connection),
+            $"No se pudo guardar la conexión {RoleLabel(connection.Role)} '{connection.Name}'",
+            target: id);
+
+    private static Func<Connection?, AuditResult> Updated(string id) => updated => updated is null
+        ? new AuditResult($"La conexión {id} no existe.", Outcome: AuditOutcome.Rejected)
+        : new AuditResult($"Conexión {RoleLabel(updated.Role)} '{updated.Name}' actualizada.");
+
+    private static string RoleLabel(ConnectionRole role) => role == ConnectionRole.Source ? "de origen" : "de destino";
+
+    private async Task<(Connection? Connection, int CopiedTables)> UpdateCoreAsync(string id, Connection connection, CancellationToken cancellationToken)
     {
         var existing = _store.GetById(id);
         if (existing is null)
@@ -250,9 +296,23 @@ public sealed class ConnectionService : IConnectionService
         return merged;
     }
 
-    public bool Delete(string id, out string? error)
+    public string? Delete(AuditActor actor, string id)
     {
-        error = null;
+        var name = _store.GetById(id)?.Name ?? id;
+        return _audit.Audit(
+            actor,
+            "connection.delete",
+            null,
+            () => DeleteCore(id),
+            error => error is null
+                ? new AuditResult($"Conexión '{name}' eliminada.")
+                : new AuditResult($"No se borró la conexión '{name}': {error}", Outcome: AuditOutcome.Rejected),
+            $"No se pudo borrar la conexión '{name}'",
+            target: id);
+    }
+
+    private string? DeleteCore(string id)
+    {
         var usedBy = _pipelines.ListAll()
             .Where(p => p.SourceId == id || p.DestinationId == id)
             .Select(p => p.Name)
@@ -261,15 +321,28 @@ public sealed class ConnectionService : IConnectionService
         {
             // Nombra los pipelines que la usan para que el usuario sepa qué desasociar. Si solo
             // quería arreglar la conexión (p. ej. re-cifrar el secreto), basta editarla, no borrarla.
-            error = $"Connection is in use by pipeline(s): {string.Join(", ", usedBy)}. " +
+            return $"Connection is in use by pipeline(s): {string.Join(", ", usedBy)}. " +
                 "Edit or delete that pipeline first, or just edit the connection instead of deleting it.";
-            return false;
         }
 
-        return _store.Delete(id);
+        return _store.Delete(id) ? null : "Connection not found.";
     }
 
-    public Task<ConnectionTestResult> TestAsync(string id, CancellationToken cancellationToken = default)
+    // Una prueba que no conecta es un resultado, no una excepción: queda como Error con su mensaje.
+    public Task<ConnectionTestResult> TestAsync(AuditActor actor, string id, CancellationToken cancellationToken = default) =>
+        AuditTestAsync(actor, id, () => TestCoreAsync(id, cancellationToken));
+
+    private Task<ConnectionTestResult> AuditTestAsync(AuditActor actor, string target, Func<Task<ConnectionTestResult>> test) =>
+        _audit.AuditAsync(
+            actor,
+            "connection.test",
+            null,
+            test,
+            result => new AuditResult($"Prueba de la conexión {target}: {result.Message}", Outcome: result.Ok ? AuditOutcome.Ok : AuditOutcome.Error),
+            $"No se pudo probar la conexión {target}",
+            target: target);
+
+    private Task<ConnectionTestResult> TestCoreAsync(string id, CancellationToken cancellationToken)
     {
         var connection = _store.GetById(id);
         if (connection is null)
@@ -316,7 +389,13 @@ public sealed class ConnectionService : IConnectionService
         return new ConnectionTestResult(true, $"{detection.Message} Versión del destino actualizada (antes: {SqlServerVersions.DisplayName(configured)}).");
     }
 
-    public async Task<ConnectionTestResult> TestSourceDraftAsync(Connection draft, string? existingId, CancellationToken cancellationToken = default)
+    // Las pruebas desde el formulario (sin guardar) también salen a la red del cliente.
+    public Task<ConnectionTestResult> TestSourceDraftAsync(AuditActor actor, Connection draft, string? existingId, CancellationToken cancellationToken = default) =>
+        AuditTestAsync(actor, DraftTarget(draft, existingId), () => TestSourceDraftCoreAsync(draft, existingId, cancellationToken));
+
+    private static string DraftTarget(Connection draft, string? existingId) => existingId ?? $"'{draft.Name}' (sin guardar)";
+
+    private async Task<ConnectionTestResult> TestSourceDraftCoreAsync(Connection draft, string? existingId, CancellationToken cancellationToken)
     {
         var existing = existingId is null ? null : _store.GetById(existingId);
         var connection = existing is not null && string.Equals(existing.Type, draft.Type, StringComparison.OrdinalIgnoreCase)
@@ -326,7 +405,19 @@ public sealed class ConnectionService : IConnectionService
         return new ConnectionTestResult(ok, message, ok ? null : KnownErrors.CodeFromText(message));
     }
 
-    public Task<SqlVersionDetection> DetectSqlVersionAsync(Connection draft, string? existingId, CancellationToken cancellationToken = default)
+    public Task<SqlVersionDetection> DetectSqlVersionAsync(AuditActor actor, Connection draft, string? existingId, CancellationToken cancellationToken = default) =>
+        _audit.AuditAsync(
+            actor,
+            "connection.test",
+            null,
+            () => DetectSqlVersionCoreAsync(draft, existingId, cancellationToken),
+            result => new AuditResult(
+                $"Prueba de la conexión {DraftTarget(draft, existingId)}: {result.Message}",
+                Outcome: result.Ok ? AuditOutcome.Ok : AuditOutcome.Error),
+            $"No se pudo probar la conexión {DraftTarget(draft, existingId)}",
+            target: DraftTarget(draft, existingId));
+
+    private Task<SqlVersionDetection> DetectSqlVersionCoreAsync(Connection draft, string? existingId, CancellationToken cancellationToken)
     {
         var existing = existingId is null ? null : _store.GetById(existingId);
         var connection = existing is not null && string.Equals(existing.Type, draft.Type, StringComparison.OrdinalIgnoreCase)

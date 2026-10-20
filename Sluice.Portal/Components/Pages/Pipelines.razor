@@ -12,7 +12,7 @@
 @inject ReportStore Reports
 @inject INotificationService NotificationService
 @inject IDialogService DialogService
-@inject IActivityLog ActivityLog
+@inject CircuitAuditActor Audit
 @inject RunQueueService RunQueue
 @inject NavigationManager Nav
 @inject ILogger<Pipelines> Logger
@@ -279,7 +279,7 @@
                     return;
                 }
 
-                PipelineService.Create(new Pipeline
+                PipelineService.Create(Audit.Current, new Pipeline
                 {
                     Id = $"pipe-{slug}",
                     Name = _editName,
@@ -293,7 +293,7 @@
             else
             {
                 var existing = PipelineService.Get(_editingId)!;
-                PipelineService.Update(_editingId, existing with
+                PipelineService.Update(Audit.Current, _editingId, existing with
                 {
                     Name = _editName,
                     SourceId = _sourceId,
@@ -303,24 +303,20 @@
             }
 
             _showEditor = false;
-            var saved = _editingId is null ? "creado" : "actualizado";
             _ = NotificationService.ShowSuccessToastAsync(L["Common.Saved"].Value);
-            ActivityLog.LogUser("pipeline.save", $"Pipeline {_editName} {saved}.");
             Load();
         }
         catch (Exception ex)
         {
             _ = NotificationService.ShowErrorToastAsync(ex.Message);
-            ActivityLog.LogUser("pipeline.save", $"No se pudo guardar el pipeline {_editName}: {ex.Message}", level: "error");
         }
     }
 
     private void Toggle(Pipeline pipeline)
     {
         var next = !pipeline.Enabled;
-        PipelineService.Update(pipeline.Id, pipeline with { Enabled = next });
+        PipelineService.SetScheduler(Audit.Current, pipeline.Id, next);
         _ = NotificationService.ShowInfoToastAsync(next ? L["Page.Pipelines.SchedulerActive"].Value : L["Page.Pipelines.SchedulerInactive"].Value);
-        ActivityLog.LogUser("pipeline.scheduler", $"Scheduler {(next ? "activado" : "desactivado")} en el pipeline {pipeline.Name}.", pipeline.Id);
         Load();
     }
 
@@ -341,7 +337,7 @@
 
         try
         {
-            if (await PipelineService.DeleteAsync(_deleteId, _wipeState) is { } error)
+            if (await PipelineService.DeleteAsync(Audit.Current, _deleteId, _wipeState) is { } error)
             {
                 _ = NotificationService.ShowErrorToastAsync(error);
                 return;
@@ -354,7 +350,6 @@
         }
 
         _ = NotificationService.ShowInfoToastAsync(string.Format(L["Common.Deleted"].Value, _deleteName ?? _deleteId));
-        ActivityLog.LogUser("pipeline.delete", $"Pipeline {_deleteName ?? _deleteId} eliminado{(_wipeState ? " (con borrado de estado)" : "")}.", _deleteId);
         _showDelete = false;
         Load();
     }
@@ -378,30 +373,20 @@
         _resetting = true;
         try
         {
-            var result = await PipelineResetService.ResetAsync(_resetId, _truncateSql);
+            var result = await PipelineResetService.ResetAsync(Audit.Current, _resetId, _truncateSql);
             if (!result.Completed)
             {
                 await NotificationService.ShowErrorToastAsync(string.Format(L["Page.Pipelines.ResetFailed"].Value, result.TableTruncateFailures.Count));
-                ActivityLog.LogUser(
-                    "pipeline.reset",
-                    $"Reset de {_resetName ?? _resetId} detenido: fallo al truncar {string.Join(", ", result.TableTruncateFailures.Select(f => f.Entity))}.",
-                    _resetId,
-                    level: "error");
                 return;
             }
 
             await NotificationService.ShowInfoToastAsync(string.Format(L["Page.Pipelines.ResetSuccess"].Value, result.TablesTruncated.Count, result.ParquetArtifactsDeleted));
-            ActivityLog.LogUser(
-                "pipeline.reset",
-                $"Pipeline {_resetName ?? _resetId} reseteado ({result.TablesTruncated.Count} tabla(s) truncada(s), {result.ParquetArtifactsDeleted} parquet(s) borrado(s)).",
-                _resetId);
             _showReset = false;
             Load();
         }
         catch (Exception ex)
         {
             await NotificationService.ShowErrorToastAsync(ex.Message);
-            ActivityLog.LogUser("pipeline.reset", $"No se pudo resetear {_resetName ?? _resetId}: {ex.Message}", _resetId, level: "error");
         }
         finally
         {

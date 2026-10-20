@@ -36,11 +36,11 @@ public static class ManagementEndpoints
         api.MapGet("/connections", (IConnectionService svc, ConnectionRole? role) => Results.Ok(svc.List(role)));
         api.MapGet("/connections/{id}", (string id, IConnectionService svc) =>
             svc.Get(id) is { } c ? Results.Ok(c) : Results.NotFound());
-        api.MapPost("/connections", (Connection connection, IConnectionService svc) =>
+        api.MapPost("/connections", (Connection connection, HttpContext http, IConnectionService svc) =>
         {
             try
             {
-                return Results.Created($"/api/connections/{connection.Id}", svc.Create(connection));
+                return Results.Created($"/api/connections/{connection.Id}", svc.Create(AuditActor.FromHttp(http), connection));
             }
             catch (DuplicateIdException ex)
             {
@@ -51,42 +51,42 @@ public static class ManagementEndpoints
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid connection.");
             }
         });
-        api.MapPut("/connections/{id}", async (string id, Connection connection, IConnectionService svc, CancellationToken ct) =>
+        api.MapPut("/connections/{id}", async (string id, Connection connection, HttpContext http, IConnectionService svc, CancellationToken ct) =>
         {
             try
             {
-                return (await svc.UpdateAsync(id, connection, ct)).Connection is { } c ? Results.Ok(c) : Results.NotFound();
+                return (await svc.UpdateAsync(AuditActor.FromHttp(http), id, connection, ct)).Connection is { } c ? Results.Ok(c) : Results.NotFound();
             }
             catch (InvalidOperationException ex)
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
         });
-        api.MapDelete("/connections/{id}", (string id, IConnectionService svc) =>
+        api.MapDelete("/connections/{id}", (string id, HttpContext http, IConnectionService svc) =>
         {
-            if (!svc.Delete(id, out var error))
+            if (svc.Delete(AuditActor.FromHttp(http), id) is { } error)
             {
-                return error?.Contains("in use") == true
+                return error.Contains("in use")
                     ? Results.Conflict(new { error })
                     : Results.NotFound();
             }
 
             return Results.NoContent();
         });
-        api.MapPost("/connections/{id}/test", async (string id, IConnectionService svc, CancellationToken ct) =>
+        api.MapPost("/connections/{id}/test", async (string id, HttpContext http, IConnectionService svc, CancellationToken ct) =>
         {
-            var (ok, message) = await svc.TestAsync(id, ct);
+            var (ok, message) = await svc.TestAsync(AuditActor.FromHttp(http), id, ct);
             return ok ? Results.Ok(new { ok, message }) : Results.BadRequest(new { ok, message });
         });
 
         api.MapGet("/pipelines", (IPipelineService svc) => Results.Ok(svc.List()));
         api.MapGet("/pipelines/{id}", (string id, IPipelineService svc) =>
             svc.Get(id) is { } p ? Results.Ok(p) : Results.NotFound());
-        api.MapPost("/pipelines", (PipelineModel pipeline, IPipelineService svc) =>
+        api.MapPost("/pipelines", (PipelineModel pipeline, HttpContext http, IPipelineService svc) =>
         {
             try
             {
-                return Results.Created($"/api/pipelines/{pipeline.Id}", svc.Create(pipeline));
+                return Results.Created($"/api/pipelines/{pipeline.Id}", svc.Create(AuditActor.FromHttp(http), pipeline));
             }
             catch (DuplicateIdException ex)
             {
@@ -97,22 +97,22 @@ public static class ManagementEndpoints
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid pipeline.");
             }
         });
-        api.MapPut("/pipelines/{id}", (string id, PipelineModel pipeline, IPipelineService svc) =>
+        api.MapPut("/pipelines/{id}", (string id, PipelineModel pipeline, HttpContext http, IPipelineService svc) =>
         {
             try
             {
-                return svc.Update(id, pipeline) is { } p ? Results.Ok(p) : Results.NotFound();
+                return svc.Update(AuditActor.FromHttp(http), id, pipeline) is { } p ? Results.Ok(p) : Results.NotFound();
             }
             catch (InvalidOperationException ex)
             {
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid pipeline.");
             }
         });
-        api.MapDelete("/pipelines/{id}", async (string id, bool wipe, IPipelineService svc, CancellationToken ct) =>
+        api.MapDelete("/pipelines/{id}", async (string id, bool wipe, HttpContext http, IPipelineService svc, CancellationToken ct) =>
         {
             try
             {
-                if (await svc.DeleteAsync(id, wipe, ct) is { } error)
+                if (await svc.DeleteAsync(AuditActor.FromHttp(http), id, wipe, ct) is { } error)
                 {
                     return Results.NotFound(new { error });
                 }
@@ -127,11 +127,11 @@ public static class ManagementEndpoints
         // Reset para pruebas: limpia estado (LastProcessedSnapshot/tablas) y parquets
         // consolidados en ADLS; con truncateSql=true además vacía las tablas de destino en SQL.
         // No borra la configuración del pipeline (a diferencia de DELETE ?wipe=true).
-        api.MapPost("/pipelines/{id}/reset", async (string id, bool truncateSql, IPipelineResetService svc, CancellationToken ct) =>
+        api.MapPost("/pipelines/{id}/reset", async (string id, bool truncateSql, HttpContext http, IPipelineResetService svc, CancellationToken ct) =>
         {
             try
             {
-                var result = await svc.ResetAsync(id, truncateSql, ct);
+                var result = await svc.ResetAsync(AuditActor.FromHttp(http), id, truncateSql, ct);
                 return Results.Ok(result);
             }
             catch (InvalidOperationException ex)
@@ -259,8 +259,8 @@ public static class ManagementEndpoints
                 ? Results.NotFound()
                 : Results.Stream(stream, "application/octet-stream", path.Split('/').Last());
         });
-        api.MapDelete("/pipelines/{id}/parquet", async (string id, string path, IParquetArtifactService parquet, CancellationToken ct) =>
-            await parquet.DeleteAsync(id, path, ct)
+        api.MapDelete("/pipelines/{id}/parquet", async (string id, string path, HttpContext http, IParquetArtifactService parquet, CancellationToken ct) =>
+            await parquet.DeleteAsync(AuditActor.FromHttp(http), id, path, ct)
                 ? Results.NoContent()
                 : Results.BadRequest(new { error = "Ruta de parquet inválida para este pipeline." }));
 

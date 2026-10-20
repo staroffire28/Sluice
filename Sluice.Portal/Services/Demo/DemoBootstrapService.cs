@@ -158,7 +158,7 @@ public sealed class DemoBootstrapService : BackgroundService
 
         if (_pipelines.Get(PipelineId) is null)
         {
-            _pipelines.Create(new Models.Pipeline
+            _pipelines.Create(AuditActor.Demo, new Models.Pipeline
             {
                 Id = PipelineId,
                 Name = "Demo F&O",

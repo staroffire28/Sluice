@@ -40,6 +40,22 @@ public sealed class RunQueueService
         return removed ? queued : null;
     }
 
+    // Vacía la cola (lo encolado y lo reservado para arrancar) porque ya no tiene sentido lanzarlo: el
+    // pipeline se borró o se reseteó. Solo deja entrada si había algo que descartar.
+    public QueuedRun? Discard(AuditActor actor, string pipelineId, string reason)
+    {
+        var queued = _queue.Get(pipelineId);
+        _queue.Remove(pipelineId);
+        _queue.Complete(pipelineId);
+        if (queued is not null)
+        {
+            _audit.Record(actor, "pipeline.queue.discarded", AuditOutcome.Ok, pipelineId, null, null,
+                $"{queued.Type} descartado de la cola del pipeline {pipelineId}: {reason}.");
+        }
+
+        return queued;
+    }
+
     public QueuedRun? TryClaim(string pipelineId) => _queue.TryClaim(pipelineId);
 
     public void Release(string pipelineId) => _queue.Release(pipelineId);

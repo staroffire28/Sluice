@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
+using Sluice.Portal.Services.Logging;
 using Sluice.Portal.Services.Stores;
 using PipelineModel = Sluice.Portal.Models.Pipeline;
 
@@ -10,9 +11,15 @@ public interface IPipelineService
 {
     IReadOnlyList<PipelineModel> List();
     PipelineModel? Get(string id);
-    PipelineModel Create(PipelineModel pipeline);
-    PipelineModel? Update(string id, PipelineModel pipeline);
-    Task<string?> DeleteAsync(string id, bool wipeState, CancellationToken cancellationToken = default);
+    // Lo que muta recibe quién actúa y queda en el registro de actividad (ver AuditActor).
+    PipelineModel Create(AuditActor actor, PipelineModel pipeline);
+    PipelineModel? Update(AuditActor actor, string id, PipelineModel pipeline);
+
+    // Activa o desactiva el scheduler del pipeline (null si no existe).
+    PipelineModel? SetScheduler(AuditActor actor, string id, bool enabled);
+
+    // null si se borró; si no, el motivo.
+    Task<string?> DeleteAsync(AuditActor actor, string id, bool wipeState, CancellationToken cancellationToken = default);
     PipelineState GetState(string pipelineId);
     IReadOnlyList<object> GetTables(string pipelineId);
 }
@@ -22,13 +29,15 @@ public sealed class PipelineService : IPipelineService
     private readonly PipelineStore _store;
     private readonly PipelineStateStore _stateStore;
     private readonly ConnectionStore _connections;
-    private readonly PipelineRunQueue? _runQueue;
+    private readonly RunQueueService? _runQueue;
+    private readonly IAuditLog _audit;
     private readonly IJobService _jobs;
     private readonly ITaskStore _tasks;
     private readonly AppOptions _options;
 
-    public PipelineService(IOptions<AppOptions> options, PipelineStore store, PipelineStateStore stateStore, ConnectionStore connections, IJobService jobs, ITaskStore tasks, PipelineRunQueue? runQueue = null)
+    public PipelineService(IOptions<AppOptions> options, PipelineStore store, PipelineStateStore stateStore, ConnectionStore connections, IJobService jobs, ITaskStore tasks, IAuditLog audit, RunQueueService? runQueue = null)
     {
+        _audit = audit;
         _options = options.Value;
         _store = store;
         _stateStore = stateStore;
@@ -42,7 +51,16 @@ public sealed class PipelineService : IPipelineService
 
     public PipelineModel? Get(string id) => _store.GetById(id);
 
-    public PipelineModel Create(PipelineModel pipeline)
+    public PipelineModel Create(AuditActor actor, PipelineModel pipeline) =>
+        _audit.Audit(
+            actor,
+            "pipeline.create",
+            pipeline.Id,
+            () => CreateCore(pipeline),
+            created => new AuditResult($"Pipeline {created.Name} creado."),
+            $"No se pudo crear el pipeline {pipeline.Name}");
+
+    private PipelineModel CreateCore(PipelineModel pipeline)
     {
         if (!EntityIds.IsValid(pipeline.Id))
         {
@@ -61,7 +79,29 @@ public sealed class PipelineService : IPipelineService
         return pipeline;
     }
 
-    public PipelineModel? Update(string id, PipelineModel pipeline)
+    public PipelineModel? Update(AuditActor actor, string id, PipelineModel pipeline) =>
+        _audit.Audit(
+            actor,
+            "pipeline.update",
+            id,
+            () => UpdateCore(id, pipeline),
+            updated => updated is null
+                ? new AuditResult($"El pipeline {id} no existe.", Outcome: AuditOutcome.Rejected)
+                : new AuditResult($"Pipeline {updated.Name} actualizado."),
+            $"No se pudo guardar el pipeline {pipeline.Name}");
+
+    public PipelineModel? SetScheduler(AuditActor actor, string id, bool enabled) =>
+        _audit.Audit(
+            actor,
+            "pipeline.scheduler",
+            id,
+            () => _store.GetById(id) is { } pipeline ? UpdateCore(id, pipeline with { Enabled = enabled }) : null,
+            updated => updated is null
+                ? new AuditResult($"El pipeline {id} no existe.", Outcome: AuditOutcome.Rejected)
+                : new AuditResult($"Scheduler {(enabled ? "activado" : "desactivado")} en el pipeline {updated.Name}."),
+            $"No se pudo cambiar el scheduler del pipeline {id}");
+
+    private PipelineModel? UpdateCore(string id, PipelineModel pipeline)
     {
         if (!_store.Exists(id))
         {
@@ -74,7 +114,18 @@ public sealed class PipelineService : IPipelineService
         return updated;
     }
 
-    public async Task<string?> DeleteAsync(string id, bool wipeState, CancellationToken cancellationToken = default)
+    public Task<string?> DeleteAsync(AuditActor actor, string id, bool wipeState, CancellationToken cancellationToken = default) =>
+        _audit.AuditAsync(
+            actor,
+            "pipeline.delete",
+            id,
+            () => DeleteCoreAsync(actor, id, wipeState, cancellationToken),
+            error => error is null
+                ? new AuditResult($"Pipeline {id} eliminado{(wipeState ? " (con borrado de estado)" : "")}.")
+                : new AuditResult($"No se borró el pipeline {id}: {error}", Outcome: AuditOutcome.Rejected),
+            $"No se pudo borrar el pipeline {id}");
+
+    private async Task<string?> DeleteCoreAsync(AuditActor actor, string id, bool wipeState, CancellationToken cancellationToken)
     {
         if (!_store.Exists(id))
         {
@@ -99,8 +150,7 @@ public sealed class PipelineService : IPipelineService
         }
 
         // Sin pipeline no hay nada que ejecutar, y otro creado luego con el mismo id no debe heredarlo.
-        _runQueue?.Remove(id);
-        _runQueue?.Complete(id);
+        _runQueue?.Discard(actor, id, "el pipeline se borró");
         return null;
     }
 
