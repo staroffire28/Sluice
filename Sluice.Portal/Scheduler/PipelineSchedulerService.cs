@@ -111,7 +111,8 @@ public sealed class PipelineSchedulerService : BackgroundService
     internal async Task PollAsync(CancellationToken ct)
     {
         _alertDeliveryFailedThisPoll = false;
-        await _deadman.PingAsync(ct);
+        // Un vigilante del ciclo que falla: el poll sigue, pero no hace ping al dead-man.
+        var degraded = false;
         await CheckChangelogStallsAsync(ct);
 
         // Antes de agendar: un job huérfano en Running bloquearía el auto-run de su pipeline.
@@ -138,6 +139,7 @@ public sealed class PipelineSchedulerService : BackgroundService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            degraded = true;
             _logger.LogError(ex, "El vigilante de jobs huérfanos falló; se reintenta en el próximo poll.");
         }
 
@@ -163,6 +165,7 @@ public sealed class PipelineSchedulerService : BackgroundService
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                degraded = true;
                 _logger.LogError(ex, "La vigilancia de colas paradas falló; se reintenta en el próximo poll.");
             }
         }
@@ -219,6 +222,14 @@ public sealed class PipelineSchedulerService : BackgroundService
                 _activity.LogSystem("scheduler.error", $"El scheduler falló en el pipeline {pipeline.Id}: {ex.Message}", pipeline.Id, level: "error");
                 await _alerts.SendAsync($"Scheduler failed for {pipeline.Id}: {ex.Message}", ct);
             }
+        }
+
+        // Al final, y solo si el ciclo terminó sin excepción ni fallos de sus vigilantes (el fallo de un
+        // pipeline concreto ya alerta por su cuenta): un scheduler que falla en cada poll deja de hacer
+        // ping y el monitor externo lo da por caído.
+        if (!degraded)
+        {
+            await _deadman.PingAsync(ct);
         }
     }
 
