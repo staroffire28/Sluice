@@ -94,16 +94,21 @@ public static class SnapshotManifest
         return partitions;
     }
 
-    // "https://cuenta.dfs.core.windows.net/container/{snapshot}/tabla/1.csv" → "tabla/1.csv". También
-    // acepta una ruta relativa ("tabla/1.csv" o "{snapshot}/tabla/1.csv"). Null si no cae dentro de la
-    // carpeta del snapshot.
+    // "https://cuenta.dfs.core.windows.net/container/{snapshot}/tabla/1.csv" → "tabla/1.csv". Solo URL
+    // absolutas, que es lo que escribe Synapse Link. Null si no lo es o no cae dentro de la carpeta del
+    // snapshot.
     internal static string? RelativePath(string snapshot, string location)
     {
-        var absolute = Uri.TryCreate(location, UriKind.Absolute, out var uri) && uri.Scheme != Uri.UriSchemeFile;
-        var path = absolute ? uri!.AbsolutePath : location;
-        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.UnescapeDataString).ToList();
+        if (!Uri.TryCreate(location, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.UnescapeDataString).ToList();
         var at = segments.FindIndex(s => string.Equals(s, snapshot, StringComparison.Ordinal));
-        var relative = at >= 0 ? segments.Skip(at + 1).ToList() : absolute ? null : segments;
-        return relative is { Count: > 0 } && !relative.Contains("..") ? string.Join('/', relative) : null;
+        var relative = at >= 0 ? segments.Skip(at + 1).ToList() : null;
+        return relative is { Count: > 0 } && !relative.Any(s => s == ".." || s.Contains('\\'))
+            ? string.Join('/', relative)
+            : null;
     }
 }
