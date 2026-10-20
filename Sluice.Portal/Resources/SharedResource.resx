@@ -435,6 +435,8 @@
   <data name="Page.Logs.Col.Message" xml:space="preserve"><value>Mensaje</value></data>
   <data name="Page.Logs.Col.Pipeline" xml:space="preserve"><value>Pipeline</value></data>
   <data name="Page.Logs.Col.Job" xml:space="preserve"><value>Job</value></data>
+  <data name="Page.Logs.Col.Actor" xml:space="preserve"><value>Actor</value></data>
+  <data name="Page.Logs.Col.Host" xml:space="preserve"><value>Máquina</value></data>
   <data name="Page.Settings.Title" xml:space="preserve"><value>Ajustes</value></data>
   <data name="Page.Settings.Subtitle" xml:space="preserve"><value>Parámetros operativos globales del scheduler y la conciliación.</value></data>
   <data name="Page.Settings.Scheduler.Title" xml:space="preserve"><value>Scheduler y cola</value></data>

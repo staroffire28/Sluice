@@ -41,7 +41,7 @@
         <FluentDataGrid Class="data-panel data-panel--compact logs-grid"
                         RowSize="DataGridRowSize.Small"
                         MultiLine="false"
-                        GridTemplateColumns="8.5rem 5.5rem 5rem 10rem 1fr 9rem 10rem"
+                        GridTemplateColumns="8.5rem 5.5rem 11rem 5rem 10rem 1fr 9rem 10rem"
                         Items="@_entries.AsQueryable()"
                         TGridItem="ActivityLogEntry">
             @* Fecha corta ("09 oct 20:28") para que quepa en la columna; la completa, con
@@ -55,6 +55,10 @@
                 <FluentBadge Appearance="@(context.Source == "user" ? BadgeAppearance.Filled : BadgeAppearance.Tint)" Color="@(context.Source == "user" ? BadgeColor.Brand : BadgeColor.Informative)">
                     @(context.Source == "user" ? L["Page.Logs.Source.User"] : L["Page.Logs.Source.System"])
                 </FluentBadge>
+            </TemplateColumn>
+            @* Quién actuó (canal, IP y hash de la sesión); la máquina que lo registró, en el tooltip. *@
+            <TemplateColumn Title="@L["Page.Logs.Col.Actor"]">
+                <span class="cell-ellipsis" data-testid="log-actor" title="@($"{context.ActorLabel} ({L["Page.Logs.Col.Host"]}: {context.HostName ?? "—"})")">@(context.ActorLabel ?? "—")</span>
             </TemplateColumn>
             <TemplateColumn Title="@L["Page.Logs.Col.Level"]">
                 <FluentBadge Appearance="@LevelAppearance(context.Level)" Color="@LevelColor(context.Level)">

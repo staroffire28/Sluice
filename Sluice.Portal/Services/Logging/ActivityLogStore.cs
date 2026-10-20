@@ -18,6 +18,13 @@ public interface IActivityLog
     IReadOnlyList<ActivityLogEntry> Query(ActivityLogFilter filter);
 }
 
+// Auditoría de las acciones que mutan algo: la llaman los servicios (no las páginas), con el actor
+// que pasó el llamador. El nivel sale del outcome: Ok=info, Rejected=warning, Error=error.
+public interface IAuditLog
+{
+    void Record(AuditActor actor, string action, AuditOutcome outcome, string? pipelineId, string? jobId, string? target, string message);
+}
+
 public sealed record ActivityLogPage(IReadOnlyList<ActivityLogEntry> Items, int Total, int Page);
 
 // Filtros de la página Logs. Zone: en qué zona se toma el día del rango (por defecto, la del
@@ -32,7 +39,7 @@ public sealed record ActivityLogFilter(
 // Registro de actividad con persistencia en archivo (JSONL), robusto bajo réplicas.
 // Cada proceso (api + N workers) escribe SU PROPIO archivo activity-{Máquina}.jsonl
 // para no competir por el mismo archivo. La lectura agrega todos los archivos.
-public sealed class ActivityLogStore : IActivityLog
+public sealed class ActivityLogStore : IActivityLog, IAuditLog
 {
     // Tamaño máximo del archivo activo antes de rotar a .1 (~5 MB).
     private const long MaxFileBytes = 5 * 1024 * 1024;
@@ -54,27 +61,48 @@ public sealed class ActivityLogStore : IActivityLog
     }
 
     public void LogUser(string action, string message, string? pipelineId = null, string? jobId = null, string level = "info") =>
-        Append("user", level, action, message, pipelineId, jobId);
+        Append(NewEntry("user", level, action, message, pipelineId, jobId));
 
     public void LogSystem(string action, string message, string? pipelineId = null, string? jobId = null, string level = "info") =>
-        Append("system", level, action, message, pipelineId, jobId);
+        Append(NewEntry("system", level, action, message, pipelineId, jobId));
 
-    private void Append(string source, string level, string action, string message, string? pipelineId, string? jobId)
+    public void Record(AuditActor actor, string action, AuditOutcome outcome, string? pipelineId, string? jobId, string? target, string message)
+    {
+        var level = outcome switch
+        {
+            AuditOutcome.Rejected => "warning",
+            AuditOutcome.Error => "error",
+            _ => "info",
+        };
+
+        Append(NewEntry(actor.Source, level, action, message, pipelineId, jobId) with
+        {
+            Channel = actor.Channel,
+            Client = NullIfBlank(actor.Client),
+            Outcome = outcome,
+            Target = NullIfBlank(target),
+        });
+    }
+
+    private ActivityLogEntry NewEntry(string source, string level, string action, string message, string? pipelineId, string? jobId) => new()
+    {
+        Timestamp = _time.GetUtcNow(),
+        Source = source,
+        Level = string.IsNullOrWhiteSpace(level) ? "info" : level,
+        Action = action,
+        Message = message,
+        PipelineId = NullIfBlank(pipelineId),
+        JobId = NullIfBlank(jobId),
+        Host = Environment.MachineName,
+    };
+
+    private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    private void Append(ActivityLogEntry entry)
     {
         // El logging NUNCA debe romper la acción que lo invoca: todo va envuelto y se traga.
         try
         {
-            var entry = new ActivityLogEntry
-            {
-                Timestamp = _time.GetUtcNow(),
-                Source = source,
-                Level = string.IsNullOrWhiteSpace(level) ? "info" : level,
-                Action = action,
-                Message = message,
-                PipelineId = string.IsNullOrWhiteSpace(pipelineId) ? null : pipelineId,
-                JobId = string.IsNullOrWhiteSpace(jobId) ? null : jobId,
-                Actor = Environment.MachineName,
-            };
 
             // Una línea = un ActivityLogEntry; sin saltos de línea internos.
             var line = JsonSerializer.Serialize(entry, JsonDefaults.Options).Replace("\r", "").Replace("\n", " ") + Environment.NewLine;
@@ -173,13 +201,17 @@ public sealed class ActivityLogStore : IActivityLog
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
-            // Substring case-insensitive sobre Message + Action + PipelineId + JobId.
+            // Substring case-insensitive sobre Message + Action + PipelineId + JobId + quién actuó.
             var search = filter.Search;
             query = query.Where(e =>
                 Contains(e.Message, search) ||
                 Contains(e.Action, search) ||
                 Contains(e.PipelineId, search) ||
-                Contains(e.JobId, search));
+                Contains(e.JobId, search) ||
+                Contains(e.Channel, search) ||
+                Contains(e.Client, search) ||
+                Contains(e.HostName, search) ||
+                Contains(e.Target, search));
         }
 
         if (filter.Range is { IsEmpty: false } range)
