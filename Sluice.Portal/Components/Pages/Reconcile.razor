@@ -107,8 +107,7 @@
 
     @if (!string.IsNullOrWhiteSpace(_pipelineId))
     {
-        <PageSection>
-            <h4>@L["Page.Reconcile.Values.Title"]</h4>
+        <PageSection Title="@L["Page.Reconcile.Values.Title"]">
             <p class="field-hint">@L["Page.Reconcile.Values.Hint"]</p>
             <PanelState IsEmpty="@(_values is null)" EmptyText="@L["Page.Reconcile.Values.None"]">
                 @if (_values is not null)
@@ -168,8 +167,7 @@
 
     @if (_history.Count > 0)
     {
-        <PageSection>
-            <h4>@L["Page.Reconcile.History"]</h4>
+        <PageSection Title="@L["Page.Reconcile.History"]">
             <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Medium" Items="@_history.AsQueryable()" TGridItem="ReconcileRemediation" data-testid="recon-history">
                 <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" />
                 <PropertyColumn Property="@(r => r.Mode)" Title="@L["Page.Reconcile.Mode"]" />
