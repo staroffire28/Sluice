@@ -118,6 +118,12 @@
     border-radius: 50%;
 }
 
+/* Un color por tipo de aviso (los mismos que la plantilla del correo). */
+.la-chip__dot--failure { background: #c4314b; }
+.la-chip__dot--divergence { background: #c27c0e; }
+.la-chip__dot--values { background: #7a4fd1; }
+.la-chip__dot--test { background: #0f6cbd; }
+
 .la-card__actions {
     display: flex;
     flex-wrap: wrap;

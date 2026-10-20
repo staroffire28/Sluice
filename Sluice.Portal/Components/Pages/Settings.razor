@@ -18,24 +18,24 @@
     <PageHeader Title="@L["Page.Settings.Title"]" Subtitle="@L["Page.Settings.Subtitle"]" />
 
     <PageSection Title="@L["Page.Settings.Scheduler.Title"]">
-        <div class="dialog-form" style="max-width:560px;">
-            <FluentNumberInput TValue="int" @bind-Value="_pollMinutes" Label="@L["Page.Settings.PollMinutes"]" Style="width:100%;" />
-            <FluentNumberInput TValue="int" @bind-Value="_leaseSeconds" Label="@L["Page.Settings.LeaseSeconds"]" Style="width:100%;" />
-            <FluentNumberInput TValue="double" @bind-Value="_divergencePct" Label="@L["Page.Settings.DivergencePct"]" Style="width:100%;" />
+        <div class="dialog-form dialog-form--narrow">
+            <FluentNumberInput TValue="int" @bind-Value="_pollMinutes" Label="@L["Page.Settings.PollMinutes"]" />
+            <FluentNumberInput TValue="int" @bind-Value="_leaseSeconds" Label="@L["Page.Settings.LeaseSeconds"]" />
+            <FluentNumberInput TValue="double" @bind-Value="_divergencePct" Label="@L["Page.Settings.DivergencePct"]" />
             <FluentSwitch @bind-Value="_autoRemediate" Label="@L["Page.Settings.AutoRemediate"]" data-testid="settings-autofix" />
             <p class="field-hint">@L["Page.Settings.AutoRemediate.Hint"]</p>
         </div>
     </PageSection>
 
     <PageSection Title="@L["Page.Settings.Retention.Title"]">
-        <div class="dialog-form" style="max-width:560px;">
-            <FluentNumberInput TValue="int" @bind-Value="_retentionDays" Label="@L["Page.Settings.RetentionDays"]" Style="width:100%;" />
+        <div class="dialog-form dialog-form--narrow">
+            <FluentNumberInput TValue="int" @bind-Value="_retentionDays" Label="@L["Page.Settings.RetentionDays"]" />
             <p class="field-hint">@L["Page.Settings.RetentionDays.Hint"]</p>
-            <FluentNumberInput TValue="int" @bind-Value="_staleTableDays" Label="@L["Page.Settings.StaleTableDays"]" Style="width:100%;" data-testid="settings-stale-days" />
+            <FluentNumberInput TValue="int" @bind-Value="_staleTableDays" Label="@L["Page.Settings.StaleTableDays"]" data-testid="settings-stale-days" />
             <p class="field-hint">@L["Page.Settings.StaleTableDays.Hint"]</p>
-            <FluentNumberInput TValue="int" @bind-Value="_parquetVersionDays" Label="@L["Page.Settings.ParquetVersionDays"]" Style="width:100%;" data-testid="settings-parquet-version-days" />
+            <FluentNumberInput TValue="int" @bind-Value="_parquetVersionDays" Label="@L["Page.Settings.ParquetVersionDays"]" data-testid="settings-parquet-version-days" />
             <p class="field-hint">@L["Page.Settings.ParquetVersionDays.Hint"]</p>
-            <FluentNumberInput TValue="int" @bind-Value="_sourceSnapshotRetentionDays" Label="@L["Page.Settings.SourceSnapshotRetentionDays"]" Style="width:100%;" />
+            <FluentNumberInput TValue="int" @bind-Value="_sourceSnapshotRetentionDays" Label="@L["Page.Settings.SourceSnapshotRetentionDays"]" />
             <p class="field-hint">@L["Page.Settings.SourceSnapshotRetentionDays.Hint"]</p>
             <FluentSwitch @bind-Value="_sourceSnapshotRetentionDryRun" Label="@L["Page.Settings.SourceSnapshotRetentionDryRun"]" />
             <p class="field-hint">@L["Page.Settings.SourceSnapshotRetentionDryRun.Hint"]</p>
@@ -45,13 +45,13 @@
     </PageSection>
 
     <PageSection Title="@L["Page.Settings.Alerts.Title"]">
-        <div class="dialog-form" style="max-width:560px;">
+        <div class="dialog-form dialog-form--narrow">
             <p class="field-hint">@L["Page.Settings.Alerts.Hint"]</p>
             <FluentSwitch @bind-Value="_alertEnabled" Label="@L["Page.Settings.Alerts.Enabled"]" />
-            <FluentNumberInput TValue="int" @bind-Value="_pipelineLagAlertHours" Label="@L["Page.Settings.PipelineLagAlertHours"]" Style="width:100%;" data-testid="settings-pipeline-lag-hours" />
+            <FluentNumberInput TValue="int" @bind-Value="_pipelineLagAlertHours" Label="@L["Page.Settings.PipelineLagAlertHours"]" data-testid="settings-pipeline-lag-hours" />
             <p class="field-hint">@L["Page.Settings.PipelineLagAlertHours.Hint"]</p>
             @* La URL lleva la firma (sig=...): no se envía al navegador. Vacío = conservar la guardada. *@
-            <FluentTextInput @bind-Value="_alertWebhookUrl" Label="@L["Page.Settings.Alerts.WebhookUrl"]" Style="width:100%;"
+            <FluentTextInput @bind-Value="_alertWebhookUrl" Label="@L["Page.Settings.Alerts.WebhookUrl"]"
                              TextInputType="TextInputType.Password"
                              Placeholder="@(string.IsNullOrWhiteSpace(_storedWebhookUrl) ? "https://..." : L["Page.Settings.Alerts.WebhookStored"].Value)" />
             <FluentButton Appearance="ButtonAppearance.Outline" data-testid="settings-test-alert" OnClick="TestAlertAsync" Disabled="_testingAlert">
@@ -67,7 +67,7 @@
 
             @* Última entrega real (no las pruebas), la registre la api o un worker. *@
             <div data-testid="settings-alert-delivery">
-                <p class="field-hint"><strong>@L["Page.Settings.Alerts.LastDelivery"]</strong></p>
+                <h3 class="dialog-form-subtitle">@L["Page.Settings.Alerts.LastDelivery"]</h3>
                 @if (_delivery is null)
                 {
                     <p class="field-hint">@L["Page.Settings.Alerts.LastDelivery.None"]</p>
@@ -89,7 +89,7 @@
 
             @* Ping al monitor externo al final de cada poll sano del scheduler (DEADMAN_PING_URL). *@
             <div data-testid="settings-deadman">
-                <p class="field-hint"><strong>@L["Page.Settings.Deadman"]</strong></p>
+                <h3 class="dialog-form-subtitle">@L["Page.Settings.Deadman"]</h3>
                 @if (!Deadman.IsConfigured)
                 {
                     <p class="field-hint">@L["Page.Settings.Deadman.NotConfigured"]</p>
@@ -131,10 +131,10 @@
                 </ol>
                 <div class="la-card__events">
                     <span class="la-card__label">@L["Page.Settings.LogicApp.Events"]</span>
-                    <span class="la-chip"><i style="background:#c4314b"></i>@L["Page.Settings.LogicApp.Event.Failure"]</span>
-                    <span class="la-chip"><i style="background:#c27c0e"></i>@L["Page.Settings.LogicApp.Event.Divergence"]</span>
-                    <span class="la-chip"><i style="background:#7a4fd1"></i>@L["Page.Settings.LogicApp.Event.Values"]</span>
-                    <span class="la-chip"><i style="background:#0f6cbd"></i>@L["Page.Settings.LogicApp.Event.Test"]</span>
+                    <span class="la-chip"><i class="la-chip__dot la-chip__dot--failure"></i>@L["Page.Settings.LogicApp.Event.Failure"]</span>
+                    <span class="la-chip"><i class="la-chip__dot la-chip__dot--divergence"></i>@L["Page.Settings.LogicApp.Event.Divergence"]</span>
+                    <span class="la-chip"><i class="la-chip__dot la-chip__dot--values"></i>@L["Page.Settings.LogicApp.Event.Values"]</span>
+                    <span class="la-chip"><i class="la-chip__dot la-chip__dot--test"></i>@L["Page.Settings.LogicApp.Event.Test"]</span>
                 </div>
                 <div class="la-card__actions">
                     <FluentAnchorButton Href="/api/settings/logic-app-package" ForceLoad="true" Appearance="ButtonAppearance.Outline"
@@ -145,7 +145,7 @@
         </div>
     </PageSection>
 
-    <div class="dialog-form" style="max-width:560px;">
+    <div class="dialog-form dialog-form--narrow">
         <FluentButton Appearance="ButtonAppearance.Primary" data-testid="settings-save" OnClick="SaveSettings">@L["Common.Save"]</FluentButton>
 
         @if (!string.IsNullOrWhiteSpace(_saveError))
