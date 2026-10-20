@@ -26,7 +26,8 @@ public sealed record AuditActor(string Source, string Channel, string? Client)
 
     public static AuditActor Ui(string? client = null) => new(UserSource, "ui", client);
 
-    public static AuditActor FromHttp(HttpContext context) => new(UserSource, "api", DescribeClient(context));
+    // channel: "ui" para lo que llega del navegador fuera del circuito (el formulario de login).
+    public static AuditActor FromHttp(HttpContext context, string channel = "api") => new(UserSource, channel, DescribeClient(context));
 
     // "IP · s:<8 hex>". Sin cookie de sesión (AUTH_MODE=none) queda solo la IP. Del token solo se
     // guarda un prefijo de su SHA-256: distingue sesiones sin permitir reutilizarlo.

@@ -167,6 +167,8 @@ builder.Services.AddSingleton<ActivityLogStore>();
 builder.Services.AddSingleton<IActivityLog>(sp => sp.GetRequiredService<ActivityLogStore>());
 builder.Services.AddSingleton<IAuditLog>(sp => sp.GetRequiredService<ActivityLogStore>());
 builder.Services.AddScoped<CircuitAuditActor>();
+builder.Services.AddSingleton<SettingsService>();
+builder.Services.AddSingleton<ReconcileAckService>();
 
 builder.Services.AddSingleton<IStageRouter, StageRouter>();
 builder.Services.AddSingleton<IIngestExecutor, IngestExecutor>();

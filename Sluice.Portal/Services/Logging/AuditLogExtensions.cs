@@ -2,8 +2,8 @@ using Sluice.Portal.Models;
 
 namespace Sluice.Portal.Services.Logging;
 
-// Lo que se registra cuando la acción termina sin excepción.
-public readonly record struct AuditResult(string Message, string? JobId = null, AuditOutcome Outcome = AuditOutcome.Ok);
+// Lo que se registra cuando la acción termina sin excepción. Level: solo si no basta el del outcome.
+public readonly record struct AuditResult(string Message, string? JobId = null, AuditOutcome Outcome = AuditOutcome.Ok, string? Level = null);
 
 public static class AuditLogExtensions
 {
@@ -35,7 +35,7 @@ public static class AuditLogExtensions
         }
 
         var result = describe(value);
-        audit.Record(actor, action, result.Outcome, pipelineId, result.JobId ?? jobId, target, result.Message);
+        audit.Record(actor, action, result.Outcome, pipelineId, result.JobId ?? jobId, target, result.Message, result.Level);
         return value;
     }
 
@@ -62,7 +62,7 @@ public static class AuditLogExtensions
         }
 
         var result = describe(value);
-        audit.Record(actor, action, result.Outcome, pipelineId, result.JobId ?? jobId, target, result.Message);
+        audit.Record(actor, action, result.Outcome, pipelineId, result.JobId ?? jobId, target, result.Message, result.Level);
         return value;
     }
 

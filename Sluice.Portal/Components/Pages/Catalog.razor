@@ -227,7 +227,7 @@
 
     private void SetIncluded(string table, bool included)
     {
-        CatalogService.SetTableIncluded(_pipelineId, table, included);
+        CatalogService.SetTableIncluded(Audit.Current, _pipelineId, table, included);
         Replace(table, t => t with { Included = included });
     }
 
@@ -294,7 +294,7 @@
             return;
         }
 
-        var reincluded = CatalogService.SetExcludedColumns(_pipelineId, table.Name, _excluded);
+        var reincluded = CatalogService.SetExcludedColumns(Audit.Current, _pipelineId, table.Name, _excluded);
         Replace(table.Name, t => t with { ExcludedColumns = _excluded.Count });
         await NotificationService.ShowSuccessToastAsync(L["Common.Saved"].Value);
 

@@ -14,10 +14,10 @@ public sealed class JobReportDownloader(
     ReportStore reports,
     IJSRuntime js,
     INotificationService notifications,
-    IActivityLog activityLog,
+    IAuditLog audit,
     IStringLocalizer<SharedResource> l)
 {
-    public async Task DownloadAsync(Job job)
+    public async Task DownloadAsync(AuditActor actor, Job job)
     {
         // Toast de progreso: la generación + descarga ocurre del lado servidor.
         await notifications.ShowInfoToastAsync(l["Page.Jobs.ReportGenerating"].Value);
@@ -30,11 +30,21 @@ public sealed class JobReportDownloader(
             var diff = reports.GetDiffByJob(job.Id);
             // La generación con QuestPDF es CPU-bound; fuera del hilo del circuito para
             // no bloquear el render (el toast "Generando…" se pinta y la UI sigue viva).
-            var bytes = await Task.Run(() => pdf.GenerateEquityReport(job, reconcile, diff));
-            var base64 = Convert.ToBase64String(bytes);
-            await js.InvokeVoidAsync("sluiceUi.downloadFileBase64", $"reporte-{job.Id}.pdf", base64, "application/pdf");
+            await audit.AuditAsync(
+                actor,
+                "job.report",
+                job.PipelineId,
+                async () =>
+                {
+                    var bytes = await Task.Run(() => pdf.GenerateEquityReport(job, reconcile, diff));
+                    var base64 = Convert.ToBase64String(bytes);
+                    await js.InvokeVoidAsync("sluiceUi.downloadFileBase64", $"reporte-{job.Id}.pdf", base64, "application/pdf");
+                    return true;
+                },
+                _ => new AuditResult($"Generó el reporte PDF del job {job.Id}."),
+                $"No se pudo generar el reporte PDF del job {job.Id}",
+                jobId: job.Id);
             await notifications.ShowSuccessToastAsync(l["Page.Jobs.ReportReady"].Value);
-            activityLog.LogUser("job.report", $"Generó el reporte PDF del job {job.Id}.", job.PipelineId, job.Id);
         }
         catch (Exception ex)
         {

@@ -5,6 +5,8 @@
 @using Sluice.Portal.Services
 @using Sluice.Portal.Services.Stores
 @inject SettingsStore SettingsStore
+@inject SettingsService SettingsService
+@inject Sluice.Portal.Services.Logging.CircuitAuditActor Audit
 @inject AlertService AlertService
 @inject AlertDeliveryStatusStore DeliveryStatusStore
 @inject DeadmanService Deadman
@@ -237,7 +239,7 @@
             return;
         }
 
-        SettingsStore.Save(settings);
+        SettingsService.Save(Audit.Current, settings);
         _storedWebhookUrl = settings.AlertWebhookUrl;
         _alertWebhookUrl = null;
         _saved = true;

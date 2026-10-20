@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Sluice.Portal.Models;
 using Sluice.Portal.Services.Adls;
+using Sluice.Portal.Services.Logging;
 using Sluice.Portal.Services.Stores;
 
 namespace Sluice.Portal.Services.Pipeline;
@@ -21,14 +22,17 @@ public sealed class TableCatalogService
     private readonly PipelineStateStore _stateStore;
     private readonly TablePauseStore _pauses;
     private readonly ColumnSelectionStore _columns;
+    private readonly IAuditLog _audit;
 
     public TableCatalogService(
         IPipelineService pipelines,
         IAdlsClientFactory adlsFactory,
         PipelineStateStore stateStore,
         TablePauseStore pauses,
-        ColumnSelectionStore columns)
+        ColumnSelectionStore columns,
+        IAuditLog audit)
     {
+        _audit = audit;
         _pipelines = pipelines;
         _adlsFactory = adlsFactory;
         _stateStore = stateStore;
@@ -93,12 +97,36 @@ public sealed class TableCatalogService
             .ToList();
     }
 
-    public void SetTableIncluded(string pipelineId, string entity, bool included) =>
-        _pauses.SetPaused(Get(pipelineId).Id, entity, paused: !included);
+    // El único camino para pausar o reanudar una tabla (Tablas y Catálogo).
+    public void SetTableIncluded(AuditActor actor, string pipelineId, string entity, bool included) =>
+        _audit.Audit(
+            actor,
+            included ? "table.resume" : "table.pause",
+            pipelineId,
+            () =>
+            {
+                _pauses.SetPaused(Get(pipelineId).Id, entity, paused: !included);
+                return true;
+            },
+            _ => new AuditResult($"Sincronización de la tabla '{entity}' {(included ? "reanudada" : "pausada")} en el pipeline {pipelineId}."),
+            $"No se pudo {(included ? "reanudar" : "pausar")} la tabla '{entity}'",
+            target: entity);
 
     // Devuelve las columnas que vuelven a cargarse: SQL solo las rellena al re-sincronizar la tabla.
-    public IReadOnlyList<string> SetExcludedColumns(string pipelineId, string entity, IEnumerable<string> columns) =>
-        _columns.SetExcluded(Get(pipelineId).Id, entity, columns);
+    public IReadOnlyList<string> SetExcludedColumns(AuditActor actor, string pipelineId, string entity, IEnumerable<string> columns)
+    {
+        var excluded = columns.ToList();
+        return _audit.Audit(
+            actor,
+            "table.columns",
+            pipelineId,
+            () => _columns.SetExcluded(Get(pipelineId).Id, entity, excluded),
+            _ => new AuditResult(excluded.Count == 0
+                ? $"Todas las columnas de '{entity}' se cargan en SQL."
+                : $"Columnas excluidas de '{entity}': {string.Join(", ", excluded)}."),
+            $"No se pudieron cambiar las columnas de '{entity}'",
+            target: entity);
+    }
 
     private Models.Pipeline Get(string pipelineId) =>
         _pipelines.Get(pipelineId) ?? throw new InvalidOperationException("Pipeline not found.");
