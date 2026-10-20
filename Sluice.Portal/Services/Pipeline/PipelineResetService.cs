@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
 using Sluice.Portal.Services.Stores;
 
@@ -41,8 +43,10 @@ public sealed class PipelineResetService : IPipelineResetService
     private readonly IJobService _jobs;
     private readonly ITaskStore _tasks;
     private readonly PipelineRunQueue? _runQueue;
+    private readonly AppOptions _options;
 
     public PipelineResetService(
+        IOptions<AppOptions> options,
         IPipelineService pipelines,
         PipelineStateStore stateStore,
         IParquetArtifactService parquet,
@@ -52,6 +56,7 @@ public sealed class PipelineResetService : IPipelineResetService
         ITaskStore tasks,
         PipelineRunQueue? runQueue = null)
     {
+        _options = options.Value;
         _runQueue = runQueue;
         _pipelines = pipelines;
         _stateStore = stateStore;
@@ -64,11 +69,16 @@ public sealed class PipelineResetService : IPipelineResetService
 
     public async Task<PipelineResetResult> ResetAsync(string pipelineId, bool truncateSql, CancellationToken cancellationToken = default)
     {
-        var pipeline = _pipelines.Get(pipelineId)
+        _ = _pipelines.Get(pipelineId)
             ?? throw new InvalidOperationException($"Pipeline '{pipelineId}' not found.");
 
         // Mismo criterio que Run/Resync: resetear bajo un job en curso truncaría tablas y borraría
-        // parquets que el job está usando, y al terminar este pisaría el estado reseteado.
+        // parquets que el job está usando, y al terminar este pisaría el estado reseteado. El lock de
+        // ejecución dura todo el reset: sin él, lo encolado o el auto-run arrancaban a mitad y su
+        // ingest guardaba un estado avanzado sobre parquets borrados y SQL truncado.
+        using var runLock = await PipelineRunLock.AcquireAsync(_options.DataDir, pipelineId, PipelineRunLock.DefaultTimeout, cancellationToken);
+        var pipeline = _pipelines.Get(pipelineId)
+            ?? throw new InvalidOperationException($"Pipeline '{pipelineId}' not found.");
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId,
             "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de resetear.", cancellationToken);
 
@@ -149,7 +159,8 @@ public sealed class PipelineResetService : IPipelineResetService
 
         _stateStore.Save(new PipelineState { PipelineId = pipelineId });
 
-        // Lo pedido antes del reset contaba con el estado que se acaba de descartar.
+        // Lo pedido antes del reset contaba con el estado que se acaba de descartar. Solo aquí: un
+        // reset que falla al truncar no descarta nada y conserva lo encolado.
         _runQueue?.Remove(pipelineId);
         _runQueue?.Complete(pipelineId);
 

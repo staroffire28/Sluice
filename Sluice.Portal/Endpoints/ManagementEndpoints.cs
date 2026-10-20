@@ -108,11 +108,18 @@ public static class ManagementEndpoints
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid pipeline.");
             }
         });
-        api.MapDelete("/pipelines/{id}", (string id, bool wipe, IPipelineService svc) =>
+        api.MapDelete("/pipelines/{id}", async (string id, bool wipe, IPipelineService svc, CancellationToken ct) =>
         {
-            if (!svc.Delete(id, wipe, out var error))
+            try
             {
-                return Results.NotFound(new { error });
+                if (await svc.DeleteAsync(id, wipe, ct) is { } error)
+                {
+                    return Results.NotFound(new { error });
+                }
+            }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
             }
 
             return Results.NoContent();

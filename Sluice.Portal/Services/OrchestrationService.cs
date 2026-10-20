@@ -200,6 +200,8 @@ public sealed class OrchestrationService : IOrchestrationService
         // otro (evita dos jobs concurrentes pisándose). Mismo criterio que usa el scheduler.
         // El lock hace atómico "comprobar + crear" frente a otros Run simultáneos.
         using var runLock = await AcquireRunLockAsync(pipelineId, cancellationToken);
+        _ = _pipelines.Get(pipelineId)
+            ?? throw new InvalidOperationException("Pipeline not found.");
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
 
         // Reconcile y Diff solo comparan conteos (parquet consolidado vs SQL) y CompareValues compara
@@ -322,6 +324,8 @@ public sealed class OrchestrationService : IOrchestrationService
 
         // Misma guardia anti-doble-run que el Run completo: un solo job activo por pipeline.
         using var runLock = await AcquireRunLockAsync(pipelineId, cancellationToken);
+        _ = _pipelines.Get(pipelineId)
+            ?? throw new InvalidOperationException("Pipeline not found.");
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
 
         return await EnqueueResyncAsync(pipelineId, entities, mode, triggeredBy, cancellationToken);
@@ -344,6 +348,8 @@ public sealed class OrchestrationService : IOrchestrationService
             ?? throw new InvalidOperationException("Restoring a restore point requires the pipeline state store.");
 
         using var runLock = await AcquireRunLockAsync(pipelineId, cancellationToken);
+        _ = _pipelines.Get(pipelineId)
+            ?? throw new InvalidOperationException("Pipeline not found.");
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
 
         var state = stateStore.GetOrCreate(pipelineId);
@@ -505,12 +511,8 @@ public sealed class OrchestrationService : IOrchestrationService
         return job;
     }
 
-    // Quien espera el lock lo hace mientras el otro arranque termina (Force incluye un listado
-    // de ADLS); pasado este margen se rechaza igual que si ya hubiera un job en curso.
-    private static readonly TimeSpan RunLockTimeout = TimeSpan.FromSeconds(15);
-
     private Task<IDisposable> AcquireRunLockAsync(string pipelineId, CancellationToken cancellationToken) =>
-        PipelineRunLock.AcquireAsync(_options.DataDir, pipelineId, RunLockTimeout, cancellationToken);
+        PipelineRunLock.AcquireAsync(_options.DataDir, pipelineId, PipelineRunLock.DefaultTimeout, cancellationToken);
 
     // Sufijo aleatorio tras la marca de tiempo: con resolución de segundo, dos jobs del mismo
     // pipeline en el mismo segundo compartían id y se pisaban los archivos.
@@ -537,6 +539,8 @@ public sealed class OrchestrationService : IOrchestrationService
             ?? throw new InvalidOperationException("Pipeline not found.");
 
         using var runLock = await AcquireRunLockAsync(pipelineId, cancellationToken);
+        _ = _pipelines.Get(pipelineId)
+            ?? throw new InvalidOperationException("Pipeline not found.");
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
 
         var artifacts = await _parquet.ListAsync(pipelineId, cancellationToken);
