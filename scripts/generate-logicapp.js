@@ -63,14 +63,20 @@ const EMAIL = `<!DOCTYPE html>
 </td></tr></table>
 </body></html>`;
 
-// Textos por tipo de evento (mismo orden en la Logic App y en la vista previa).
+// Textos por tipo de evento (mismo orden en la Logic App y en la vista previa). Gana la primera entrada
+// que coincide: con status, solo cuando el payload trae ese status (un pipeline.failure en Partial llega
+// con status "warning"; sin status, o con "error", es un fallo).
 const EVENTS = [
-  { type: 'pipeline.failure', label: 'FALLO', title: 'Un pipeline ha fallado', color: '#c4314b' },
-  { type: 'reconcile.divergence', label: 'DIVERGENCIA', title: 'Divergencia en la conciliación', color: '#c27c0e' },
-  { type: 'reconcile.values', label: 'VALORES', title: 'Diferencias de valores entre Parquet y SQL', color: '#7a4fd1' },
-  { type: 'test.ping', label: 'PRUEBA', title: 'La Logic App recibe las alertas de Sluice', color: '#0f6cbd' },
+  { type: 'pipeline.failure', status: 'warning', label: 'AVISO', title: 'Un pipeline terminó con fallos parciales', color: '#ca5010', importance: 'Normal' },
+  { type: 'pipeline.failure', label: 'FALLO', title: 'Un pipeline ha fallado', color: '#c4314b', importance: 'High' },
+  { type: 'snapshot.incomplete', label: 'SNAPSHOT INCOMPLETO', title: 'Un snapshot de Synapse Link está incompleto', color: '#038387', importance: 'Normal' },
+  { type: 'reconcile.divergence', label: 'DIVERGENCIA', title: 'Divergencia en la conciliación', color: '#c27c0e', importance: 'Normal' },
+  { type: 'reconcile.values', label: 'VALORES', title: 'Diferencias de valores entre Parquet y SQL', color: '#7a4fd1', importance: 'Normal' },
+  { type: 'test.ping', label: 'PRUEBA', title: 'La Logic App recibe las alertas de Sluice', color: '#0f6cbd', importance: 'Normal' },
 ];
-const FALLBACK = { label: 'ALERTA', title: 'Alerta del sistema', color: '#4a5d72' };
+const FALLBACK = { label: 'ALERTA', title: 'Alerta del sistema', color: '#4a5d72', importance: 'Normal' };
+const eventFor = (sample) =>
+  EVENTS.find((e) => e.type === sample.eventType && (!e.status || e.status === sample.status)) ?? FALLBACK;
 const AUTOFIX = {
   scheduled: 'Programada: se re-sincronizan las tablas una vez',
   off: 'Desactivada: corrige desde Conciliación',
@@ -82,8 +88,11 @@ const lit = (s) => `'${s.replace(/'/g, "''")}'`;
 const T = (k) => `triggerBody()?['${k}']`;
 const E = `coalesce(${T('eventType')},'')`;
 const esc = (x) => `replace(replace(coalesce(${x},''),'&','&amp;'),'<','&lt;')`;
+const S = `coalesce(${T('status')},'')`;
+const matches = (ev) =>
+  ev.status ? `and(equals(${E},${lit(ev.type)}),equals(${S},${lit(ev.status)}))` : `equals(${E},${lit(ev.type)})`;
 const byEvent = (key) =>
-  EVENTS.reduceRight((acc, ev) => `if(equals(${E},${lit(ev.type)}),${lit(ev[key])},${acc})`, lit(FALLBACK[key]));
+  EVENTS.reduceRight((acc, ev) => `if(${matches(ev)},${lit(ev[key])},${acc})`, lit(FALLBACK[key]));
 const P = `trim(coalesce(parameters('urlPortal'),''))`;
 const portal = `if(endsWith(${P},'/'),substring(${P},0,sub(length(${P}),1)),${P})`;
 const pipelineName = `coalesce(${T('pipelineName')},${T('pipelineId')})`;
@@ -97,6 +106,7 @@ const outP = (k) => `outputs('Presentacion')?['${k}']`;
 
 const detalles = `concat(${[
   row('Pipeline', esc(pipelineName)),
+  row('Snapshot', esc(T('snapshot'))),
   row('Job', esc(T('jobId'))),
   row('Tipo de job', esc(T('jobType'))),
   row('Etapa', esc(T('stage'))),
@@ -142,6 +152,7 @@ const definition = {
             jobId: { type: 'string' },
             jobType: { type: 'string' },
             stage: { type: 'string' },
+            snapshot: { type: 'string' },
             status: { type: 'string' },
             message: { type: 'string' },
             text: { type: 'string' },
@@ -161,7 +172,7 @@ const definition = {
         etiqueta: `@{${byEvent('label')}}`,
         titulo: `@{${byEvent('title')}}`,
         color: `@{${byEvent('color')}}`,
-        importancia: `@{if(equals(${E},'pipeline.failure'),'High','Normal')}`,
+        importancia: `@{${byEvent('importance')}}`,
         asunto: `@{concat('[Sluice] ',${byEvent('title')},if(empty(${pipelineName}),'',concat(' · ',${pipelineName})))}`,
         autofix: `@{${autofix}}`,
         portal: `@{${portal}}`,
@@ -283,11 +294,12 @@ const escHtml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt
 const PORTAL = 'https://sluice.contoso.com';
 
 function render(sample) {
-  const ev = EVENTS.find((e) => e.type === sample.eventType) ?? FALLBACK;
+  const ev = eventFor(sample);
   const pipeline = sample.pipelineName ?? sample.pipelineId;
   const detail = (label, value) => (value ? DETAIL_START(label) + value + DETAIL_END : '');
   const details = [
     detail('Pipeline', escHtml(pipeline)),
+    detail('Snapshot', escHtml(sample.snapshot)),
     detail('Job', escHtml(sample.jobId)),
     detail('Tipo de job', escHtml(sample.jobType)),
     detail('Etapa', escHtml(sample.stage)),
@@ -318,14 +330,19 @@ const SAMPLES = [
     entities: ['purchreqbusinessjustificationcodes'], message: 'Hay filas con valores distintos entre el Parquet consolidado y SQL.' },
   { eventType: 'pipeline.failure', pipelineName: 'Lean', jobId: 'job-lean-20261009231000-778899', jobType: 'Incremental', stage: 'sql',
     message: 'Login failed for user. The login is from an untrusted domain.' },
+  { eventType: 'pipeline.failure', status: 'warning', pipelineName: 'Lean', jobId: 'job-lean-20261009233000-aabbcc', jobType: 'Incremental', stage: 'ingest',
+    message: 'Ingest completed: 3 snapshot(s), 48 entity(ies). 2 entity(ies) failed: inventtrans, salesline.' },
+  { eventType: 'snapshot.incomplete', status: 'warning', pipelineName: 'Lean', snapshot: '2026-10-09T22.00.31Z',
+    message: "Pipeline Lean parado: el snapshot 2026-10-09T22.00.31Z está cerrado pero incompleto desde hace 45 min (Snapshot '2026-10-09T22.00.31Z' has no non-empty CSV in any entity (empty or in-progress export).). No se procesa nada más hasta que el volcado de Synapse Link se complete; revisa la exportación." },
   { eventType: 'test.ping', message: 'Sluice portal alert test' },
 ];
 
 // Cada correo va en un iframe (srcdoc) para verlo tal cual, sin mezclar estilos con la página.
 const frames = SAMPLES.map((s) => {
-  const ev = EVENTS.find((e) => e.type === s.eventType);
+  const ev = eventFor(s);
   const doc = render(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-  return `<section><h2><span style="background:${ev.color}"></span>${ev.title}<code>${s.eventType}</code></h2><iframe title="${ev.title}" srcdoc="${doc}"></iframe></section>`;
+  const caption = ev.status ? `${s.eventType} · ${ev.status}` : s.eventType;
+  return `<section><h2><span style="background:${ev.color}"></span>${ev.title}<code>${caption}</code></h2><iframe title="${ev.title}" srcdoc="${doc}"></iframe></section>`;
 }).join('\n');
 
 const preview = `<!DOCTYPE html>
