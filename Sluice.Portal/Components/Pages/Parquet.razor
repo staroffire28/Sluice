@@ -8,6 +8,7 @@
 @inject IParquetArtifactService ParquetService
 @inject IDialogService DialogService
 @inject IOrchestrationService Orchestration
+@inject Sluice.Portal.Services.Logging.CircuitAuditActor Audit
 @inject IJobService JobService
 @inject INotificationService NotificationService
 @inject NavigationManager Nav
@@ -387,7 +388,7 @@
         _restoring = true;
         try
         {
-            var job = await Orchestration.RestorePointAsync(_pipelineId, snapshot);
+            var job = await Orchestration.RestorePointAsync(Audit.Current, _pipelineId, snapshot);
             await NotificationService.ShowSuccessToastAsync(L["Page.Parquet.Restored", snapshot].Value);
             if (job is not null)
             {

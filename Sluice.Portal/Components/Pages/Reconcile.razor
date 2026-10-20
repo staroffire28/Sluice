@@ -11,6 +11,7 @@
 @inject IOrchestrationService Orchestration
 @inject INotificationService NotificationService
 @inject IActivityLog ActivityLog
+@inject CircuitAuditActor Audit
 
 @inject IStringLocalizer<SharedResource> L
 
@@ -77,11 +78,11 @@
                                                   Title="@L["Common.Actions"]" data-testid="@($"recon-actions-{context.Entity}")" />
                                     <FluentMenuList>
                                         <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity"
-                                                           TestId="@($"recon-resync-{context.Entity}")" ActivityAction="reconcile.resync" OnStarted="Load" />
+                                                           TestId="@($"recon-resync-{context.Entity}")" OnStarted="Load" />
                                         @if (context.SourceRows > context.DestinationRows)
                                         {
                                             <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity" Mode="ResyncMode.Remerge"
-                                                               TestId="@($"recon-remerge-{context.Entity}")" ActivityAction="reconcile.resync" OnStarted="Load" />
+                                                               TestId="@($"recon-remerge-{context.Entity}")" OnStarted="Load" />
                                         }
                                         @if (context.Accepted)
                                         {
@@ -150,7 +151,7 @@
                                             @if (context.Error is null)
                                             {
                                                 <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity"
-                                                                   TestId="@($"values-resync-{context.Entity}")" ActivityAction="reconcile.resync" OnStarted="Load" />
+                                                                   TestId="@($"values-resync-{context.Entity}")" OnStarted="Load" />
                                             }
                                             <FluentMenuItem data-testid="@($"values-compare-{context.Entity}")" IconStart="@(new Icons.Regular.Size20.ColumnDoubleCompare())"
                                                             OnClick="@(() => CompareValuesAsync(context.Entity))">@L["Page.Reconcile.CompareAgain"]</FluentMenuItem>
@@ -289,14 +290,12 @@
     {
         try
         {
-            var job = await Orchestration.CompareValuesAsync(_pipelineId, entity);
+            var job = await Orchestration.CompareValuesAsync(Audit.Current, _pipelineId, entity);
             await NotificationService.ShowSuccessToastAsync(string.Format(L["Page.Reconcile.Values.Started"].Value, job.Id));
-            ActivityLog.LogUser("reconcile.values", $"Comparación de valores de {entity ?? "todas las tablas"} (job {job.Id}).", _pipelineId, job.Id);
         }
         catch (Exception ex)
         {
             await NotificationService.ShowErrorToastAsync(ex.Message);
-            ActivityLog.LogUser("reconcile.values", $"No se pudo iniciar la comparación de valores: {ex.Message}", _pipelineId, level: "error");
         }
     }
 

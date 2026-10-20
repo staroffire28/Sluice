@@ -4,11 +4,11 @@
 @inject IOrchestrationService Orchestration
 @inject INotificationService NotificationService
 @inject IDialogService DialogService
-@inject IActivityLog ActivityLog
+@inject CircuitAuditActor Audit
 @inject IStringLocalizer<SharedResource> L
 
-@* Re-sincronizar UNA tabla (Tablas y Conciliación): confirmación, job de re-sync, aviso y registro
-   de actividad. Reload = upsert + borrado de huérfanas; Remerge = solo upsert. Se pinta como opción
+@* Re-sincronizar UNA tabla (Tablas y Conciliación): confirmación, job de re-sync y aviso (el
+   registro de actividad lo deja el servicio). Reload = upsert + borrado de huérfanas; Remerge = solo upsert. Se pinta como opción
    del menú de acciones de la fila (el padre pone el FluentMenu). *@
 <FluentMenuItem data-testid="@TestId" IconStart="@(Mode == ResyncMode.Reload ? new Icons.Regular.Size20.ArrowSync() : new Icons.Regular.Size20.Merge())"
                 OnClick="ResyncAsync">@Label</FluentMenuItem>
@@ -27,10 +27,6 @@
     public string? TestId { get; set; }
 
     private string Label => (Mode == ResyncMode.Reload ? L["Page.Reconcile.Resync"] : L["Page.Reconcile.Remerge"]).Value;
-
-    // Acción del registro de actividad: cada página conserva la suya (table.resync, reconcile.resync).
-    [Parameter, EditorRequired]
-    public string ActivityAction { get; set; } = "";
 
     [Parameter]
     public EventCallback OnStarted { get; set; }
@@ -52,15 +48,13 @@
 
         try
         {
-            var job = await Orchestration.ResyncTableAsync(PipelineId, Entity, Mode);
+            var job = await Orchestration.ResyncTableAsync(Audit.Current, PipelineId, Entity, Mode);
             await NotificationService.ShowSuccessToastAsync(string.Format(L["Page.Reconcile.ResyncStarted"].Value, Entity, job.Id));
-            ActivityLog.LogUser(ActivityAction, $"Re-sync {Mode} de {Entity} en {PipelineId} (job {job.Id}).", PipelineId, job.Id);
             await OnStarted.InvokeAsync();
         }
         catch (Exception ex)
         {
             await NotificationService.ShowErrorToastAsync(ex.Message);
-            ActivityLog.LogUser(ActivityAction, $"No se pudo iniciar re-sync de {Entity}: {ex.Message}", PipelineId, level: "error");
         }
     }
 }

@@ -6,6 +6,7 @@
 @inject IPipelineService PipelineService
 @inject TableCatalogService CatalogService
 @inject IOrchestrationService Orchestration
+@inject Sluice.Portal.Services.Logging.CircuitAuditActor Audit
 @inject INotificationService NotificationService
 @inject NavigationManager Nav
 @inject IStringLocalizer<SharedResource> L
@@ -311,7 +312,7 @@
     {
         try
         {
-            var job = await Orchestration.ResyncTableAsync(_pipelineId, _columnsTable!.Name, ResyncMode.Reload);
+            var job = await Orchestration.ResyncTableAsync(Audit.Current, _pipelineId, _columnsTable!.Name, ResyncMode.Reload);
             Nav.NavigateTo($"/jobs/{Uri.EscapeDataString(job.Id)}");
         }
         catch (Exception ex)

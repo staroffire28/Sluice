@@ -174,7 +174,7 @@ public sealed class DemoBootstrapService : BackgroundService
     {
         try
         {
-            await _orchestration.RunPipelineAsync(PipelineId, JobType.Incremental, cancellationToken);
+            await _orchestration.RunPipelineAsync(AuditActor.Demo, PipelineId, JobType.Incremental, cancellationToken);
         }
         catch (InvalidOperationException ex)
         {

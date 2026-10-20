@@ -16,7 +16,6 @@ public sealed class StageRouter : IStageRouter
     private readonly IJobService _jobs;
     private readonly IOrchestrationService? _orchestration;
     private readonly SettingsStore? _settings;
-    private readonly IActivityLog? _activity;
 
     // Las dependencias de la corrección automática son opcionales: sin ellas el router solo encadena
     // etapas (así lo construyen los tests que no la ejercitan).
@@ -24,14 +23,12 @@ public sealed class StageRouter : IStageRouter
         ITaskStore tasks,
         IJobService jobs,
         IOrchestrationService? orchestration = null,
-        SettingsStore? settings = null,
-        IActivityLog? activity = null)
+        SettingsStore? settings = null)
     {
         _tasks = tasks;
         _jobs = jobs;
         _orchestration = orchestration;
         _settings = settings;
-        _activity = activity;
     }
 
     public async Task RouteCompletedTaskAsync(PipelineTask task, CancellationToken cancellationToken = default)
@@ -139,15 +136,14 @@ public sealed class StageRouter : IStageRouter
 
         try
         {
-            var fix = await _orchestration.ResyncTablesAsync(job.PipelineId, entities, ResyncMode.Reload, AutoRemediation.TriggeredByAuto, cancellationToken);
+            // El registro de actividad lo deja el re-sync, con el actor AutoFix.
+            var fix = await _orchestration.ResyncTablesAsync(AuditActor.AutoFix, job.PipelineId, entities, ResyncMode.Reload, cancellationToken);
             _jobs.AppendEvent(job.Id, EventLevel.Info, $"Corrección automática: el job {fix.Id} re-sincroniza {string.Join(", ", entities)}.");
-            _activity?.LogSystem("reconcile.autofix", $"Corrección automática de {string.Join(", ", entities)} (job {fix.Id}).", job.PipelineId, fix.Id);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // P. ej. "Ya hay un job en ejecución" si el scheduler arrancó otro entretanto.
             _jobs.AppendEvent(job.Id, EventLevel.Warning, $"Corrección automática no lanzada: {ex.Message}");
-            _activity?.LogSystem("reconcile.autofix.skipped", $"Corrección automática no lanzada: {ex.Message}", job.PipelineId, job.Id, "warning");
         }
     }
 

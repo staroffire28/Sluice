@@ -9,7 +9,7 @@
 @using Sluice.Portal.Services.Reporting
 @using Sluice.Portal.Services.Logging
 @inject IJobService JobService
-@inject IActivityLog ActivityLog
+@inject CircuitAuditActor Audit
 @inject IPipelineService PipelineService
 @inject IOrchestrationService Orchestration
 @inject JobReportDownloader ReportDownloader
@@ -153,9 +153,8 @@
 
         try
         {
-            await Orchestration.CancelAsync(jobId);
+            await Orchestration.CancelAsync(Audit.Current, jobId);
             await NotificationService.ShowInfoToastAsync(string.Format(L["Common.JobCancelled"].Value, jobId));
-            ActivityLog.LogUser("job.cancel", $"Cancelación manual del job {jobId}.", jobId: jobId);
             Load();
         }
         catch (Exception ex)
@@ -179,9 +178,8 @@
 
         try
         {
-            var job = await Orchestration.RetryJobAsync(jobId);
+            var job = await Orchestration.RetryJobAsync(Audit.Current, jobId);
             await NotificationService.ShowSuccessToastAsync(string.Format(L["Common.RetryStarted"].Value, job.Id));
-            ActivityLog.LogUser("pipeline.retry", $"Reintento del job {jobId} (nuevo job {job.Id}).", job.PipelineId, job.Id);
             Load();
         }
         catch (Exception ex)

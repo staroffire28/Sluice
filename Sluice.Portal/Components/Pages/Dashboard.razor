@@ -20,7 +20,8 @@
 @inject Sluice.Portal.Services.Pipeline.JobProgressStore ProgressStore
 @inject WorkerRegistry WorkerRegistry
 @inject Sluice.Portal.Services.Stores.SettingsStore Settings
-@inject Sluice.Portal.Services.Stores.PipelineRunQueue RunQueue
+@inject Sluice.Portal.Services.Stores.RunQueueService RunQueue
+@inject CircuitAuditActor Audit
 @implements IAsyncDisposable
 
 @inject IStringLocalizer<SharedResource> L
@@ -498,9 +499,8 @@
 
         try
         {
-            await Orchestration.CancelAsync(jobId);
+            await Orchestration.CancelAsync(Audit.Current, jobId);
             await NotificationService.ShowInfoToastAsync(string.Format(L["Page.Dashboard.JobCancelled"].Value, jobId));
-            ActivityLog.LogUser("job.cancel", $"Cancelación manual del job {jobId}.", jobId: jobId);
             await RefreshCoreAsync();
         }
         catch (Exception ex)

@@ -4,7 +4,7 @@
 @inject IOrchestrationService Orchestration
 @inject INotificationService NotificationService
 @inject IDialogService DialogService
-@inject IActivityLog ActivityLog
+@inject CircuitAuditActor Audit
 @inject IStringLocalizer<SharedResource> L
 
 <FluentMenuItem data-testid="@($"run-{PipelineId}")" Disabled="@string.IsNullOrWhiteSpace(PipelineId)" OnClick="@(() => RunAsync(JobType.Incremental))">@L["Common.Run"]</FluentMenuItem>
@@ -35,15 +35,13 @@
 
         try
         {
-            var job = await Orchestration.RunPipelineAsync(PipelineId, type);
+            var job = await Orchestration.RunPipelineAsync(Audit.Current, PipelineId, type);
             await NotificationService.ShowSuccessToastAsync(string.Format(L["Page.Pipelines.JobStarted"].Value, job.Id, JobTypeLabels.Get(L, type)));
-            ActivityLog.LogUser("pipeline.run", $"Ejecución manual {type} del pipeline {PipelineId} (job {job.Id}).", PipelineId, job.Id);
             await OnCompleted.InvokeAsync();
         }
         catch (Exception ex)
         {
             await NotificationService.ShowErrorToastAsync(ex.Message);
-            ActivityLog.LogUser("pipeline.run", $"No se pudo iniciar {type} en {PipelineId}: {ex.Message}", PipelineId, level: "error");
         }
     }
 
@@ -69,15 +67,13 @@
 
         try
         {
-            Orchestration.QueueRun(PipelineId, type);
+            Orchestration.QueueRun(Audit.Current, PipelineId, type);
             await NotificationService.ShowSuccessToastAsync(string.Format(L["Page.Pipelines.Queued"].Value, label));
-            ActivityLog.LogUser("pipeline.queue", $"{type} en cola en el pipeline {PipelineId}: arranca cuando termine el job en curso.", PipelineId);
             await OnCompleted.InvokeAsync();
         }
         catch (Exception ex)
         {
             await NotificationService.ShowErrorToastAsync(ex.Message);
-            ActivityLog.LogUser("pipeline.queue", $"No se pudo dejar {type} en cola en {PipelineId}: {ex.Message}", PipelineId, level: "error");
         }
     }
 
