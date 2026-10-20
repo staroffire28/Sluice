@@ -219,45 +219,31 @@ public sealed class AdlsClient : IAdlsClient, IParquetStore
 
     public async Task<SnapshotIntegrity> ValidateSnapshotAsync(string snapshot, CancellationToken cancellationToken = default)
     {
-        // Validación de robustez: la carpeta ya está sellada por el changelog, pero esto
-        // defiende ante un fallo de Synapse que dejara una carpeta cerrada pero vacía/a medias.
-        // Solo inspecciona metadatos (longitudes), NO descarga datos.
-        //
-        // Criterio a NIVEL DE SNAPSHOT: basta con que UNA entidad tenga datos (>0 bytes) para
-        // considerar el volcado presente y procesable. Una entidad con solo CSV vacíos es normal
-        // en Dynamics F&O/Dataverse (tabla sin movimientos en la ventana) y NO debe bloquear el
-        // ingest — el resto del flujo ya omite entidades vacías. Solo se marca incompleto si
-        // NINGUNA entidad del snapshot tiene datos (volcado totalmente vacío o en progreso).
+        // Validación de robustez: la carpeta ya está sellada por el changelog, pero esto defiende ante un
+        // fallo de Synapse que la dejara cerrada pero a medias. Criterio en SnapshotManifest: cada
+        // partition del model.json de la raíz existe y no está vacía. Un listado recursivo de la carpeta
+        // (tamaños) y la descarga del model.json (metadatos, unos cientos de KB); ningún CSV de datos.
         var entities = await ListEntitiesAsync(snapshot, cancellationToken);
-
-        // Snapshot sin entidades: nada que ingestar, no es un volcado roto.
-        if (entities.Count == 0)
+        var prefix = $"{snapshot.TrimEnd('/')}/";
+        var sizes = new Dictionary<string, long>(StringComparer.Ordinal);
+        await foreach (var path in _fileSystem.GetPathsAsync(prefix, true, false, cancellationToken))
         {
-            return new SnapshotIntegrity(true, null, null);
-        }
-
-        foreach (var entity in entities)
-        {
-            var prefix = $"{snapshot.TrimEnd('/')}/{entity}/";
-
-            await foreach (var path in _fileSystem.GetPathsAsync(prefix, false, false, cancellationToken))
+            if (path.IsDirectory != true && path.Name.StartsWith(prefix, StringComparison.Ordinal))
             {
-                if (path.IsDirectory == true || !path.Name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                if ((path.ContentLength ?? 0) > 0)
-                {
-                    return new SnapshotIntegrity(true, null, null);
-                }
+                sizes[path.Name[prefix.Length..]] = path.ContentLength ?? 0;
             }
         }
 
-        return new SnapshotIntegrity(
-            false,
-            null,
-            $"Snapshot '{snapshot}' has no non-empty CSV in any entity (empty or in-progress export).");
+        string? modelJson = null;
+        if (sizes.ContainsKey(SnapshotManifest.ModelFile))
+        {
+            var response = await _fileSystem.GetFileClient(prefix + SnapshotManifest.ModelFile).ReadAsync(cancellationToken: cancellationToken);
+            using var reader = new StreamReader(response.Value.Content, Encoding.UTF8);
+            modelJson = await reader.ReadToEndAsync(cancellationToken);
+        }
+
+        return SnapshotManifest.Evaluate(snapshot, modelJson, entities.Count > 0,
+            relative => sizes.TryGetValue(relative, out var size) ? size : null);
     }
 
     public async Task<IReadOnlyList<string>> ListEntitiesAsync(string snapshot, CancellationToken cancellationToken = default)
