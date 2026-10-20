@@ -10,7 +10,7 @@
 @inject SettingsStore Settings
 @inject IOrchestrationService Orchestration
 @inject INotificationService NotificationService
-@inject IActivityLog ActivityLog
+@inject ReconcileAckService Acks
 @inject CircuitAuditActor Audit
 
 @inject IStringLocalizer<SharedResource> L
@@ -299,17 +299,15 @@
 
     private void Accept(ReconRow row)
     {
-        Reports.SaveAck(_pipelineId, row.Entity, new ReconAck { AckPct = row.DivergencePct });
+        Acks.Accept(Audit.Current, _pipelineId, row.Entity, row.DivergencePct);
         _ = NotificationService.ShowInfoToastAsync(string.Format(L["Page.Reconcile.AcceptedToast"].Value, row.Entity));
-        ActivityLog.LogUser("reconcile.accept", $"Divergencia de {row.Entity} aceptada ({row.DivergencePct:F2}%).", _pipelineId);
         Load();
     }
 
     private void Unaccept(ReconRow row)
     {
-        Reports.RemoveAck(_pipelineId, row.Entity);
+        Acks.Remove(Audit.Current, _pipelineId, row.Entity);
         _ = NotificationService.ShowInfoToastAsync(string.Format(L["Page.Reconcile.UnacceptedToast"].Value, row.Entity));
-        ActivityLog.LogUser("reconcile.accept", $"Se quitó la aceptación de {row.Entity}.", _pipelineId);
         Load();
     }
 

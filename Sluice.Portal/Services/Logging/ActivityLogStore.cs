@@ -8,7 +8,8 @@ namespace Sluice.Portal.Services.Logging;
 
 public interface IActivityLog
 {
-    void LogUser(string action, string message, string? pipelineId = null, string? jobId = null, string level = "info");
+    // Eventos del sistema que no son la acción de nadie (retención, avisos, huérfanos). Lo que
+    // alguien (o el scheduler, la cola...) decide hacer va por IAuditLog.Record.
     void LogSystem(string action, string message, string? pipelineId = null, string? jobId = null, string level = "info");
     // Devuelve la página y el total filtrado en UNA sola lectura/deserialización
     // (evita releer y deserializar todos los archivos dos veces por render).
@@ -19,10 +20,11 @@ public interface IActivityLog
 }
 
 // Auditoría de las acciones que mutan algo: la llaman los servicios (no las páginas), con el actor
-// que pasó el llamador. El nivel sale del outcome: Ok=info, Rejected=warning, Error=error.
+// que pasó el llamador. El nivel sale del outcome (Ok=info, Rejected=warning, Error=error) salvo que
+// se indique otro: un Ok que merece atención (p. ej. desactivar el dry-run de la retención) es warning.
 public interface IAuditLog
 {
-    void Record(AuditActor actor, string action, AuditOutcome outcome, string? pipelineId, string? jobId, string? target, string message);
+    void Record(AuditActor actor, string action, AuditOutcome outcome, string? pipelineId, string? jobId, string? target, string message, string? level = null);
 }
 
 public sealed record ActivityLogPage(IReadOnlyList<ActivityLogEntry> Items, int Total, int Page);
@@ -60,15 +62,12 @@ public sealed class ActivityLogStore : IActivityLog, IAuditLog
         _time = time ?? TimeProvider.System;
     }
 
-    public void LogUser(string action, string message, string? pipelineId = null, string? jobId = null, string level = "info") =>
-        Append(NewEntry("user", level, action, message, pipelineId, jobId));
-
     public void LogSystem(string action, string message, string? pipelineId = null, string? jobId = null, string level = "info") =>
         Append(NewEntry("system", level, action, message, pipelineId, jobId));
 
-    public void Record(AuditActor actor, string action, AuditOutcome outcome, string? pipelineId, string? jobId, string? target, string message)
+    public void Record(AuditActor actor, string action, AuditOutcome outcome, string? pipelineId, string? jobId, string? target, string message, string? level = null)
     {
-        var level = outcome switch
+        level ??= outcome switch
         {
             AuditOutcome.Rejected => "warning",
             AuditOutcome.Error => "error",

@@ -10,7 +10,8 @@
 @inject TablePauseStore PauseStore
 @inject SettingsStore Settings
 @inject INotificationService NotificationService
-@inject IActivityLog ActivityLog
+@inject Sluice.Portal.Services.Pipeline.TableCatalogService CatalogService
+@inject CircuitAuditActor Audit
 @inject NavigationManager Nav
 
 @inject IStringLocalizer<SharedResource> L
@@ -196,13 +197,9 @@
     // del pipeline (no se ingesta ni se mergea); su estado/datos ya sincronizados se conservan.
     private void TogglePaused(string entity, bool paused)
     {
-        PauseStore.SetPaused(_pipelineId, entity, paused);
+        CatalogService.SetTableIncluded(Audit.Current, _pipelineId, entity, included: !paused);
         var key = paused ? "Page.Tables.PausedToast" : "Page.Tables.ResumedToast";
         _ = NotificationService.ShowInfoToastAsync(string.Format(L[key].Value, entity));
-        ActivityLog.LogUser(
-            paused ? "table.pause" : "table.resume",
-            $"Sincronización de la tabla '{entity}' {(paused ? "pausada" : "reanudada")} en el pipeline {_pipelineId}.",
-            _pipelineId);
         Load();
     }
 

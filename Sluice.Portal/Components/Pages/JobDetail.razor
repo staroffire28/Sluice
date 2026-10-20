@@ -60,7 +60,7 @@
                 </div>
                 <div class="jd-head__actions">
                     <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.DocumentPdf())"
-                                  data-testid="job-report" OnClick="@(() => ReportDownloader.DownloadAsync(job))">@L["Page.Jobs.Report"]</FluentButton>
+                                  data-testid="job-report" OnClick="@(() => ReportDownloader.DownloadAsync(Audit.Current, job))">@L["Page.Jobs.Report"]</FluentButton>
                     @if (JobProgressHelper.IsActive(job))
                     {
                         <FluentButton Appearance="ButtonAppearance.Outline" Class="btn-danger" data-testid="cancel-job" OnClick="@(() => CancelJobAsync(job.Id))">@L["Common.Cancel"]</FluentButton>

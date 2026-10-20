@@ -39,11 +39,11 @@ Authenticates with `UI_API_KEY` and sets the session cookie.
 
 Query error codes on form login redirect: `invalid`, `required`, `csrf`, `throttled`.
 
-After 10 failed attempts from the same client IP within 15 minutes, further attempts are rejected (`429`, or `?error=throttled` for the form) until the window expires — even with the correct key. Successful logins do not count and reset the counter. Behind a reverse proxy the client IP comes from `X-Forwarded-For`; set `KNOWN_PROXIES` / `KNOWN_NETWORKS` so only your proxy can supply it.
+After 10 failed attempts (wrong or empty key, or a form without a valid antiforgery token) from the same client IP within 15 minutes, further attempts are rejected (`429`, or `?error=throttled` for the form) until the window expires — even with the correct key. Successful logins do not count and reset the counter. Logins, failed attempts and the first throttled attempt of each window are recorded in the activity log as `auth.login` (never the key); once a client is throttled, its further attempts are not recorded. Behind a reverse proxy the client IP comes from `X-Forwarded-For`; set `KNOWN_PROXIES` / `KNOWN_NETWORKS` so only your proxy can supply it.
 
 ### `POST /auth/logout`
 
-Revokes **all** sessions (every browser, every script) and clears `sluice_session`. Form POST with antiforgery token. Returns `302` → `/login`.
+Revokes **all** sessions (every browser, every script) and clears `sluice_session`. Form POST with antiforgery token. Returns `302` → `/login`. Recorded in the activity log as `auth.logout` only if the request carries a valid session, whether it succeeds or is rejected for a missing token.
 
 ### `GET /login`
 

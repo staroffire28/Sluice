@@ -204,7 +204,7 @@
     {
         if (JobService.Get(jobId) is { } job)
         {
-            await ReportDownloader.DownloadAsync(job);
+            await ReportDownloader.DownloadAsync(Audit.Current, job);
         }
     }
 }
