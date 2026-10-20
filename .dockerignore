@@ -4,6 +4,8 @@
 **/bin
 **/obj
 **/data
+**/backups
+**/*.tar.gz
 **/*.user
 **/*.suo
 **/.env
