@@ -26,7 +26,9 @@ public sealed class PipelineSchedulerService : BackgroundService
     private readonly QueueStallWatch _queueStall;
     private readonly PipelineRunQueue _runQueue;
     private readonly Dictionary<string, DateTimeOffset> _stallAlertsSent = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _lagAlertsNoticed = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _lagAlertsSent = new(StringComparer.OrdinalIgnoreCase);
+    private bool _alertDeliveryFailedThisPoll;
 
     public PipelineSchedulerService(
         IOptions<AppOptions> options,
@@ -108,6 +110,7 @@ public sealed class PipelineSchedulerService : BackgroundService
     // internal: los tests ejercitan un ciclo sin esperar al primer tick del timer.
     internal async Task PollAsync(CancellationToken ct)
     {
+        _alertDeliveryFailedThisPoll = false;
         await _deadman.PingAsync(ct);
         await CheckChangelogStallsAsync(ct);
 
@@ -147,8 +150,15 @@ public sealed class PipelineSchedulerService : BackgroundService
                 foreach (var stall in _queueStall.Check())
                 {
                     var message = $"Cola parada: {stall.PendingTasks} tarea(s) de la etapa {stall.Stage} pendiente(s) desde hace más de {QueueStallWatch.Threshold.TotalMinutes:0} min sin ningún worker vivo de esa etapa. Comprueba el contenedor del worker {stall.Stage}.";
-                    _activity.LogSystem("queue.stalled", message, level: "error");
-                    await _alerts.SendAsync(message, ct);
+                    if (stall.FirstNotice)
+                    {
+                        _activity.LogSystem("queue.stalled", message, level: "error");
+                    }
+
+                    if (await TrySendPendingAlertAsync(message, ct))
+                    {
+                        _queueStall.MarkReported(stall.Stage);
+                    }
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -169,28 +179,34 @@ public sealed class PipelineSchedulerService : BackgroundService
             try
             {
                 var catalog = await _snapshots.GetCatalogAsync(pipeline.Id, ct);
-                await CheckPipelineLagAsync(pipeline, catalog, ct);
-                if (catalog.Blocked)
+                try
                 {
-                    _logger.LogDebug(
-                        "Scheduler skip {PipelineId}: {Reason}",
+                    if (catalog.Blocked)
+                    {
+                        _logger.LogDebug(
+                            "Scheduler skip {PipelineId}: {Reason}",
+                            pipeline.Id,
+                            catalog.BlockReason);
+                        continue;
+                    }
+
+                    if (catalog.PendingSnapshots.Count == 0)
+                    {
+                        _logger.LogDebug("Scheduler skip {PipelineId}: no pending snapshots", pipeline.Id);
+                        continue;
+                    }
+
+                    _logger.LogInformation(
+                        "Scheduler auto-run for pipeline {PipelineId} ({Count} snapshot(s))",
                         pipeline.Id,
-                        catalog.BlockReason);
-                    continue;
+                        catalog.PendingSnapshots.Count);
+                    var job = await _orchestration.RunPipelineAsync(pipeline.Id, JobType.Incremental, ct);
+                    _activity.LogSystem("scheduler.run", $"Auto-run del scheduler en el pipeline {pipeline.Id} ({catalog.PendingSnapshots.Count} snapshot(s), job {job.Id}).", pipeline.Id, job.Id);
                 }
-
-                if (catalog.PendingSnapshots.Count == 0)
+                finally
                 {
-                    _logger.LogDebug("Scheduler skip {PipelineId}: no pending snapshots", pipeline.Id);
-                    continue;
+                    await CheckPipelineLagAsync(pipeline, catalog, ct);
                 }
-
-                _logger.LogInformation(
-                    "Scheduler auto-run for pipeline {PipelineId} ({Count} snapshot(s))",
-                    pipeline.Id,
-                    catalog.PendingSnapshots.Count);
-                var job = await _orchestration.RunPipelineAsync(pipeline.Id, JobType.Incremental, ct);
-                _activity.LogSystem("scheduler.run", $"Auto-run del scheduler en el pipeline {pipeline.Id} ({catalog.PendingSnapshots.Count} snapshot(s), job {job.Id}).", pipeline.Id, job.Id);
             }
             catch (PipelineBusyException ex)
             {
@@ -269,19 +285,43 @@ public sealed class PipelineSchedulerService : BackgroundService
         var closedAt = hours <= 0 || catalog.LastProcessedSnapshot is null ? null : OldestPendingClosedAt(catalog);
         if (closedAt is not { } since || (now - since).TotalHours < hours)
         {
+            _lagAlertsNoticed.Remove(pipeline.Id);
             _lagAlertsSent.Remove(pipeline.Id);
             return;
         }
 
-        if (!_lagAlertsSent.Add(pipeline.Id))
+        if (_lagAlertsSent.Contains(pipeline.Id))
         {
             return;
         }
 
+        // Se registra una vez por episodio; la alerta cuenta como dada solo si llega al webhook,
+        // así que con el webhook caído se reintenta en cada poll.
         var message = $"Pipeline {pipeline.Name} atrasado: {catalog.PendingSnapshots.Count} snapshot(s) cerrado(s) sin procesar; " +
             $"el más antiguo ({catalog.PendingSnapshots.Min(StringComparer.Ordinal)}) espera desde hace {(now - since).TotalHours:0} h (umbral {hours} h).";
-        _activity.LogSystem("pipeline.lag", message, pipeline.Id, level: "warning");
-        await _alerts.SendAsync(message, ct);
+        if (_lagAlertsNoticed.Add(pipeline.Id))
+        {
+            _activity.LogSystem("pipeline.lag", message, pipeline.Id, level: "warning");
+        }
+
+        if (await TrySendPendingAlertAsync(message, ct))
+        {
+            _lagAlertsSent.Add(pipeline.Id);
+        }
+    }
+
+    // Alertas deduplicadas que se reintentan en cada poll hasta llegar: tras el primer fallo de entrega
+    // del poll las demás esperan al siguiente, para no bloquear el ciclo con un webhook caído.
+    private async Task<bool> TrySendPendingAlertAsync(string message, CancellationToken ct)
+    {
+        if (_alertDeliveryFailedThisPoll)
+        {
+            return false;
+        }
+
+        var sent = (await _alerts.SendAsync(message, ct)).Success;
+        _alertDeliveryFailedThisPoll = !sent;
+        return sent;
     }
 
     // Cuándo se cerró el snapshot pendiente más antiguo: cuando empezó la carpeta siguiente.
@@ -327,11 +367,14 @@ public sealed class PipelineSchedulerService : BackgroundService
                     continue;
                 }
 
-                _stallAlertsSent[pipeline.SourceId] = now;
-                await _alerts.SendAsync(
+                var sent = await TrySendPendingAlertAsync(
                     $"Changelog stall detected for source '{pipeline.SourceId}' " +
                     $"(last modified {lastModified:u}, threshold {_options.ChangelogStallHours}h).",
                     ct);
+                if (sent)
+                {
+                    _stallAlertsSent[pipeline.SourceId] = now;
+                }
             }
             catch (Exception ex)
             {

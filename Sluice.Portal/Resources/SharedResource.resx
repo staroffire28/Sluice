@@ -485,6 +485,12 @@
   <data name="Page.Settings.Alerts.WebhookStored" xml:space="preserve"><value>Configurada (oculta). Escribe otra para reemplazarla.</value></data>
   <data name="Page.Settings.Alerts.Test" xml:space="preserve"><value>Enviar prueba</value></data>
   <data name="Page.Settings.Alerts.Testing" xml:space="preserve"><value>Enviando…</value></data>
+  <data name="Page.Settings.Alerts.LastDelivery" xml:space="preserve"><value>Última entrega</value></data>
+  <data name="Page.Settings.Alerts.LastDelivery.None" xml:space="preserve"><value>Todavía no se ha enviado ninguna alerta al webhook.</value></data>
+  <data name="Page.Settings.Alerts.LastDelivery.Ok" xml:space="preserve"><value>{0}: alerta {1} entregada ({2}).</value></data>
+  <data name="Page.Settings.Alerts.LastDelivery.Failed" xml:space="preserve"><value>{0}: no se pudo entregar la alerta {1} ({2}). Las alertas no llegan mientras el webhook falle.</value></data>
+  <data name="Page.Settings.Alerts.LastDelivery.LastSuccess" xml:space="preserve"><value>Última entrega correcta: {0}.</value></data>
+  <data name="Page.Settings.Alerts.LastDelivery.NeverSucceeded" xml:space="preserve"><value>Todavía no ha habido ninguna entrega correcta.</value></data>
   <data name="Page.Sources.ParquetContainer" xml:space="preserve"><value>Container de parquet (destino)</value></data>
   <data name="Nav.Reconcile" xml:space="preserve"><value>Conciliación</value></data>
   <data name="Page.Reconcile.Title" xml:space="preserve"><value>Conciliación</value></data>
