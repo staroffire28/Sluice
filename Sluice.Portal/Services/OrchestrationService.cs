@@ -203,6 +203,7 @@ public sealed class OrchestrationService : IOrchestrationService
         _ = _pipelines.Get(pipelineId)
             ?? throw new InvalidOperationException("Pipeline not found.");
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
+        ThrowIfRestorePending(pipelineId);
 
         // Reconcile y Diff solo comparan conteos (parquet consolidado vs SQL) y CompareValues compara
         // valores: no ingieren ni mergean. Arrancan directamente en la etapa de conciliación con las
@@ -327,6 +328,7 @@ public sealed class OrchestrationService : IOrchestrationService
         _ = _pipelines.Get(pipelineId)
             ?? throw new InvalidOperationException("Pipeline not found.");
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
+        ThrowIfRestorePending(pipelineId);
 
         return await EnqueueResyncAsync(pipelineId, entities, mode, triggeredBy, cancellationToken);
     }
@@ -353,47 +355,64 @@ public sealed class OrchestrationService : IOrchestrationService
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
 
         var state = stateStore.GetOrCreate(pipelineId);
+        if (state.RestoreInProgress is { } halfDone && halfDone.Snapshot != snapshot)
+        {
+            throw new InvalidOperationException(
+                $"El restore al punto {halfDone.Snapshot} quedó a medias: termínalo restaurando ese mismo punto antes de elegir otro.");
+        }
+
+        var from = state.RestoreInProgress is { } inProgress ? inProgress.FromSnapshot : state.LastProcessedSnapshot;
+        if (state.PendingRestore.Count > 0)
+        {
+            state = await FinishPendingRestoreAsync(stateStore, pipelineId, state, from, cancellationToken);
+        }
+
         var plan = ParquetVersions.Plan(await _parquet.ListAllVersionsAsync(pipelineId, cancellationToken), state.Tables, snapshot);
         if (plan.Restore.Count == 0 && plan.Archive.Count == 0 && state.PendingReload.Count == 0)
         {
+            if (state.RestoreInProgress is not null)
+            {
+                stateStore.Save(state with { RestoreInProgress = null });
+                return null;
+            }
+
             throw new InvalidOperationException($"El pipeline ya está en el punto {snapshot}.");
         }
 
-        // Cada tabla queda pendiente de recarga antes de moverla: si el restore falla después, su
-        // versión de entonces ya se consumió y el reintento no la vería en su plan.
+        // Cada tabla queda pendiente de recarga y marcada (versión y estado de entonces) antes de
+        // moverla: si el restore falla después, su versión de entonces ya se consumió y el reintento
+        // no la vería en su plan.
         var tables = new Dictionary<string, TableState>(state.Tables, StringComparer.OrdinalIgnoreCase);
         var pendingReload = new List<string>(state.PendingReload);
-        var rewound = state with { LastProcessedSnapshot = snapshot, Tables = tables, PendingReload = pendingReload };
+        var pendingRestore = new Dictionary<string, PendingRestoreTable>(StringComparer.OrdinalIgnoreCase);
+        var rewound = state with { LastProcessedSnapshot = snapshot, Tables = tables, PendingReload = pendingReload, PendingRestore = pendingRestore, RestoreInProgress = new() { Snapshot = snapshot, FromSnapshot = from } };
         stateStore.Save(rewound);
         foreach (var (entity, version) in plan.Restore)
         {
             if (!pendingReload.Contains(entity, StringComparer.OrdinalIgnoreCase))
             {
                 pendingReload.Add(entity);
-                stateStore.Save(rewound);
             }
 
-            await _parquet.RestoreVersionAsync(pipelineId, entity, version.Id, CurrentAsVersion(state, entity), cancellationToken);
-            if (version.Table is { } table)
-            {
-                tables[entity] = table;
-            }
-            else
-            {
-                tables.Remove(entity);
-            }
+            var current = state.Tables.GetValueOrDefault(entity);
+            pendingRestore[entity] = new PendingRestoreTable { VersionId = version.Id, Table = version.Table, FromTable = current };
+            stateStore.Save(rewound);
 
+            await _parquet.RestoreVersionAsync(pipelineId, entity, version.Id, CurrentAsVersion(current, from), cancellationToken);
+            ParquetVersions.SetTable(tables, entity, version.Table);
+            pendingRestore.Remove(entity);
             stateStore.Save(rewound);
         }
 
         foreach (var entity in plan.Archive)
         {
-            await _parquet.ArchiveCurrentAsync(pipelineId, entity, CurrentAsVersion(state, entity), cancellationToken);
+            await _parquet.ArchiveCurrentAsync(pipelineId, entity, CurrentAsVersion(state.Tables.GetValueOrDefault(entity), from), cancellationToken);
             tables.Remove(entity);
             pendingReload.RemoveAll(e => string.Equals(e, entity, StringComparison.OrdinalIgnoreCase));
             stateStore.Save(rewound);
         }
 
+        stateStore.Save(rewound with { RestoreInProgress = null });
         var toReload = ParquetVersions.ToReload(plan, state.PendingReload);
         if (toReload.Count == 0)
         {
@@ -410,17 +429,41 @@ public sealed class OrchestrationService : IOrchestrationService
         return job;
     }
 
-    private static ParquetVersion CurrentAsVersion(PipelineState state, string entity)
+    // Termina las tablas que el restore a medias del mismo punto marcó y no llegó a cerrar: si su
+    // versión sigue en la lista el fichero no llegó a moverse y se mueve; si no, ya está en su sitio.
+    // Después el estado vuelve a cuadrar con los ficheros y el plan nuevo sale bien.
+    private async Task<PipelineState> FinishPendingRestoreAsync(
+        PipelineStateStore stateStore, string pipelineId, PipelineState state, string? from, CancellationToken cancellationToken)
     {
-        var table = state.Tables.GetValueOrDefault(entity);
-        return new()
+        var versions = await _parquet.ListAllVersionsAsync(pipelineId, cancellationToken);
+        var tables = new Dictionary<string, TableState>(state.Tables, StringComparer.OrdinalIgnoreCase);
+        var pendingRestore = new Dictionary<string, PendingRestoreTable>(state.PendingRestore, StringComparer.OrdinalIgnoreCase);
+        var finished = state with { Tables = tables, PendingRestore = pendingRestore };
+        foreach (var (entity, mark) in state.PendingRestore)
         {
-            Table = table,
-            PipelineSnapshot = string.CompareOrdinal(table?.LastSnapshot, state.LastProcessedSnapshot) > 0
-                ? table!.LastSnapshot
-                : state.LastProcessedSnapshot,
-        };
+            var notMoved = versions
+                .Where(v => string.Equals(v.Key, entity, StringComparison.OrdinalIgnoreCase))
+                .Any(v => v.Value.Any(version => version.Id == mark.VersionId));
+            if (notMoved)
+            {
+                await _parquet.RestoreVersionAsync(pipelineId, entity, mark.VersionId, CurrentAsVersion(mark.FromTable, from), cancellationToken);
+            }
+
+            ParquetVersions.SetTable(tables, entity, mark.Table);
+            pendingRestore.Remove(entity);
+            stateStore.Save(finished);
+        }
+
+        return finished;
     }
+
+    private static ParquetVersion CurrentAsVersion(TableState? table, string? pipelineSnapshot) => new()
+    {
+        Table = table,
+        PipelineSnapshot = string.CompareOrdinal(table?.LastSnapshot, pipelineSnapshot) > 0
+            ? table!.LastSnapshot
+            : pipelineSnapshot,
+    };
 
     // Crea y encola el job de re-sync. Quien llama ya tiene el lock de ejecución del pipeline.
     private async Task<Job> EnqueueResyncAsync(string pipelineId, IReadOnlyList<string> entities, ResyncMode mode, string triggeredBy, CancellationToken cancellationToken)
@@ -511,6 +554,17 @@ public sealed class OrchestrationService : IOrchestrationService
         return job;
     }
 
+    // Un restore a medias deja marcas que solo valen mientras nadie toque esas tablas: hasta que
+    // RestorePointAsync las termine no arranca otro job, o su estado pisaría lo que ese job escriba.
+    private void ThrowIfRestorePending(string pipelineId)
+    {
+        if (_stateStore?.GetOrCreate(pipelineId) is { } state
+            && (state.PendingRestore.Count > 0 || state.RestoreInProgress is not null))
+        {
+            throw new RestorePendingException(state.RestoreInProgress?.Snapshot);
+        }
+    }
+
     private Task<IDisposable> AcquireRunLockAsync(string pipelineId, CancellationToken cancellationToken) =>
         PipelineRunLock.AcquireAsync(_options.DataDir, pipelineId, PipelineRunLock.DefaultTimeout, cancellationToken);
 
@@ -542,6 +596,7 @@ public sealed class OrchestrationService : IOrchestrationService
         _ = _pipelines.Get(pipelineId)
             ?? throw new InvalidOperationException("Pipeline not found.");
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
+        ThrowIfRestorePending(pipelineId);
 
         var artifacts = await _parquet.ListAsync(pipelineId, cancellationToken);
         var entities = artifacts

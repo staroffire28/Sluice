@@ -310,6 +310,8 @@
   <data name="Page.Parquet.LeftAt" xml:space="preserve"><value>Dejado atrás (UTC)</value></data>
   <data name="Page.Parquet.TablesBack" xml:space="preserve"><value>Tablas que vuelven</value></data>
   <data name="Page.Parquet.RestoreBlocked" xml:space="preserve"><value>Hay un job en ejecución en este pipeline: espera a que termine para restaurar.</value></data>
+  <data name="Page.Parquet.RestoreHalfDone" xml:space="preserve"><value>La restauración al punto {0} quedó a medias: termínala antes de restaurar otro punto o de lanzar cualquier job en este pipeline.</value></data>
+  <data name="Page.Parquet.FinishRestore" xml:space="preserve"><value>Terminar restauración</value></data>
   <data name="Page.Parquet.ReplacedBy" xml:space="preserve"><value>Sustituido por</value></data>
   <data name="Page.Parquet.Restore" xml:space="preserve"><value>Restaurar</value></data>
   <data name="Page.Parquet.ConfirmRestoreTitle" xml:space="preserve"><value>Restaurar punto</value></data>

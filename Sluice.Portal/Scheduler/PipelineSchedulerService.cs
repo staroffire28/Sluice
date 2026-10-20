@@ -32,6 +32,10 @@ public sealed class PipelineSchedulerService : BackgroundService
     private readonly Dictionary<string, string> _incompleteLogged = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _lagAlertsNoticed = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _lagAlertsSent = new(StringComparer.OrdinalIgnoreCase);
+    // Restore a medias: aviso registrado y alerta entregada, una vez por episodio. Se rearman en cuanto
+    // el estado del pipeline ya no tiene el restore a medias.
+    private readonly HashSet<string> _restoreHoldNoticed = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _restoreHoldAlerted = new(StringComparer.OrdinalIgnoreCase);
     private bool _alertDeliveryFailedThisPoll;
 
     public PipelineSchedulerService(
@@ -182,6 +186,12 @@ public sealed class PipelineSchedulerService : BackgroundService
         var failed = 0;
         foreach (var pipeline in _pipelines.List().Where(p => p.Enabled))
         {
+            if (_stateStore.GetOrCreate(pipeline.Id).RestoreInProgress is null)
+            {
+                _restoreHoldNoticed.Remove(pipeline.Id);
+                _restoreHoldAlerted.Remove(pipeline.Id);
+            }
+
             if (_jobs.ListRunning().Any(j => j.PipelineId == pipeline.Id))
             {
                 continue;
@@ -229,6 +239,22 @@ public sealed class PipelineSchedulerService : BackgroundService
             {
                 // Un job recién cancelado aún detiene su stage: se reintenta en el próximo poll.
                 _logger.LogInformation("Scheduler skip {PipelineId}: {Reason}", pipeline.Id, ex.Message);
+            }
+            catch (RestorePendingException ex)
+            {
+                // Retención, no fallo: hasta que alguien termine el restore no arranca nada. Se avisa una
+                // vez por episodio y la alerta cuenta como dada solo si llega al webhook.
+                _logger.LogInformation("Scheduler hold {PipelineId}: {Reason}", pipeline.Id, ex.Message);
+                var message = $"Pipeline {pipeline.Name} parado: {ex.Message}";
+                if (_restoreHoldNoticed.Add(pipeline.Id))
+                {
+                    _activity.LogSystem("restore.pending", message, pipeline.Id, level: "warning");
+                }
+
+                if (!_restoreHoldAlerted.Contains(pipeline.Id) && await TrySendPendingAlertAsync(message, ct))
+                {
+                    _restoreHoldAlerted.Add(pipeline.Id);
+                }
             }
             catch (Exception ex)
             {

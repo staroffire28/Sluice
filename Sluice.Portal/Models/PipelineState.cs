@@ -14,6 +14,25 @@ public sealed record PipelineState
     // Snapshot cerrado pero incompleto que frena el pipeline (el ingest se para en él). Lo vigila el
     // scheduler: alerta tras una gracia y cada 24 h mientras siga igual. Se rearma al avanzar.
     public IncompleteSnapshot? IncompleteSnapshot { get; init; }
+
+    // Restore a medias: la versión que recupera cada tabla y su estado de entonces, guardados antes de
+    // mover el fichero. Mover la versión borra su sidecar, así que si el proceso cae antes de guardar el
+    // TableState el reintento termina la tabla desde aquí: el plan recalculado ya no vería esa versión
+    // y archivaría el consolidado correcto.
+    public Dictionary<string, PendingRestoreTable> PendingRestore { get; init; } = new();
+
+    // Restore en curso: se guarda antes de mover la primera tabla y se borra cuando ya no queda nada por
+    // mover ni archivar. Los reintentos etiquetan lo que archivan con el snapshot de antes del restore,
+    // porque el estado guardado ya está rebobinado al punto pedido. Mientras exista solo se puede
+    // restaurar ese mismo punto: con otro, las tablas ya movidas se archivarían con esa etiqueta y su
+    // contenido del punto dejaría de poder elegirse.
+    public RestoreInProgress? RestoreInProgress { get; init; }
+}
+
+public sealed record RestoreInProgress
+{
+    public required string Snapshot { get; init; }
+    public string? FromSnapshot { get; init; }
 }
 
 public sealed record IncompleteSnapshot
@@ -21,6 +40,15 @@ public sealed record IncompleteSnapshot
     public required string Name { get; init; }
     public required DateTimeOffset FirstSeenAt { get; init; }
     public DateTimeOffset? LastAlertedAt { get; init; }
+}
+
+public sealed record PendingRestoreTable
+{
+    public required string VersionId { get; init; }
+    public TableState? Table { get; init; }
+
+    // Estado de la tabla antes del restore: etiqueta el consolidado que se archiva al moverla.
+    public TableState? FromTable { get; init; }
 }
 
 public sealed record TableState

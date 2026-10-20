@@ -275,6 +275,19 @@ public static class ParquetVersions
         return new RestorePlan(restore, archive);
     }
 
+    // Estado de una tabla tras volver a una versión: el de la versión o, si no lo trae, ninguno.
+    public static void SetTable(Dictionary<string, TableState> tables, string entity, TableState? table)
+    {
+        if (table is not null)
+        {
+            tables[entity] = table;
+        }
+        else
+        {
+            tables.Remove(entity);
+        }
+    }
+
     // Tablas que restaurar un punto recarga en SQL: las que vuelven atrás y las que un restore
     // anterior ya movió sin llegar a recargarlas (PipelineState.PendingReload).
     public static IReadOnlyList<string> ToReload(RestorePlan plan, IEnumerable<string> pendingReload) =>
