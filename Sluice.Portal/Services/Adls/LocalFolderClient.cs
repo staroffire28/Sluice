@@ -150,7 +150,6 @@ public sealed class LocalFolderClient : IAdlsClient, IParquetStore
         string? settledSnapshot,
         CancellationToken cancellationToken = default)
     {
-        // Misma cadena de búsqueda que AdlsClient: snapshot, sellado, cualquier snapshot, raíz.
         return await CdmSchemaLocator.FindAsync(entity, snapshot, settledSnapshot, async candidate =>
         {
             var path = SourcePath(candidate);
