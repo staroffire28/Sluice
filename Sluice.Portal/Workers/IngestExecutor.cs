@@ -61,15 +61,19 @@ public sealed class IngestExecutor : IIngestExecutor
 
     public async Task ExecuteAsync(PipelineTask task, CancellationToken cancellationToken = default)
     {
-        // El staging se borra también si el ingest falla o se cancela: si no, sus transitorios se
-        // quedaban en el volumen hasta que la retención purgaba el job.
+        // El camino feliz borra el staging al registrar. Si el ingest falla o el usuario cancela el
+        // job, también se borra: si no, sus transitorios se quedaban en el volumen hasta que la
+        // retención purgaba el job. Con el lease perdido o en un apagado (token cancelado, job aún
+        // Running) no: la tarea puede ser ya de otra réplica, que escribe en el mismo staging/{jobId}.
+        // Ese lo limpia la re-ejecución al terminar, o la retención si el job acaba en Error/Cancelled.
         try
         {
             await ExecuteCoreAsync(task, cancellationToken);
         }
-        finally
+        catch when (!cancellationToken.IsCancellationRequested || _jobs.Get(task.JobId)?.Status == JobStatus.Cancelled)
         {
             DeleteStaging(task.JobId);
+            throw;
         }
     }
 
