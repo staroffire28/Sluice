@@ -28,11 +28,23 @@ public static class AuthEndpoints
                 Record(AuditOutcome.Rejected, message);
             }
 
+            void RecordBlockOnce()
+            {
+                if (throttle.TryMarkBlockReported(client))
+                {
+                    Record(AuditOutcome.Rejected, "Inicio de sesión bloqueado: demasiados intentos fallidos recientes desde este cliente.");
+                }
+            }
+
             if (!isJson && !await TryValidateFormAntiforgeryAsync(context, antiforgery))
             {
                 if (!throttle.IsBlocked(client))
                 {
                     RecordFailure("Inicio de sesión rechazado: el formulario no trae un token antiforgery válido.");
+                }
+                else
+                {
+                    RecordBlockOnce();
                 }
 
                 return Results.Redirect("/login?error=csrf");
@@ -42,11 +54,7 @@ public static class AuthEndpoints
             // comprobar la clave (ni siquiera la correcta) hasta que expire la ventana.
             if (throttle.IsBlocked(client))
             {
-                if (throttle.TryMarkBlockReported(client))
-                {
-                    Record(AuditOutcome.Rejected, "Inicio de sesión bloqueado: demasiados intentos fallidos recientes desde este cliente.");
-                }
-
+                RecordBlockOnce();
                 return isJson
                     ? Results.StatusCode(StatusCodes.Status429TooManyRequests)
                     : Results.Redirect("/login?error=throttled");
