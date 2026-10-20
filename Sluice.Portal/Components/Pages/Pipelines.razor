@@ -47,8 +47,13 @@
         <ListContent>
             <FluentDataGrid Class="data-panel" MultiLine="true" Items="@_items.AsQueryable()" TGridItem="Pipeline">
                 <PropertyColumn Property="@(p => p.Name)" Title="@L["Common.Name"]" />
-                <PropertyColumn Property="@(p => p.SourceId)" Title="@L["Page.Pipelines.Source"]" />
-                <PropertyColumn Property="@(p => p.DestinationId)" Title="@L["Page.Pipelines.Destination"]" />
+                @* El nombre de la conexión; el id queda en el tooltip y en el editor. *@
+                <TemplateColumn Title="@L["Page.Pipelines.Source"]">
+                    <span title="@context.SourceId" data-testid="@($"source-{context.Id}")">@ConnectionName(context.SourceId)</span>
+                </TemplateColumn>
+                <TemplateColumn Title="@L["Page.Pipelines.Destination"]">
+                    <span title="@context.DestinationId" data-testid="@($"dest-{context.Id}")">@ConnectionName(context.DestinationId)</span>
+                </TemplateColumn>
                 <TemplateColumn Title="@L["Page.Pipelines.Scheduler"]">
                     <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center" Wrap="true" VerticalGap="4">
                         <FluentBadge data-testid="@($"sched-{context.Id}-{(context.Enabled ? "on" : "off")}")" Appearance="@(context.Enabled ? BadgeAppearance.Filled : BadgeAppearance.Tint)" Color="@(context.Enabled ? BadgeColor.Brand : BadgeColor.Informative)">
@@ -165,6 +170,7 @@
     private string? _resetName;
     private bool _truncateSql;
     private ReconcileReport? _latestReconcile;
+    private Dictionary<string, string> _connectionNames = [];
     private PageRefreshTimer? _queueTimer;
     private bool _watchingQueue;
 
@@ -179,6 +185,7 @@
     private void Load()
     {
         _allItems = PipelineService.List().OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        _connectionNames = Connections.List().ToDictionary(c => c.Id, c => c.Name);
         // Sobre TODOS los pipelines, no solo la página actual: es un resumen global.
         _latestReconcile = _allItems
             .Select(p => Reports.GetLatestReconcile(p.Id))
@@ -188,6 +195,9 @@
         ApplyPaging();
         WatchQueue();
     }
+
+    // Una conexión borrada ya no tiene nombre: se muestra su id.
+    private string ConnectionName(string id) => _connectionNames.GetValueOrDefault(id) ?? id;
 
     private bool HasQueued() => _allItems.Any(p => RunQueue.Get(p.Id) is not null);
 
