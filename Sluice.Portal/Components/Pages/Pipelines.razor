@@ -113,7 +113,9 @@
 
 <InlineDialog @bind-Visible="_showDelete" Title="@L["Page.Pipelines.DeleteTitle"]">
     <ChildContent>
-    <FluentLabel>@L["Page.Pipelines.DeletePrefix"] <strong>@_deleteName</strong>?</FluentLabel>
+    @* fluent-label es flex: texto y <strong> serían ítems separados y el espacio entre ambos se
+       pierde. Un único <span> los mantiene en la misma línea de texto. *@
+    <FluentLabel><span>@L["Page.Pipelines.DeletePrefix"] <strong>@_deleteName</strong>?</span></FluentLabel>
     <FluentCheckbox @bind-Value="_wipeState" Label="@L["Page.Pipelines.WipeState"]" />
     </ChildContent>
     <Actions>
@@ -124,8 +126,8 @@
 
 <InlineDialog @bind-Visible="_showReset" Title="@L["Page.Pipelines.ResetTitle"]">
     <ChildContent>
-    @* El espacio va dentro de la expresión: Blazor elimina el espacio suelto antes de <strong>. *@
-    <FluentLabel>@($"{L["Page.Pipelines.ResetPrefix"]} ")<strong>@_resetName</strong>?</FluentLabel>
+    @* Ver el diálogo de borrado: un único <span> para no perder el espacio dentro de fluent-label. *@
+    <FluentLabel><span>@L["Page.Pipelines.ResetPrefix"] <strong>@_resetName</strong>?</span></FluentLabel>
     <FluentLabel Class="field-hint">@L["Page.Pipelines.ResetWarning"]</FluentLabel>
     <FluentLabel Class="field-hint">@L["Page.Pipelines.ResetKeeps"]</FluentLabel>
     <FluentCheckbox @bind-Value="_truncateSql" Label="@L["Page.Pipelines.ResetTruncateSql"]" />
