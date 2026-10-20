@@ -55,7 +55,10 @@
             <TemplateColumn Title="@L["Page.Jobs.ColumnJob"]">
                 <code class="cell-mono cell-nowrap" title="@context.Id" data-testid="@($"job-id-{context.Id}")">@JobIdLabels.Short(context.Id)</code>
             </TemplateColumn>
-            <PropertyColumn Property="@(j => j.PipelineId)" Title="@L["Common.Pipeline"]" />
+            @* El nombre del pipeline; el id queda en el tooltip y en el detalle del job. *@
+            <TemplateColumn Title="@L["Common.Pipeline"]">
+                <span title="@context.PipelineId" data-testid="@($"job-pipeline-{context.Id}")">@PipelineName(context.PipelineId)</span>
+            </TemplateColumn>
             <TemplateColumn Title="@L["Page.Jobs.ColumnType"]">
                 @JobTypeLabels.Get(L, context.Type)
             </TemplateColumn>
@@ -90,6 +93,7 @@
 
 @code {
     private List<Job> _jobs = [];
+    private Dictionary<string, string> _pipelineNames = [];
     private string _pipelineFilter = "";
     private string _statusFilter = "";
     private DateRange _range = new(null, null);
@@ -119,7 +123,11 @@
             string.IsNullOrWhiteSpace(_pipelineFilter) ? null : _pipelineFilter,
             status,
             _range).ToList();
+        _pipelineNames = PipelineService.List().ToDictionary(p => p.Id, p => p.Name);
     }
+
+    // Un pipeline borrado ya no tiene nombre: se muestra su id.
+    private string PipelineName(string id) => _pipelineNames.GetValueOrDefault(id) ?? id;
 
     // Mismos filtros que la tabla, en la query de /api/jobs/export.
     private string ExportUrl => QueryHelpers.AddQueryString("/api/jobs/export", new Dictionary<string, string?>
