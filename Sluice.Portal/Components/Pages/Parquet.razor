@@ -356,7 +356,7 @@
             _points = ParquetVersions.KeptPoints(versions, Settings.Get().ParquetVersionDays, DateTimeOffset.UtcNow)
                 .Select(p =>
                 {
-                    var plan = ParquetVersions.Plan(versions, state.Tables, p.Snapshot);
+                    var plan = ParquetVersions.PlanFinishingPending(versions, state, p.Snapshot);
                     return new PointRow(p, plan, ParquetVersions.ToReload(plan, state.PendingReload).Count);
                 })
                 .ToList();
