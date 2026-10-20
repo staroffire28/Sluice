@@ -189,6 +189,7 @@ public sealed class IngestExecutor : IIngestExecutor
         var totalCsvRows = 0;
         var snapshotsProcessed = 0;
         SnapshotIntegrity? incomplete = null;
+        string? incompleteSnapshot = null;
         string? lastSnapshot = pipelineState.LastProcessedSnapshot;
 
         // Tablas con sincronización pausada por el usuario (default: ninguna). Se omiten en
@@ -208,6 +209,7 @@ public sealed class IngestExecutor : IIngestExecutor
             if (!integrity.IsComplete)
             {
                 incomplete = integrity;
+                incompleteSnapshot = snapshot;
                 _jobs.AppendEvent(task.JobId, EventLevel.Warning,
                     $"Stopping at snapshot {snapshot}: {integrity.Reason} Will retry on the next run.");
                 break;
@@ -544,6 +546,11 @@ public sealed class IngestExecutor : IIngestExecutor
             LastProcessedSnapshot = processedUpTo,
             GlobalWatermark = manifestEntities.Select(e => e.Watermark).Where(w => w.HasValue).Max(),
             Tables = updatedTables,
+            // El mismo snapshot sigue incompleto: se conserva desde cuándo (y la última alerta). Otro,
+            // o ninguno, rearma el aviso.
+            IncompleteSnapshot = incompleteSnapshot is null ? null
+                : pipelineState.IncompleteSnapshot?.Name == incompleteSnapshot ? pipelineState.IncompleteSnapshot
+                : new IncompleteSnapshot { Name = incompleteSnapshot, FirstSeenAt = DateTimeOffset.UtcNow },
         });
         progress.CompleteStep(JobStepCatalog.Register);
 
