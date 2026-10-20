@@ -22,6 +22,10 @@ public sealed class RetentionService
     // (el artefacto aparece antes que su job): solo se purga pasado este margen.
     public static readonly TimeSpan OrphanGracePeriod = TimeSpan.FromHours(1);
 
+    // El staging de un job terminado en Error o Cancelled ya no lo lee nadie (un reintento es otro
+    // job): se purga pasado este margen aunque el job siga dentro de la retención.
+    public static readonly TimeSpan FailedStagingRetention = TimeSpan.FromHours(24);
+
     private readonly AppOptions _options;
     private readonly IActivityLog _activity;
     private readonly ILogger<RetentionService> _logger;
@@ -89,7 +93,7 @@ public sealed class RetentionService
             ReportFiles = OrphanReportFiles(orphans),
             TaskFiles = OrphanTerminalTaskFiles(orphans),
             RunDirectories = OrphanRunDirectories(orphans),
-            StagingDirectories = OrphanStagingDirectories(orphans),
+            StagingDirectories = OrphanStagingDirectories(orphans, FailedJobIds(jobs, now)),
         };
     }
 
@@ -215,7 +219,14 @@ public sealed class RetentionService
         return result;
     }
 
-    private List<string> OrphanStagingDirectories(OrphanFilter orphans)
+    // Jobs terminados en Error o Cancelled hace más de FailedStagingRetention: su staging sobra.
+    private static HashSet<string> FailedJobIds(List<Job> jobs, DateTimeOffset now) =>
+        jobs.Where(j => j.Status is JobStatus.Error or JobStatus.Cancelled
+                && (j.FinishedAt ?? j.StartedAt) <= now - FailedStagingRetention)
+            .Select(j => j.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private List<string> OrphanStagingDirectories(OrphanFilter orphans, HashSet<string> failedJobIds)
     {
         var result = new List<string>();
         var stagingRoot = Path.Combine(_options.DataDir, "staging");
@@ -226,7 +237,8 @@ public sealed class RetentionService
 
         foreach (var dir in Directory.GetDirectories(stagingRoot))
         {
-            if (orphans.IsPurgeable(Path.GetFileName(dir), Directory.GetLastWriteTimeUtc(dir)))
+            var jobId = Path.GetFileName(dir);
+            if (failedJobIds.Contains(jobId) || orphans.IsPurgeable(jobId, Directory.GetLastWriteTimeUtc(dir)))
             {
                 result.Add(dir);
             }

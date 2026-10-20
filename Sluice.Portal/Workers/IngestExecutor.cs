@@ -61,6 +61,37 @@ public sealed class IngestExecutor : IIngestExecutor
 
     public async Task ExecuteAsync(PipelineTask task, CancellationToken cancellationToken = default)
     {
+        // El staging se borra también si el ingest falla o se cancela: si no, sus transitorios se
+        // quedaban en el volumen hasta que la retención purgaba el job.
+        try
+        {
+            await ExecuteCoreAsync(task, cancellationToken);
+        }
+        finally
+        {
+            DeleteStaging(task.JobId);
+        }
+    }
+
+    // Limpiar el staging local del job (transitorios + consolidados temporales).
+    private void DeleteStaging(string jobId)
+    {
+        try
+        {
+            var stagingRoot = _manifestStore.GetStagingRoot(jobId);
+            if (Directory.Exists(stagingRoot))
+            {
+                Directory.Delete(stagingRoot, recursive: true);
+            }
+        }
+        catch
+        {
+            // El staging es efímero; si no se puede borrar ahora, no es fatal.
+        }
+    }
+
+    private async Task ExecuteCoreAsync(PipelineTask task, CancellationToken cancellationToken)
+    {
         var job = _jobs.Get(task.JobId)
             ?? throw new InvalidOperationException($"Job '{task.JobId}' not found.");
 
@@ -490,19 +521,7 @@ public sealed class IngestExecutor : IIngestExecutor
         progress.CompleteStep(JobStepCatalog.Consolidate);
         progress.StartStep(JobStepCatalog.Register);
 
-        // Limpiar el staging local del job (transitorios + consolidados temporales).
-        try
-        {
-            var stagingRoot = _manifestStore.GetStagingRoot(task.JobId);
-            if (Directory.Exists(stagingRoot))
-            {
-                Directory.Delete(stagingRoot, recursive: true);
-            }
-        }
-        catch
-        {
-            // El staging es efímero; si no se puede borrar ahora, no es fatal.
-        }
+        DeleteStaging(task.JobId);
 
         var updatedTables = new Dictionary<string, TableState>(pipelineState.Tables, StringComparer.OrdinalIgnoreCase);
         foreach (var entry in manifestEntities)
