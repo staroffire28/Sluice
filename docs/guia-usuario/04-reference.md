@@ -73,6 +73,7 @@ A janitor caps the volume's growth. The **job is the unit of retention**: an old
 
 - **Always kept**: the last 50 jobs per pipeline (even if old), running jobs, divergence acceptances, and pipeline state.
 - **Knob**: `RetentionDays` in `/settings` (default 90). `0` or negative disables purging.
+- **Failed or cancelled jobs**: the job's staging is deleted when the ingest fails or is cancelled; any leftover is purged 24 h after the job finished, even within retention and even with purging disabled.
 - **Cadence**: every 6 hours, on the orchestrator only; logged as `retention.sweep`. Corrupt or locked files are skipped without breaking the sweep.
 
 ### Source snapshots (Synapse Link ADLS container)
