@@ -43,7 +43,7 @@ After 10 failed attempts (wrong or empty key, or a form without a valid antiforg
 
 ### `POST /auth/logout`
 
-Revokes **all** sessions (every browser, every script) and clears `sluice_session`. Form POST with antiforgery token. Returns `302` → `/login`. Recorded in the activity log as `auth.logout` only if the request carries a valid session, whether it succeeds or is rejected for a missing token.
+With a valid session, revokes **all** sessions (every browser, every script) and clears `sluice_session`; without one (anonymous, or an expired cookie) it only clears the cookie and revokes nothing, so a caller holding the public `/login` antiforgery token cannot sign everyone out. Form POST with antiforgery token. Returns `302` → `/login`. Recorded in the activity log as `auth.logout` only if the request carries a valid session, whether it succeeds or is rejected for a missing token.
 
 ### `GET /login`
 

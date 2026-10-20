@@ -68,7 +68,7 @@ curl http://localhost:58472/internal/health
 3. Redeploy containers (`docker compose up -d` or your redeploy script).
 4. Distribute the new UI key to operators.
 
-Rotating `UI_API_KEY` does **not** invalidate existing sessions (they are signed with a separate key in `DATA_DIR/auth/session.json`). To sign everyone out after a rotation, log out once from any browser: logout revokes all sessions.
+Rotating `UI_API_KEY` does **not** invalidate existing sessions (they are signed with a separate key in `DATA_DIR/auth/session.json`). To sign everyone out after a rotation, log out once from any signed-in browser: logout revokes all sessions.
 
 ## Verification
 

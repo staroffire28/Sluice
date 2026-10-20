@@ -64,7 +64,7 @@ Set `KNOWN_PROXIES` / `KNOWN_NETWORKS` to restrict which proxies may supply `X-F
 | Choice | Benefit | Cost |
 |--------|---------|------|
 | Shared UI key (not per-user accounts) | Simple deploy, no user DB | No audit per person |
-| HMAC cookie + revocation epoch | No per-session store; logout revokes stolen cookies | Any logout signs out everyone (including running scripts) |
+| HMAC cookie + revocation epoch | No per-session store; logout revokes stolen cookies | Any signed-in logout signs out everyone (including running scripts) |
 | Workers use the shared `DATA_DIR` queue, no HTTP API | No worker secret to rotate or leak | Workers must mount the same volume as the portal |
 | JSON login without CSRF | Easy automation | Brute force limited to 10 failures per client IP per 15 min; behind a proxy not listed in `KNOWN_PROXIES` / `KNOWN_NETWORKS`, all users share one IP and one throttle |
 | `/internal/health` exempt | Docker healthcheck without secret | Endpoint reveals process is up (no sensitive data) |
