@@ -57,14 +57,17 @@ public sealed class SettingsStore
 {
     private readonly string _path;
     private readonly object _lock = new();
+    private readonly ILogger<SettingsStore>? _logger;
     private AppSettings? _cache;
     private DateTime _cachedWriteTimeUtc;
+    private DateTime? _unreadableLoggedFor;
 
-    public SettingsStore(IOptions<AppOptions> options)
+    public SettingsStore(IOptions<AppOptions> options, ILogger<SettingsStore>? logger = null)
     {
         var dataDir = options.Value.DataDir;
         Directory.CreateDirectory(dataDir);
         _path = Path.Combine(dataDir, "settings.json");
+        _logger = logger;
     }
 
     // Caché invalidada por fecha de modificación: evita reabrir/deserializar el archivo
@@ -103,8 +106,16 @@ public sealed class SettingsStore
                 settings = loaded;
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
+                // Hot path (TaskStore, scheduler): un aviso por versión del fichero, no por llamada.
+                if (_unreadableLoggedFor != writeTime)
+                {
+                    _unreadableLoggedFor = writeTime;
+                    _logger?.LogError(ex,
+                        "settings.json no se puede leer: se usan los valores por defecto hasta que se corrija o se guarde desde Ajustes. Mientras tanto el webhook de Ajustes no recibe alertas y no se podan las versiones del parquet.");
+                }
+
                 settings = new AppSettings();
                 return false;
             }
