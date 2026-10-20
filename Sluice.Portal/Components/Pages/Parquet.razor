@@ -32,12 +32,12 @@
             </FluentSelect>
             <FluentTextInput @bind-Value="_search" @bind-Value:after="OnSearchChanged" data-testid="parquet-search"
                              Label="@L["Common.Search"]" Placeholder="@L["Page.Tables.FilterPlaceholder"]" Style="min-width:220px;" />
-            <FluentButton Appearance="ButtonAppearance.Subtle"
+            <FluentButton Appearance="ButtonAppearance.Outline"
                           IconStart="@(new Icons.Regular.Size20.ArrowSync())"
                           OnClick="Reload">
                 @L["Common.Refresh"]
             </FluentButton>
-            <FluentButton Appearance="ButtonAppearance.Subtle"
+            <FluentButton Appearance="ButtonAppearance.Outline"
                           IconStart="@(new Icons.Regular.Size20.History())"
                           Disabled="@string.IsNullOrWhiteSpace(_pipelineId)"
                           data-testid="parquet-restore-points"

@@ -23,7 +23,7 @@
     <PageSection>
     <ListWithEmptyCta HasItems="@(_allItems.Count > 0)" EmptyText="@L["Page.Destinations.EmptyText"]">
         <EmptyAction>
-            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OpenCreate">@L["Page.Destinations.AddDestination"]</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="OpenCreate">@L["Page.Destinations.AddDestination"]</FluentButton>
         </EmptyAction>
         <ListContent>
             <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true" Items="@_items.AsQueryable()" TGridItem="Connection">

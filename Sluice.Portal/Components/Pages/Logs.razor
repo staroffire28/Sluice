@@ -28,7 +28,7 @@
         </FluentSelect>
         <FluentTextInput @bind-Value="_search" @bind-Value:after="Load" data-testid="logs-search" Label="@L["Page.Logs.Search"]" Placeholder="@L["Page.Logs.SearchPlaceholder"]" Style="min-width:240px;" />
         <DateRangeFilter @bind-Value="_range" @bind-Value:after="Load" />
-        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="Load">@L["Common.Refresh"]</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowSync())" OnClick="Load">@L["Common.Refresh"]</FluentButton>
         @* Descarga por HTTP (no por el circuito): todos los registros que cumplen los filtros. ForceLoad:
            sin él el router de Blazor busca /api/... como página y muestra "Not found". *@
         <FluentAnchorButton Href="@ExportUrl" ForceLoad="true" Appearance="ButtonAppearance.Outline" data-testid="logs-export"
