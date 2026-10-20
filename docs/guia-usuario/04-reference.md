@@ -62,7 +62,7 @@ The full authentication documentation (tutorial, how-to, reference and explanati
   - `reconcile.divergence` / `reconcile.values` — Partial reconcile or value differences: `{ "eventType", "pipelineId", "pipelineName", "jobId", "status": "warning", "message", "text", "maxDivergencePct" (divergence only), "entities": [tables], "autoRemediation": "off" | "scheduled" | "unresolved" | "none", "timestamp" }`
   - `system.alert` — scheduler/retention/changelog/source type change/SQL block/pipeline behind/stalled queue (distributed mode: tasks of a stage pending for more than 15 min with no live worker of that stage): `{ "eventType": "system.alert", "text", "message", "timestamp" }`
 - **Possible SQL block**: if a SQL statement makes no progress for 1 hour, the job timeline gets a Warning with the entity and phase, and a `system.alert` is sent. The statement is **not** cancelled and the job status does not change; check for blocking sessions in the destination database. The 1-hour threshold is fixed in the code.
-- **Dead-man ping**: if `DEADMAN_PING_URL` is set, the scheduler GETs it (10 s timeout) at the end of every cycle that finishes without errors; an HTTP error status counts as a failure. Settings → Alerts shows the result of the last ping.
+- **Dead-man ping**: if `DEADMAN_PING_URL` is set, the scheduler GETs it (10 s timeout) at the end of every cycle whose watchdogs succeed and in which not every evaluated enabled pipeline failed; an HTTP error status counts as a failure. Settings → Alerts shows the result of the last ping.
 
 ## Retention
 

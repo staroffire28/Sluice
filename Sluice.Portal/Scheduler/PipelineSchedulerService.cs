@@ -172,6 +172,8 @@ public sealed class PipelineSchedulerService : BackgroundService
 
         await StartQueuedRunsAsync(ct);
 
+        var evaluated = 0;
+        var failed = 0;
         foreach (var pipeline in _pipelines.List().Where(p => p.Enabled))
         {
             if (_jobs.ListRunning().Any(j => j.PipelineId == pipeline.Id))
@@ -179,6 +181,7 @@ public sealed class PipelineSchedulerService : BackgroundService
                 continue;
             }
 
+            evaluated++;
             try
             {
                 var catalog = await _snapshots.GetCatalogAsync(pipeline.Id, ct);
@@ -218,16 +221,17 @@ public sealed class PipelineSchedulerService : BackgroundService
             }
             catch (Exception ex)
             {
+                failed++;
                 _logger.LogWarning(ex, "Scheduler failed for pipeline {PipelineId}", pipeline.Id);
                 _activity.LogSystem("scheduler.error", $"El scheduler falló en el pipeline {pipeline.Id}: {ex.Message}", pipeline.Id, level: "error");
                 await _alerts.SendAsync($"Scheduler failed for {pipeline.Id}: {ex.Message}", ct);
             }
         }
 
-        // Al final, y solo si el ciclo terminó sin excepción ni fallos de sus vigilantes (el fallo de un
-        // pipeline concreto ya alerta por su cuenta): un scheduler que falla en cada poll deja de hacer
-        // ping y el monitor externo lo da por caído.
-        if (!degraded)
+        // Al final, y solo si el ciclo terminó sin excepción ni fallos de sus vigilantes, y no fallaron
+        // todos los pipelines evaluados (el fallo de alguno suelto ya alerta por su cuenta): un scheduler
+        // que falla en cada poll deja de hacer ping y el monitor externo lo da por caído.
+        if (!degraded && (evaluated == 0 || failed < evaluated))
         {
             await _deadman.PingAsync(ct);
         }
