@@ -492,6 +492,11 @@
   <data name="Page.Settings.Alerts.LastDelivery.Failed" xml:space="preserve"><value>{0}: the {1} alert could not be delivered ({2}). Alerts are not arriving while the webhook fails.</value></data>
   <data name="Page.Settings.Alerts.LastDelivery.LastSuccess" xml:space="preserve"><value>Last successful delivery: {0}.</value></data>
   <data name="Page.Settings.Alerts.LastDelivery.NeverSucceeded" xml:space="preserve"><value>No delivery has succeeded yet.</value></data>
+  <data name="Page.Settings.Deadman" xml:space="preserve"><value>External monitor (dead-man)</value></data>
+  <data name="Page.Settings.Deadman.NotConfigured" xml:space="preserve"><value>Not configured: set DEADMAN_PING_URL so an external monitor can tell when the scheduler stops working.</value></data>
+  <data name="Page.Settings.Deadman.Waiting" xml:space="preserve"><value>Configured; no ping yet since the portal started.</value></data>
+  <data name="Page.Settings.Deadman.Ok" xml:space="preserve"><value>{0}: last ping succeeded ({1}).</value></data>
+  <data name="Page.Settings.Deadman.Failed" xml:space="preserve"><value>{0}: the last ping failed ({1}). The external monitor will report Sluice as down.</value></data>
   <data name="Page.Sources.ParquetContainer" xml:space="preserve"><value>Parquet container (destination)</value></data>
   <data name="Nav.Reconcile" xml:space="preserve"><value>Reconciliation</value></data>
   <data name="Page.Reconcile.Title" xml:space="preserve"><value>Reconciliation</value></data>

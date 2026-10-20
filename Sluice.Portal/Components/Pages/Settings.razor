@@ -7,6 +7,7 @@
 @inject SettingsStore SettingsStore
 @inject AlertService AlertService
 @inject AlertDeliveryStatusStore DeliveryStatusStore
+@inject DeadmanService Deadman
 @inject IStringLocalizer<SharedResource> L
 
 <PageTitle>@L["Nav.Settings"]</PageTitle>
@@ -81,6 +82,27 @@
                             ? L["Page.Settings.Alerts.LastDelivery.LastSuccess", FormatTime(ok)]
                             : L["Page.Settings.Alerts.LastDelivery.NeverSucceeded"])
                     </FluentMessageBar>
+                }
+            </div>
+
+            @* Ping al monitor externo al final de cada poll sano del scheduler (DEADMAN_PING_URL). *@
+            <div data-testid="settings-deadman">
+                <p class="field-hint"><strong>@L["Page.Settings.Deadman"]</strong></p>
+                @if (!Deadman.IsConfigured)
+                {
+                    <p class="field-hint">@L["Page.Settings.Deadman.NotConfigured"]</p>
+                }
+                else if (Deadman.LastPing is not { } ping)
+                {
+                    <p class="field-hint">@L["Page.Settings.Deadman.Waiting"]</p>
+                }
+                else if (ping.Success)
+                {
+                    <p class="field-hint">@L["Page.Settings.Deadman.Ok", FormatTime(ping.At), ping.Detail]</p>
+                }
+                else
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning">@L["Page.Settings.Deadman.Failed", FormatTime(ping.At), ping.Detail]</FluentMessageBar>
                 }
             </div>
         </div>
