@@ -50,10 +50,10 @@
                     <PanelState IsEmpty="@(_allRows.Count == 0)" EmptyText="@L["Page.Reconcile.NoDivergence"]">
                         @* MultiLine: sin él la fila tiene alto fijo y un texto largo (la dirección)
                            invade la fila siguiente. Las acciones van en un menú de tres puntos. *@
-                        <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true"
-                                        GridTemplateColumns="minmax(160px, 1.6fr) 1fr 1fr 0.9fr 1.2fr 0.9fr 0.6fr"
+                        <FluentDataGrid Class="data-panel" MultiLine="true"
+                                        GridTemplateColumns="minmax(max-content, 1.6fr) 1fr 1fr 0.9fr 1.2fr 0.9fr 0.6fr"
                                         Items="@_rows.AsQueryable()" TGridItem="ReconRow">
-                            <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" />
+                            <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" Class="cell-nowrap" />
                             <PropertyColumn Property="@(r => r.SourceRows)" Title="@L["Page.Reconcile.Source"]" />
                             <PropertyColumn Property="@(r => r.DestinationRows)" Title="@L["Page.Reconcile.Destination"]" />
                             <TemplateColumn Title="@L["Page.Reconcile.Divergence"]">
@@ -118,8 +118,8 @@
 
                     @if (_valueRows.Count > 0)
                     {
-                        <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true"
-                                        GridTemplateColumns="minmax(160px, 1.6fr) 1fr 1fr 0.9fr 0.9fr 0.9fr minmax(280px, 2fr)"
+                        <FluentDataGrid Class="data-panel" MultiLine="true"
+                                        GridTemplateColumns="minmax(max-content, 1.6fr) 1fr 1fr 0.9fr 0.9fr 0.9fr minmax(280px, 2fr)"
                                         Items="@_valueRows.AsQueryable()" TGridItem="ValueCompareEntityResult" data-testid="values-grid">
                             <TemplateColumn Title="@L["Common.Entity"]">
                                 <span data-testid="@($"values-row-{context.Entity}")">@context.Entity</span>
@@ -168,8 +168,8 @@
     @if (_history.Count > 0)
     {
         <PageSection Title="@L["Page.Reconcile.History"]">
-            <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Medium" Items="@_history.AsQueryable()" TGridItem="ReconcileRemediation" data-testid="recon-history">
-                <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" />
+            <FluentDataGrid Class="data-panel" MultiLine="true" Items="@_history.AsQueryable()" TGridItem="ReconcileRemediation" data-testid="recon-history">
+                <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" Class="cell-nowrap" />
                 <PropertyColumn Property="@(r => r.Mode)" Title="@L["Page.Reconcile.Mode"]" />
                 <TemplateColumn Title="@L["Page.Reconcile.Origin"]">
                     @if (context.TriggeredBy == AutoRemediation.TriggeredByAuto)

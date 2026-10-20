@@ -37,13 +37,13 @@
     <PageSection>
     <PanelState IsEmpty="@(string.IsNullOrWhiteSpace(_pipelineId))" EmptyText="@L["Page.Tables.SelectPipeline"]">
         <PanelState IsEmpty="@(_allRows.Count == 0)" EmptyText="@L["Page.Tables.NoTables"]">
-            <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true"
-                            GridTemplateColumns="minmax(160px, 1.6fr) 0.8fr 1.4fr 1.2fr 0.9fr 0.8fr 1fr minmax(170px, 1fr)"
+            <FluentDataGrid Class="data-panel" MultiLine="true"
+                            GridTemplateColumns="minmax(max-content, 1.6fr) 0.8fr 1.4fr 1.2fr 0.9fr 0.8fr 1fr minmax(170px, 1fr)"
                             Items="@_rows.AsQueryable()" TGridItem="TableRow">
-                <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" />
-                <PropertyColumn Property="@(r => r.RowCount)" Title="@L["Common.Rows"]" />
-                <PropertyColumn Property="@(r => r.Watermark)" Title="@L["Page.Tables.Watermark"]" />
-                <TemplateColumn Title="@L["Page.Tables.LastData"]">
+                <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" Class="cell-nowrap" />
+                <PropertyColumn Property="@(r => r.RowCount)" Title="@L["Common.Rows"]" Class="cell-nowrap" />
+                <PropertyColumn Property="@(r => r.Watermark)" Title="@L["Page.Tables.Watermark"]" Class="cell-nowrap" />
+                <TemplateColumn Title="@L["Page.Tables.LastData"]" Class="cell-nowrap">
                     @if (context.LastLoad is { } lastLoad)
                     {
                         var days = (int)(DateTimeOffset.UtcNow - lastLoad).TotalDays;

@@ -50,10 +50,10 @@
     </div>
 
     <PanelState IsEmpty="@(_jobs.Count == 0)" EmptyText="@L["Page.Jobs.Empty"]">
-        <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true" Items="@_jobs.AsQueryable()" TGridItem="Job">
+        <FluentDataGrid Class="data-panel" MultiLine="true" Items="@_jobs.AsQueryable()" TGridItem="Job">
             @* Solo el hash del id (una línea); el id completo en el tooltip, el detalle y el CSV. *@
             <TemplateColumn Title="@L["Page.Jobs.ColumnJob"]">
-                <code class="cell-mono" style="white-space:nowrap;" title="@context.Id" data-testid="@($"job-id-{context.Id}")">@JobIdLabels.Short(context.Id)</code>
+                <code class="cell-mono cell-nowrap" title="@context.Id" data-testid="@($"job-id-{context.Id}")">@JobIdLabels.Short(context.Id)</code>
             </TemplateColumn>
             <PropertyColumn Property="@(j => j.PipelineId)" Title="@L["Common.Pipeline"]" />
             <TemplateColumn Title="@L["Page.Jobs.ColumnType"]">
@@ -62,7 +62,7 @@
             <TemplateColumn Title="@L["Common.Status"]">
                 <StatusBadge Status="@context.Status.ToString().ToLowerInvariant()" />
             </TemplateColumn>
-            <PropertyColumn Property="@(j => j.StartedAt)" Title="@L["Page.Jobs.ColumnStarted"]" Format="g" />
+            <PropertyColumn Property="@(j => j.StartedAt)" Title="@L["Page.Jobs.ColumnStarted"]" Format="g" Class="cell-nowrap" />
             <TemplateColumn Title="@L["Common.Actions"]">
                 <FluentMenu>
                     <FluentMenuButton Appearance="ButtonAppearance.Outline" data-testid="@($"job-actions-{context.Id}")" Label="@L["Common.Actions"]" />

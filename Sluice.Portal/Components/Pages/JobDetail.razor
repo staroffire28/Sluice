@@ -148,7 +148,7 @@
                                              data-testid="entity-search" Style="min-width:240px;" />
                             <span class="jd-muted">@L["Page.JobDetail.EntityCount", rows.Count, _comparison.Count]</span>
                         </div>
-                        <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" Items="@comparePaged.AsQueryable()" TGridItem="CompareRow" Style="width:100%;" data-testid="entity-compare">
+                        <FluentDataGrid Class="data-panel" MultiLine="true" Items="@comparePaged.AsQueryable()" TGridItem="CompareRow" Style="width:100%;" data-testid="entity-compare">
                             <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" />
                             <TemplateColumn Title="@L[isDiff ? "Page.JobDetail.Compare.Source" : "Page.JobDetail.Compare.Parquet"]" Align="DataGridCellAlignment.End">
                                 <span class="jd-num">@context.Source.ToString("N0")</span>
@@ -183,7 +183,7 @@
                                              data-testid="entity-search" Style="min-width:240px;" />
                             <span class="jd-muted">@L["Page.JobDetail.EntityCount", filtered.Count, job.Entities.Count]</span>
                         </div>
-                        <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" Items="@paged.AsQueryable()" TGridItem="JobEntityResult" Style="width:100%;" data-testid="entity-grid">
+                        <FluentDataGrid Class="data-panel" MultiLine="true" Items="@paged.AsQueryable()" TGridItem="JobEntityResult" Style="width:100%;" data-testid="entity-grid">
                             <PropertyColumn Property="@(e => e.Entity)" Title="@L["Common.Entity"]" />
                             <TemplateColumn Title="@L["Page.JobDetail.ReadRows"]" Align="DataGridCellAlignment.End">
                                 <span class="jd-num">@context.CsvRows.ToString("N0")</span>

@@ -41,9 +41,9 @@
         <PanelState IsEmpty="@(string.IsNullOrWhiteSpace(_pipelineId))" EmptyText="@L["Page.Parquet.SelectPipeline"]">
             <PanelState IsLoading="@_loading" IsEmpty="@(_tables.Count == 0)" EmptyText="@L["Page.Catalog.Empty"]">
                 <p data-testid="catalog-summary">@L["Page.Catalog.Summary", _tables.Count(t => t.Included), _tables.Count]</p>
-                <FluentDataGrid Class="data-panel" Items="@_rows.AsQueryable()" TGridItem="CatalogTable">
-                    <TemplateColumn Title="@L["Page.Catalog.Table"]">@context.Name</TemplateColumn>
-                    <TemplateColumn Title="@L["Page.Catalog.State"]">
+                <FluentDataGrid Class="data-panel" MultiLine="true" Items="@_rows.AsQueryable()" TGridItem="CatalogTable">
+                    <TemplateColumn Title="@L["Page.Catalog.Table"]" Class="cell-nowrap">@context.Name</TemplateColumn>
+                    <TemplateColumn Title="@L["Page.Catalog.State"]" Class="cell-nowrap">
                         <span data-testid="@($"catalog-state-{context.Name}")">
                             @(context.Loaded ? L["Page.Catalog.Loaded", context.RowCount.ToString("N0")] : L["Page.Catalog.NotLoaded"])
                         </span>

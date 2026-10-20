@@ -28,10 +28,10 @@
             <FluentButton Appearance="ButtonAppearance.Outline" OnClick="OpenCreate">@L["Page.Sources.AddSource"]</FluentButton>
         </EmptyAction>
         <ListContent>
-            <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true" Items="@_items.AsQueryable()" TGridItem="Connection">
+            <FluentDataGrid Class="data-panel" MultiLine="true" Items="@_items.AsQueryable()" TGridItem="Connection">
                 <PropertyColumn Property="@(c => c.Name)" Title="@L["Common.Name"]" />
                 <PropertyColumn Property="@(c => c.Type)" Title="@L["Common.Type"]" />
-                <PropertyColumn Property="@(c => c.CreatedAt)" Title="@L["Page.Sources.Created"]" Format="g" />
+                <PropertyColumn Property="@(c => c.CreatedAt)" Title="@L["Page.Sources.Created"]" Format="g" Class="cell-nowrap" />
                 <TemplateColumn Title="@L["Common.Actions"]">
                     @if (_testingId == context.Id)
                     {
