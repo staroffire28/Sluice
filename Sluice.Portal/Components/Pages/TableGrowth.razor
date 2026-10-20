@@ -79,7 +79,7 @@
             </div>
 
             <FluentCard>
-                <FluentLabel Typo="Typography.H5">@L["Page.TableGrowth.SpikeDays"]</FluentLabel>
+                <h2 class="section-panel__title">@L["Page.TableGrowth.SpikeDays"]</h2>
                 <PanelState IsEmpty="@(_report.TopSpikeDays.Count == 0)" EmptyText="@L["Page.TableGrowth.Empty.Spikes"]">
                     <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Medium" Items="@_report.TopSpikeDays.AsQueryable()" TGridItem="TableSpikeDay">
                         <PropertyColumn Property="@(s => s.Date)" Title="@L["Page.TableGrowth.Date"]" Format="dd/MM/yyyy" />
