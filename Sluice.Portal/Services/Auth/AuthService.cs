@@ -71,10 +71,16 @@ public sealed class AuthService : IAuthService
     }
 
     // Cerrar sesión invalida TODAS las sesiones abiertas (incluida una cookie robada), no solo la
-    // de este navegador: el token lleva un epoch que se incrementa aquí.
+    // de este navegador: el token lleva un epoch que se incrementa aquí. Solo si quien cierra tiene
+    // una sesión válida: /auth/logout es público y /login reparte un token antiforgery a cualquiera,
+    // que si no podría echar a todos. Sin sesión solo se borra la cookie (caducada o ajena).
     public void SignOut(HttpContext httpContext)
     {
-        _sessionTokens.RevokeAll();
+        if (HasValidUiSession(httpContext))
+        {
+            _sessionTokens.RevokeAll();
+        }
+
         httpContext.Response.Cookies.Delete(AuthConstants.SessionCookieName, BuildCookieOptions(httpContext));
     }
 
