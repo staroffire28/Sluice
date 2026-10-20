@@ -397,7 +397,7 @@ public sealed class SqlExecutor : ISqlExecutor
         if (jobStatusAfterSql is JobStatus.Partial or JobStatus.Error)
         {
             await SendEntityFailureAlertAsync(
-                pipeline, job, task.JobId, entityResults, totalMerged, cancellationToken);
+                pipeline, job, task.JobId, entityResults, totalMerged, jobStatusAfterSql.Value, cancellationToken);
         }
     }
 
@@ -470,6 +470,7 @@ public sealed class SqlExecutor : ISqlExecutor
         string jobId,
         IReadOnlyList<JobEntityResult> entityResults,
         int totalMerged,
+        JobStatus jobStatus,
         CancellationToken cancellationToken)
     {
         var failed = entityResults
@@ -481,8 +482,8 @@ public sealed class SqlExecutor : ISqlExecutor
         }
 
         var detail = string.Join("; ", failed.Select(e => $"{e.Entity}: {e.Message}"));
-        var summary = failed.Count == entityResults.Count
-            ? $"SQL MERGE: todas las entidades fallaron ({totalMerged} fila(s) mergeadas)."
+        var summary = jobStatus == JobStatus.Error
+            ? $"SQL MERGE: ninguna entidad se cargó ({failed.Count}/{entityResults.Count} con error, {totalMerged} fila(s) mergeadas)."
             : $"SQL MERGE: fallos parciales ({failed.Count}/{entityResults.Count} entidades, {totalMerged} fila(s) mergeadas).";
 
         await _alerts.SendPipelineFailureAsync(new PipelineFailureAlert
@@ -493,6 +494,8 @@ public sealed class SqlExecutor : ISqlExecutor
             JobType = job.Type.ToString(),
             Stage = "sql",
             Message = $"{summary} {detail}",
+            // Fallos parciales: el job queda en Partial, es un aviso y no un fallo.
+            Status = jobStatus == JobStatus.Partial ? PipelineFailureAlert.Warning : PipelineFailureAlert.Error,
         }, cancellationToken);
     }
 

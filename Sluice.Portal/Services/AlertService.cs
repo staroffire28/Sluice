@@ -77,7 +77,7 @@ public sealed class AlertService
             jobId = alert.JobId,
             jobType = alert.JobType,
             stage = alert.Stage,
-            status = "error",
+            status = alert.Status,
             message = alert.Message,
         }, cancellationToken);
     }
@@ -144,7 +144,20 @@ public sealed class AlertService
 
     private string? ResolveWebhookUrl()
     {
-        var settings = _settings.Get();
+        // Con settings.json ilegible no se sabe si el webhook de Ajustes está activo: queda solo el de
+        // ALERT_WEBHOOK_URL, y se dice, porque sin él la alerta solo llega a este log.
+        if (!_settings.TryGet(out var settings))
+        {
+            if (string.IsNullOrWhiteSpace(_options.AlertWebhookUrl))
+            {
+                _logger.LogError("settings.json no se puede leer y no hay ALERT_WEBHOOK_URL: la alerta solo queda en este log.");
+            }
+            else
+            {
+                _logger.LogWarning("settings.json no se puede leer: la alerta va a ALERT_WEBHOOK_URL, no al webhook de Ajustes.");
+            }
+        }
+
         if (settings.AlertEnabled && !string.IsNullOrWhiteSpace(settings.AlertWebhookUrl))
         {
             return settings.AlertWebhookUrl.Trim();

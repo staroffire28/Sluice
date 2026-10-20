@@ -548,14 +548,25 @@ public sealed class IngestExecutor : IIngestExecutor
         progress.CompleteStep(JobStepCatalog.Register);
 
         // La poda va por puntos de restauración (todas las tablas a la vez), así que una vez por job.
-        // Si falla, la ingesta ya está hecha: solo se avisa y se reintenta en la siguiente.
-        try
+        // Si falla, la ingesta ya está hecha: solo se avisa y se reintenta en la siguiente. Con
+        // settings.json ilegible no se poda: los días por defecto podrían borrar, sin vuelta atrás,
+        // versiones que el ajuste guardado conserva.
+        AppSettings? settings = null;
+        if (_settings is not null && !_settings.TryGet(out settings))
         {
-            await ParquetVersions.PruneAsync(parquetStore, task.PipelineId, _settings?.Get().ParquetVersionDays ?? 0, DateTimeOffset.UtcNow, cancellationToken);
+            _jobs.AppendEvent(task.JobId, EventLevel.Warning,
+                "settings.json no se puede leer: no se podan las versiones del parquet hasta que se corrija.");
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        else
         {
-            _jobs.AppendEvent(task.JobId, EventLevel.Warning, $"No se pudieron podar las versiones del parquet: {ex.Message}");
+            try
+            {
+                await ParquetVersions.PruneAsync(parquetStore, task.PipelineId, settings?.ParquetVersionDays ?? 0, DateTimeOffset.UtcNow, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _jobs.AppendEvent(task.JobId, EventLevel.Warning, $"No se pudieron podar las versiones del parquet: {ex.Message}");
+            }
         }
 
         // Entidades que fallaron en TODOS sus intentos (nunca llegaron a consolidarse): se
@@ -705,6 +716,7 @@ public sealed class IngestExecutor : IIngestExecutor
                 JobType = job.Type.ToString(),
                 Stage = "ingest",
                 Message = completionNote,
+                Status = jobStatusAfterIngest == JobStatus.Partial ? PipelineFailureAlert.Warning : PipelineFailureAlert.Error,
             }, cancellationToken);
         }
     }

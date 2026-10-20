@@ -8,6 +8,13 @@ public sealed record PipelineFailureAlert
     public required string JobType { get; init; }
     public required string Stage { get; init; }
     public required string Message { get; init; }
+
+    // "error" (el job falló) o "warning" (Partial: parte de las tablas sí cargó), para que el
+    // receptor distinga un aviso de un fallo.
+    public string Status { get; init; } = Error;
+
+    public const string Error = "error";
+    public const string Warning = "warning";
 }
 
 // Alerta de conciliación: divergencia de conteos (reconcile.divergence) o de valores
