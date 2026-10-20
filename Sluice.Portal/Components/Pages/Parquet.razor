@@ -341,7 +341,7 @@
 
         try
         {
-            await ParquetService.DeleteAsync(_pipelineId, path);
+            await ParquetService.DeleteAsync(Audit.Current, _pipelineId, path);
             await Reload();
         }
         catch (Exception ex)

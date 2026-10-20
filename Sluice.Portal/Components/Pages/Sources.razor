@@ -7,7 +7,7 @@
 @inject IConnectionService Connections
 @inject INotificationService NotificationService
 @inject IDialogService DialogService
-@inject IActivityLog ActivityLog
+@inject Sluice.Portal.Services.Logging.CircuitAuditActor Audit
 @inject Microsoft.Extensions.Options.IOptions<Sluice.Portal.Configuration.AppOptions> Options
 @using Sluice.Portal.Services.Adls
 
@@ -256,8 +256,7 @@
                 Type = _type,
                 Config = FormConfig(),
             };
-            _draftTest = await Connections.TestSourceDraftAsync(draft, _editingId);
-            ActivityLog.LogUser("source.test", $"Test de origen '{_name}' (sin guardar): {_draftTest.Message}", level: _draftTest.Ok ? "info" : "warning");
+            _draftTest = await Connections.TestSourceDraftAsync(Audit.Current, draft, _editingId);
         }
         finally
         {
@@ -281,7 +280,7 @@
                     return;
                 }
 
-                Connections.Create(new Connection
+                Connections.Create(Audit.Current, new Connection
                 {
                     Id = $"conn-src-{slug}",
                     Name = _name,
@@ -293,7 +292,7 @@
             else
             {
                 var existing = Connections.Get(_editingId)!;
-                (_, copied) = await Connections.UpdateAsync(_editingId, existing with
+                (_, copied) = await Connections.UpdateAsync(Audit.Current, _editingId, existing with
                 {
                     Name = _name,
                     Type = _type,
@@ -315,7 +314,6 @@
         {
             _ = NotificationService.ShowInfoToastAsync(L["Page.Sources.ParquetCopied", copied].Value);
         }
-        ActivityLog.LogUser("source.save", $"Conexión de origen '{_name}' {(_editingId is null ? "creada" : "actualizada")}.");
         Load();
     }
 
@@ -327,7 +325,7 @@
         await InvokeAsync(StateHasChanged);
         try
         {
-            var (ok, msg, code) = await Connections.TestAsync(id);
+            var (ok, msg, code) = await Connections.TestAsync(Audit.Current, id);
             if (ok)
             {
                 await NotificationService.ShowSuccessToastAsync(msg);
@@ -336,7 +334,6 @@
             {
                 await NotificationService.ShowErrorToastAsync(KnownErrors.Describe(L, code, msg));
             }
-            ActivityLog.LogUser("source.test", $"Test de origen {id}: {msg}", level: ok ? "info" : "warning");
         }
         finally
         {
@@ -357,14 +354,13 @@
             return;
         }
 
-        if (!Connections.Delete(connection.Id, out var error))
+        if (Connections.Delete(Audit.Current, connection.Id) is { } error)
         {
-            await NotificationService.ShowErrorToastAsync(error ?? L["Common.DeleteFailed"].Value);
+            await NotificationService.ShowErrorToastAsync(error);
             return;
         }
 
         await NotificationService.ShowInfoToastAsync(string.Format(L["Common.Deleted"].Value, connection.Name));
-        ActivityLog.LogUser("source.delete", $"Conexión de origen '{connection.Name}' eliminada.");
         Load();
     }
 

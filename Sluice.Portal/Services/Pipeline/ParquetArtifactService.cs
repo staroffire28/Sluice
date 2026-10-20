@@ -1,4 +1,6 @@
+using Sluice.Portal.Models;
 using Sluice.Portal.Services.Adls;
+using Sluice.Portal.Services.Logging;
 
 namespace Sluice.Portal.Services.Pipeline;
 
@@ -9,7 +11,12 @@ public interface IParquetArtifactService
 {
     Task<IReadOnlyList<ParquetArtifact>> ListAsync(string pipelineId, CancellationToken cancellationToken = default);
     Task<Stream?> OpenAsync(string pipelineId, string blobPath, CancellationToken cancellationToken = default);
-    Task<bool> DeleteAsync(string pipelineId, string blobPath, CancellationToken cancellationToken = default);
+    // Borrado pedido por alguien (UI o API): queda en el registro de actividad.
+    Task<bool> DeleteAsync(AuditActor actor, string pipelineId, string blobPath, CancellationToken cancellationToken = default);
+
+    // Sin entrada propia: solo para operaciones que se auditan enteras (el reset borra decenas de
+    // ficheros y deja una sola entrada con el recuento).
+    Task<bool> DeleteUnauditedAsync(string pipelineId, string blobPath, CancellationToken cancellationToken = default);
 
     // Versiones del consolidado (ParquetVersions), por tabla. Por defecto sin versiones, para los
     // dobles de test.
@@ -37,9 +44,11 @@ public sealed class ParquetArtifactService : IParquetArtifactService
 {
     private readonly IPipelineService _pipelines;
     private readonly IAdlsClientFactory _adlsFactory;
+    private readonly IAuditLog _audit;
 
-    public ParquetArtifactService(IPipelineService pipelines, IAdlsClientFactory adlsFactory)
+    public ParquetArtifactService(IPipelineService pipelines, IAdlsClientFactory adlsFactory, IAuditLog audit)
     {
+        _audit = audit;
         _pipelines = pipelines;
         _adlsFactory = adlsFactory;
     }
@@ -63,7 +72,19 @@ public sealed class ParquetArtifactService : IParquetArtifactService
             : null;
     }
 
-    public async Task<bool> DeleteAsync(string pipelineId, string blobPath, CancellationToken cancellationToken = default)
+    public Task<bool> DeleteAsync(AuditActor actor, string pipelineId, string blobPath, CancellationToken cancellationToken = default) =>
+        _audit.AuditAsync(
+            actor,
+            "parquet.delete",
+            pipelineId,
+            () => DeleteUnauditedAsync(pipelineId, blobPath, cancellationToken),
+            deleted => deleted
+                ? new AuditResult($"Parquet {blobPath} borrado del pipeline {pipelineId}.")
+                : new AuditResult($"La ruta {blobPath} no pertenece al pipeline {pipelineId}: no se borró.", Outcome: AuditOutcome.Rejected),
+            $"No se pudo borrar el parquet {blobPath}",
+            target: blobPath);
+
+    public async Task<bool> DeleteUnauditedAsync(string pipelineId, string blobPath, CancellationToken cancellationToken = default)
     {
         if (!IsWithinPipeline(pipelineId, blobPath))
         {

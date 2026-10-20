@@ -14,7 +14,6 @@
 @inject IStorageOverviewService StorageOverview
 @inject INotificationService NotificationService
 @inject IDialogService DialogService
-@inject IActivityLog ActivityLog
 @inject IJSRuntime Js
 @inject ILogger<Dashboard> Logger
 @inject Sluice.Portal.Services.Pipeline.JobProgressStore ProgressStore
@@ -523,8 +522,8 @@
         await InvokeAsync(StateHasChanged);
         try
         {
-            var src = await Connections.TestAsync(pipeline.SourceId);
-            var dst = await Connections.TestAsync(pipeline.DestinationId);
+            var src = await Connections.TestAsync(Audit.Current, pipeline.SourceId);
+            var dst = await Connections.TestAsync(Audit.Current, pipeline.DestinationId);
             var summary = $"{L["Page.Dashboard.Source"].Value}: {(src.Ok ? L["Page.Dashboard.Ok"].Value : KnownErrors.Describe(L, src.Code, src.Message))} | {L["Page.Dashboard.Destination"].Value}: {(dst.Ok ? L["Page.Dashboard.Ok"].Value : KnownErrors.Describe(L, dst.Code, dst.Message))}";
             if (src.Ok && dst.Ok)
             {
@@ -534,7 +533,6 @@
             {
                 await NotificationService.ShowWarningToastAsync(summary);
             }
-            ActivityLog.LogUser("connection.test", $"Test de conexiones del pipeline {_selectedPipeline}: {summary}", _selectedPipeline, level: src.Ok && dst.Ok ? "info" : "warning");
         }
         finally
         {

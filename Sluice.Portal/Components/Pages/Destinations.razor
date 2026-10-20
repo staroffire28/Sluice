@@ -7,7 +7,7 @@
 @inject IConnectionService Connections
 @inject INotificationService NotificationService
 @inject IDialogService DialogService
-@inject IActivityLog ActivityLog
+@inject Sluice.Portal.Services.Logging.CircuitAuditActor Audit
 
 @inject IStringLocalizer<SharedResource> L
 
@@ -170,14 +170,13 @@
                     [SqlServerVersions.ConfigKey] = _sqlVersion,
                 },
             };
-            _detection = await Connections.DetectSqlVersionAsync(draft, _editingId);
+            _detection = await Connections.DetectSqlVersionAsync(Audit.Current, draft, _editingId);
             if (_detection.Version is { } detected)
             {
                 _sqlVersion = ((int)detected).ToString(System.Globalization.CultureInfo.InvariantCulture);
                 _versionKey = Guid.NewGuid();
             }
 
-            ActivityLog.LogUser("destination.test", $"Test de destino '{_name}' (sin guardar): {_detection.Message}", level: _detection.Ok ? "info" : "warning");
         }
         finally
         {
@@ -273,7 +272,7 @@
                     return;
                 }
 
-                Connections.Create(new Connection
+                Connections.Create(Audit.Current, new Connection
                 {
                     Id = $"conn-dst-{slug}",
                     Name = _name,
@@ -285,7 +284,7 @@
             else
             {
                 var existing = Connections.Get(_editingId)!;
-                Connections.Update(_editingId, existing with
+                Connections.Update(Audit.Current, _editingId, existing with
                 {
                     Name = _name,
                     Type = _type,
@@ -302,7 +301,6 @@
 
         _showEditor = false;
         _ = NotificationService.ShowSuccessToastAsync(L["Common.Saved"].Value);
-        ActivityLog.LogUser("destination.save", $"Conexión de destino '{_name}' {(_editingId is null ? "creada" : "actualizada")}.");
         Load();
     }
 
@@ -313,7 +311,7 @@
         await InvokeAsync(StateHasChanged);
         try
         {
-            var (ok, msg, code) = await Connections.TestAsync(id);
+            var (ok, msg, code) = await Connections.TestAsync(Audit.Current, id);
             if (ok)
             {
                 await NotificationService.ShowSuccessToastAsync(msg);
@@ -322,7 +320,6 @@
             {
                 await NotificationService.ShowErrorToastAsync(KnownErrors.Describe(L, code, msg));
             }
-            ActivityLog.LogUser("destination.test", $"Test de destino {id}: {msg}", level: ok ? "info" : "warning");
         }
         finally
         {
@@ -345,14 +342,13 @@
             return;
         }
 
-        if (!Connections.Delete(connection.Id, out var error))
+        if (Connections.Delete(Audit.Current, connection.Id) is { } error)
         {
-            await NotificationService.ShowErrorToastAsync(error ?? L["Common.DeleteFailed"].Value);
+            await NotificationService.ShowErrorToastAsync(error);
             return;
         }
 
         await NotificationService.ShowInfoToastAsync(string.Format(L["Common.Deleted"].Value, connection.Name));
-        ActivityLog.LogUser("destination.delete", $"Conexión de destino '{connection.Name}' eliminada.");
         Load();
     }
 
