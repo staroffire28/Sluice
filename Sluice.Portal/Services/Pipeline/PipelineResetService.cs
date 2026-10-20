@@ -82,10 +82,6 @@ public sealed class PipelineResetService : IPipelineResetService
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId,
             "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de resetear.", cancellationToken);
 
-        // Lo pedido antes del reset contaba con el estado que se va a descartar.
-        _runQueue?.Remove(pipelineId);
-        _runQueue?.Complete(pipelineId);
-
         // Entidades a truncar: las que el pipeline ya llegó a cargar (PipelineState.Tables),
         // tomadas ANTES de tocar nada — si truncar falla a medio camino, el estado sigue
         // reflejando la realidad para poder reintentar.
@@ -162,6 +158,11 @@ public sealed class PipelineResetService : IPipelineResetService
         deleted += await _parquet.DeleteVersionsAsync(pipelineId, cancellationToken);
 
         _stateStore.Save(new PipelineState { PipelineId = pipelineId });
+
+        // Lo pedido antes del reset contaba con el estado que se acaba de descartar. Solo aquí: un
+        // reset que falla al truncar no descarta nada y conserva lo encolado.
+        _runQueue?.Remove(pipelineId);
+        _runQueue?.Complete(pipelineId);
 
         return new PipelineResetResult
         {
