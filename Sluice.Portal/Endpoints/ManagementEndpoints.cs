@@ -310,11 +310,11 @@ public static class ManagementEndpoints
             var entries = log.Query(new ActivityLogFilter(NullIfBlank(source), NullIfBlank(level), NullIfBlank(search), new DateRange(from, to)));
             return Csv("logs", writer =>
             {
-                CsvWriter.WriteRow(writer, [l["Page.Logs.Col.Date"].Value, l["Page.Logs.Col.Source"].Value, l["Page.Logs.Col.Level"].Value, l["Page.Logs.Col.Action"].Value, l["Page.Logs.Col.Message"].Value, l["Page.Logs.Col.Pipeline"].Value, l["Page.Logs.Col.Job"].Value]);
+                CsvWriter.WriteRow(writer, [l["Page.Logs.Col.Date"].Value, l["Page.Logs.Col.Source"].Value, l["Page.Logs.Col.Actor"].Value, l["Page.Logs.Col.Level"].Value, l["Page.Logs.Col.Action"].Value, l["Page.Logs.Col.Message"].Value, l["Page.Logs.Col.Pipeline"].Value, l["Page.Logs.Col.Job"].Value, l["Page.Logs.Col.Host"].Value]);
                 foreach (var e in entries)
                 {
                     var sourceLabel = e.Source == "user" ? l["Page.Logs.Source.User"].Value : l["Page.Logs.Source.System"].Value;
-                    CsvWriter.WriteRow(writer, [CsvDate(e.Timestamp), sourceLabel, e.Level.ToLowerInvariant(), e.Action, e.Message, e.PipelineId, e.JobId]);
+                    CsvWriter.WriteRow(writer, [CsvDate(e.Timestamp), sourceLabel, e.ActorLabel, e.Level.ToLowerInvariant(), e.Action, e.Message, e.PipelineId, e.JobId, e.HostName]);
                 }
             });
         });

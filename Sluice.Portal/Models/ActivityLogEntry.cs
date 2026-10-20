@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Sluice.Portal.Models;
 
 // Una entrada del registro de actividad (audit log) del portal. Inmutable;
@@ -11,5 +13,39 @@ public sealed record ActivityLogEntry
     public required string Message { get; init; }
     public string? PipelineId { get; init; }
     public string? JobId { get; init; }
-    public string? Actor { get; init; }            // máquina/proceso o usuario; opcional
+
+    // Solo en entradas antiguas: guardaba la máquina que la escribió (hoy Host).
+    public string? Actor { get; init; }
+
+    // Quién actuó (AuditActor): ui | api | scheduler | queue | autofix | retention | worker | demo.
+    public string? Channel { get; init; }
+
+    // IP y hash corto de la sesión de quien actuó (nunca el token).
+    public string? Client { get; init; }
+
+    // Máquina (réplica) que escribió la entrada.
+    public string? Host { get; init; }
+
+    public AuditOutcome? Outcome { get; init; }
+
+    // Sobre qué se actuó, si no basta con pipeline y job (una tabla, una conexión, una ruta).
+    public string? Target { get; init; }
+
+    [JsonIgnore]
+    public string? HostName => Host ?? Actor;
+
+    // Para la columna Actor y el CSV: canal y cliente; sin canal (entradas antiguas o registradas
+    // sin actor), la máquina que la escribió.
+    [JsonIgnore]
+    public string? ActorLabel => Channel is null
+        ? HostName
+        : Client is null ? Channel : $"{Channel} · {Client}";
+}
+
+// Rejected: la acción se rechazó por una regla (pipeline ocupado, validación); Error: falló.
+public enum AuditOutcome
+{
+    Ok,
+    Rejected,
+    Error,
 }

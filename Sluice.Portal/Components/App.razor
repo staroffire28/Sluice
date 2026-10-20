@@ -1,6 +1,7 @@
 @using System.IO
 @using System.Reflection
 @using System.Globalization
+@using Sluice.Portal.Services.Logging
 <!DOCTYPE html>
 <html lang="@CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
 
@@ -34,7 +35,7 @@
     @* Render interactivo a nivel de router: MainLayout y sus providers
        (FluentProviders) deben ser interactivos o los toasts y los diálogos
        de DialogService no se pintan. *@
-    <Routes @rendermode="InteractiveServer" />
+    <Routes @rendermode="InteractiveServer" AuditClient="@AuditClient" />
     <script src="@Versioned("app-ui.js")"></script>
     <script src="_framework/blazor.web.js"></script>
     <script src="/_content/Microsoft.FluentUI.AspNetCore.Components/Microsoft.FluentUI.AspNetCore.Components.lib.module.js" type="module" async></script>
@@ -43,6 +44,13 @@
 </html>
 
 @code {
+    // Solo el render estático tiene HttpContext: aquí se calcula quién es el cliente del circuito
+    // (IP y hash de la sesión) y Routes lo recibe como parámetro (ver CircuitAuditActor).
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? AuditClient => HttpContext is null ? null : AuditActor.DescribeClient(HttpContext);
+
     // Versión de assets propios: cambia en cada build/deploy para invalidar el
     // caché del navegador. Los estáticos de wwwroot y el bundle scoped se
     // referencian sin fingerprint, así que un deploy no recargaría CSS/JS nuevos

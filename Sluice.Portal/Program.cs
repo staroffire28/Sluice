@@ -161,7 +161,11 @@ builder.Services.AddSingleton<SnapshotRetentionService>();
 builder.Services.AddSingleton<IStorageOverviewService, StorageOverviewService>();
 builder.Services.AddSingleton<DocsService>();
 builder.Services.AddSingleton<IAnalyticsService, AnalyticsService>();
-builder.Services.AddSingleton<IActivityLog, ActivityLogStore>();
+// Un solo store (un solo lock de escritura) detrás de las dos interfaces.
+builder.Services.AddSingleton<ActivityLogStore>();
+builder.Services.AddSingleton<IActivityLog>(sp => sp.GetRequiredService<ActivityLogStore>());
+builder.Services.AddSingleton<IAuditLog>(sp => sp.GetRequiredService<ActivityLogStore>());
+builder.Services.AddScoped<CircuitAuditActor>();
 
 builder.Services.AddSingleton<IStageRouter, StageRouter>();
 builder.Services.AddSingleton<IIngestExecutor, IngestExecutor>();
