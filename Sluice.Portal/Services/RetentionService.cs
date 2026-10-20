@@ -44,14 +44,16 @@ public sealed class RetentionService
     // con un DataDir temporal y un "ahora" inyectado, sin reloj real ni efectos.
     public RetentionPlan Plan(DateTimeOffset now, AppSettings settings)
     {
-        // RetentionDays <= 0 desactiva la purga: no se borra nada.
+        var (jobs, unreadableJobIds) = LoadJobs();
+
+        // RetentionDays <= 0 desactiva la purga: no se borra nada, salvo el staging de los jobs
+        // fallidos o cancelados, que se purga siempre (FailedStagingRetention).
         if (settings.RetentionDays <= 0)
         {
-            return new RetentionPlan();
+            return new RetentionPlan { StagingDirectories = OrphanStagingDirectories(null, FailedJobIds(jobs, now)) };
         }
 
         var cutoff = now - TimeSpan.FromDays(settings.RetentionDays);
-        var (jobs, unreadableJobIds) = LoadJobs();
         // Un job ilegible (corrupto o a medio escribir) se conserva con todos sus artefactos:
         // sin poder leerlo no se sabe si está vivo, y su id sale del nombre del archivo.
         var survivingJobIds = new HashSet<string>(unreadableJobIds, StringComparer.OrdinalIgnoreCase);
@@ -226,7 +228,8 @@ public sealed class RetentionService
             .Select(j => j.Id)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-    private List<string> OrphanStagingDirectories(OrphanFilter orphans, HashSet<string> failedJobIds)
+    // orphans null: retención desactivada, solo se purga el staging de los jobs fallidos.
+    private List<string> OrphanStagingDirectories(OrphanFilter? orphans, HashSet<string> failedJobIds)
     {
         var result = new List<string>();
         var stagingRoot = Path.Combine(_options.DataDir, "staging");
@@ -238,7 +241,7 @@ public sealed class RetentionService
         foreach (var dir in Directory.GetDirectories(stagingRoot))
         {
             var jobId = Path.GetFileName(dir);
-            if (failedJobIds.Contains(jobId) || orphans.IsPurgeable(jobId, Directory.GetLastWriteTimeUtc(dir)))
+            if (failedJobIds.Contains(jobId) || orphans?.IsPurgeable(jobId, Directory.GetLastWriteTimeUtc(dir)) == true)
             {
                 result.Add(dir);
             }
