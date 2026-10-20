@@ -102,12 +102,12 @@
        guardar podía reasignar este pipeline al origen/destino de aquel. Con Items el componente
        marca la opción a partir del Value, y el @key por apertura descarta cualquier estado previo. *@
     <div class="dialog-form" @key="_editorKey">
-        <FluentTextInput @bind-Value="_editName" data-testid="pipe-name" Label="@L["Common.Name"]" Style="width:100%;" />
-        <FluentSelect TOption="Connection" TValue="string" @bind-Value="_sourceId" data-testid="pipe-source" Label="@L["Page.Pipelines.Source"]" Style="width:100%;"
+        <FluentTextInput @bind-Value="_editName" data-testid="pipe-name" Label="@L["Common.Name"]" />
+        <FluentSelect TOption="Connection" TValue="string" @bind-Value="_sourceId" data-testid="pipe-source" Label="@L["Page.Pipelines.Source"]"
                       Items="@Connections.List(ConnectionRole.Source)" OptionValue="@(c => c.Id)" OptionText="@(c => c.Name)" />
-        <FluentSelect TOption="Connection" TValue="string" @bind-Value="_destId" data-testid="pipe-dest" Label="@L["Page.Pipelines.Destination"]" Style="width:100%;"
+        <FluentSelect TOption="Connection" TValue="string" @bind-Value="_destId" data-testid="pipe-dest" Label="@L["Page.Pipelines.Destination"]"
                       Items="@Connections.List(ConnectionRole.Destination)" OptionValue="@(c => c.Id)" OptionText="@(c => c.Name)" />
-        <FluentSelect TOption="DeleteMode" TValue="string" @bind-Value="_deleteMode" data-testid="pipe-delete-mode" Label="@L["Page.Pipelines.DeleteMode"]" Style="width:100%;"
+        <FluentSelect TOption="DeleteMode" TValue="string" @bind-Value="_deleteMode" data-testid="pipe-delete-mode" Label="@L["Page.Pipelines.DeleteMode"]"
                       Items="@(Enum.GetValues<DeleteMode>())" OptionValue="@(m => m.ToString())" OptionText="@(m => L[$"Page.Pipelines.DeleteMode.{m}"].Value)" />
         <p class="field-hint">@L["Page.Pipelines.DeleteModeHint"]</p>
     </div>

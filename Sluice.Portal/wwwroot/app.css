@@ -480,6 +480,8 @@ html[data-nav-mode="expanded"] .app-sidebar [data-nav-mode-set="expanded"] {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+    /* Separa el título del primer campo (antes lo hacía el margen propio del fluent-field). */
+    padding-top: 0.5rem;
 }
 
 .dialog-form {
@@ -493,6 +495,30 @@ html[data-nav-mode="expanded"] .app-sidebar [data-nav-mode-set="expanded"] {
 .dialog-form fluent-text-input,
 .dialog-form fluent-dropdown {
     width: 100%;
+}
+
+/* El gap del formulario es el único espacio entre campos: Fluent UI 5 da a cada fluent-field un
+   margen vertical (my-3) que se sumaba al gap (12 + 14 + 12 = 38px entre un campo y la etiqueta
+   del siguiente, y aún menos tras un switch). La fila del mensaje de validación se mantiene. */
+.dialog-form fluent-field {
+    margin-block: 0;
+}
+
+/* El texto de ayuda va pegado al campo que explica, no a medio camino del siguiente. */
+.dialog-form fluent-field + .field-hint {
+    margin-top: -0.5rem;
+}
+
+/* Los botones dentro del formulario conservan su ancho (el flex en columna los estiraba). */
+.dialog-form > fluent-button,
+.dialog-form > fluent-anchor-button {
+    align-self: flex-start;
+}
+
+/* Formularios de página (Ajustes): campos más estrechos que en los diálogos. */
+.dialog-form--narrow {
+    max-width: 560px;
+    min-width: 0;
 }
 
 /* Ancho único para TODOS los modales de configuración (Sources, Destinations,
