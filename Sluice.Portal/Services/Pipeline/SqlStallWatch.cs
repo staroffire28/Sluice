@@ -13,19 +13,23 @@ public sealed class SqlStallWatch : IDisposable
     private readonly TimeSpan _threshold;
     private readonly Action<string, TimeSpan> _onStall;
     private readonly ILogger _logger;
-    private readonly Timer _timer;
+    private readonly TimeProvider _time;
+    private readonly ITimer _timer;
     private readonly object _lock = new();
     private string _step = "";
-    private DateTimeOffset _since = DateTimeOffset.UtcNow;
+    private DateTimeOffset _since;
     private bool _warned;
 
-    public SqlStallWatch(TimeSpan threshold, Action<string, TimeSpan> onStall, ILogger logger)
+    // timeProvider: el reloj y el temporizador; los tests pasan uno falso para no depender de esperas reales.
+    public SqlStallWatch(TimeSpan threshold, Action<string, TimeSpan> onStall, ILogger logger, TimeProvider? timeProvider = null)
     {
         _threshold = threshold;
         _onStall = onStall;
         _logger = logger;
+        _time = timeProvider ?? TimeProvider.System;
+        _since = _time.GetUtcNow();
         var period = threshold / 4 < MaxCheckPeriod ? threshold / 4 : MaxCheckPeriod;
-        _timer = new Timer(_ => Check(), null, period, period);
+        _timer = _time.CreateTimer(_ => Check(), null, period, period);
     }
 
     // Marca avance: empieza un tramo nuevo (otra entidad, fase o lote).
@@ -34,7 +38,7 @@ public sealed class SqlStallWatch : IDisposable
         lock (_lock)
         {
             _step = step;
-            _since = DateTimeOffset.UtcNow;
+            _since = _time.GetUtcNow();
             _warned = false;
         }
     }
@@ -45,7 +49,7 @@ public sealed class SqlStallWatch : IDisposable
         TimeSpan elapsed;
         lock (_lock)
         {
-            elapsed = DateTimeOffset.UtcNow - _since;
+            elapsed = _time.GetUtcNow() - _since;
             if (_warned || elapsed < _threshold)
             {
                 return;
