@@ -151,26 +151,11 @@ public sealed class LocalFolderClient : IAdlsClient, IParquetStore
         CancellationToken cancellationToken = default)
     {
         // Misma cadena de búsqueda que AdlsClient: snapshot, sellado, cualquier snapshot, raíz.
-        var candidates = new List<string> { $"{snapshot}/{CdmFolder}/{entity}-model.json" };
-        if (!string.IsNullOrWhiteSpace(settledSnapshot))
-        {
-            candidates.Add($"{settledSnapshot}/{CdmFolder}/{entity}-model.json");
-        }
-
-        var snapshots = await ListSnapshotFoldersAsync(cancellationToken);
-        candidates.AddRange(snapshots.Select(s => $"{s}/{CdmFolder}/{entity}-model.json"));
-        candidates.Add($"{CdmFolder}/{entity}-model.json");
-
-        foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        return await CdmSchemaLocator.FindAsync(entity, snapshot, settledSnapshot, async candidate =>
         {
             var path = SourcePath(candidate);
-            if (File.Exists(path))
-            {
-                return CdmSchemaParser.Parse(entity, await File.ReadAllTextAsync(path, Encoding.UTF8, cancellationToken));
-            }
-        }
-
-        throw new InvalidOperationException($"CDM schema not found for entity '{entity}'.");
+            return File.Exists(path) ? await File.ReadAllTextAsync(path, Encoding.UTF8, cancellationToken) : null;
+        }, () => ListSnapshotFoldersAsync(cancellationToken));
     }
 
     public async IAsyncEnumerable<string> StreamEntityCsvLinesAsync(

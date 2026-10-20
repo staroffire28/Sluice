@@ -299,35 +299,20 @@ public sealed class AdlsClient : IAdlsClient, IParquetStore
         string? settledSnapshot,
         CancellationToken cancellationToken = default)
     {
-        var candidates = new List<string>
-        {
-            $"{snapshot}/{CdmFolder}/{entity}-model.json",
-        };
+        return await CdmSchemaLocator.FindAsync(entity, snapshot, settledSnapshot, ReadAsync, () => ListSnapshotFoldersAsync(cancellationToken));
 
-        if (!string.IsNullOrWhiteSpace(settledSnapshot))
-        {
-            candidates.Add($"{settledSnapshot}/{CdmFolder}/{entity}-model.json");
-        }
-
-        var snapshots = await ListSnapshotFoldersAsync(cancellationToken);
-        candidates.AddRange(snapshots.Select(s => $"{s}/{CdmFolder}/{entity}-model.json"));
-        candidates.Add($"{CdmFolder}/{entity}-model.json");
-
-        foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        async Task<string?> ReadAsync(string candidate)
         {
             var file = _fileSystem.GetFileClient(candidate);
             if (!await file.ExistsAsync(cancellationToken))
             {
-                continue;
+                return null;
             }
 
             var response = await file.ReadAsync(cancellationToken: cancellationToken);
             using var reader = new StreamReader(response.Value.Content, Encoding.UTF8);
-            var json = await reader.ReadToEndAsync(cancellationToken);
-            return CdmSchemaParser.Parse(entity, json);
+            return await reader.ReadToEndAsync(cancellationToken);
         }
-
-        throw new InvalidOperationException($"CDM schema not found for entity '{entity}'.");
     }
 
     // CSVs de la entidad en orden de nombre, sin materializar:
