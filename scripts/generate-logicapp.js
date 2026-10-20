@@ -333,7 +333,7 @@ const SAMPLES = [
   { eventType: 'pipeline.failure', status: 'warning', pipelineName: 'Lean', jobId: 'job-lean-20261009233000-aabbcc', jobType: 'Incremental', stage: 'ingest',
     message: 'Ingest completed: 3 snapshot(s), 48 entity(ies). 2 entity(ies) failed: inventtrans, salesline.' },
   { eventType: 'snapshot.incomplete', status: 'warning', pipelineName: 'Lean', snapshot: '2026-10-09T22.00.31Z',
-    message: "Pipeline Lean parado: el snapshot 2026-10-09T22.00.31Z está cerrado pero incompleto desde hace 45 min (Snapshot '2026-10-09T22.00.31Z' has no non-empty CSV in any entity (empty or in-progress export).). No se procesa nada más hasta que el volcado de Synapse Link se complete; revisa la exportación." },
+    message: "Pipeline Lean parado: el snapshot 2026-10-09T22.00.31Z está cerrado pero incompleto desde hace 45 min (Snapshot '2026-10-09T22.00.31Z': model.json declares CustTable/1.csv, but the file does not exist (export not finished).). No se procesa nada más hasta que el volcado de Synapse Link se complete; revisa la exportación." },
   { eventType: 'test.ping', message: 'Sluice portal alert test' },
 ];
 
