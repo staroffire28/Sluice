@@ -62,7 +62,7 @@ La documentación completa de autenticación (tutorial, guía práctica, referen
   - `reconcile.divergence` / `reconcile.values` — conciliación Partial o diferencias de valores: `{ "eventType", "pipelineId", "pipelineName", "jobId", "status": "warning", "message", "text", "maxDivergencePct" (solo divergencia), "entities": [tablas], "autoRemediation": "off" | "scheduled" | "unresolved" | "none", "timestamp" }`
   - `system.alert` — scheduler/retención/changelog/cambio de tipo en el origen/bloqueo SQL/pipeline atrasado/cola parada (modo distribuido: tareas de una etapa pendientes más de 15 min sin ningún worker vivo de esa etapa): `{ "eventType": "system.alert", "text", "message", "timestamp" }`
 - **Posible bloqueo en SQL**: si una sentencia SQL no avanza durante 1 hora, la línea de tiempo del job recibe un Warning con la entidad y la fase, y se envía un `system.alert`. La sentencia **no** se cancela y el estado del job no cambia; revisa las sesiones bloqueantes en la base de destino. El umbral de 1 hora está fijado en el código.
-- **Dead-man ping**: si `DEADMAN_PING_URL` está configurada, el scheduler le hace un GET (timeout de 10 s) al final de cada ciclo que termina sin errores de sus vigilantes y en el que no fallan todos los pipelines habilitados evaluados; un HTTP de error cuenta como fallo. El resultado del último ping se ve en Ajustes → Alertas.
+- **Dead-man ping**: si `DEADMAN_PING_URL` está configurada, el scheduler le hace un GET (timeout de 10 s) al final de cada ciclo que termina sin errores de sus vigilantes y en el que al menos un pipeline habilitado evaluado termina bien (o no se evalúa ninguno); un HTTP de error cuenta como fallo. El resultado del último ping se ve en Ajustes → Alertas.
 
 ## Retención
 
