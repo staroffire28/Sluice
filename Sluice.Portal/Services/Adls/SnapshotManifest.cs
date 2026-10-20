@@ -107,7 +107,7 @@ public static class SnapshotManifest
         var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.UnescapeDataString).ToList();
         var at = segments.FindIndex(s => string.Equals(s, snapshot, StringComparison.Ordinal));
         var relative = at >= 0 ? segments.Skip(at + 1).ToList() : null;
-        return relative is { Count: > 0 } && !relative.Any(s => s == ".." || s.Contains('\\'))
+        return relative is { Count: > 0 } && !relative.Any(s => s is "" or "." or ".." || s.Contains('/') || s.Contains('\\') || s.Contains(':'))
             ? string.Join('/', relative)
             : null;
     }
