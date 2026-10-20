@@ -32,11 +32,11 @@
                 <div class="kpi-grid" style="margin-bottom:1rem;">
                     <FluentCard Class="kpi-card">
                         <FluentLabel><strong>@L["Page.Snapshots.Settled"]</strong></FluentLabel>
-                        <div class="kpi-value kpi-value--sm">@(_catalog.SettledSnapshot ?? "—")</div>
+                        <div class="kpi-value kpi-value--sm"><PathText Value="@(_catalog.SettledSnapshot ?? "—")" Separator="@('T')" /></div>
                     </FluentCard>
                     <FluentCard Class="kpi-card">
                         <FluentLabel><strong>@L["Page.Snapshots.LastProcessed"]</strong></FluentLabel>
-                        <div class="kpi-value kpi-value--sm">@(_catalog.LastProcessedSnapshot ?? "—")</div>
+                        <div class="kpi-value kpi-value--sm"><PathText Value="@(_catalog.LastProcessedSnapshot ?? "—")" Separator="@('T')" /></div>
                     </FluentCard>
                     <FluentCard Class="kpi-card">
                         <FluentLabel><strong>@L["Page.Snapshots.Pending"]</strong></FluentLabel>
@@ -74,8 +74,8 @@
                 }
 
                 <PanelState IsEmpty="@(_catalog.Snapshots.Count == 0)" EmptyText="@L["Page.Snapshots.NoSnapshots"]">
-                    <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" Items="@_pagedSnapshots.AsQueryable()" TGridItem="SnapshotEntry">
-                        <PropertyColumn Property="@(s => s.Name)" Title="@L["Page.Snapshots.Snapshot"]" />
+                    <FluentDataGrid Class="data-panel" MultiLine="true" Items="@_pagedSnapshots.AsQueryable()" TGridItem="SnapshotEntry">
+                        <PropertyColumn Property="@(s => s.Name)" Title="@L["Page.Snapshots.Snapshot"]" Class="cell-nowrap" />
                         <TemplateColumn Title="@L["Common.Status"]">
                             <StatusBadge Status="@context.Status" />
                         </TemplateColumn>

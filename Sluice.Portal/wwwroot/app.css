@@ -553,6 +553,34 @@ fluent-button[appearance="subtle"]:not([icon-only])[disabled] {
     overflow: visible;
     white-space: normal;
     align-content: center;
+    /* MultiLine trae word-break: break-word, que partía "Incremental" en "Incr/eme/ntal". Así
+       solo se parte entre palabras y la palabra más larga fija el ancho mínimo de la columna. */
+    word-break: normal;
+    overflow-wrap: break-word;
+}
+
+/* Densidad común: todas las tablas van con MultiLine (la fila crece con su contenido) y aquí
+   reciben el mismo alto mínimo. Antes cada página fijaba su RowSize (58px en Large, 32px por
+   defecto). Las tablas densas (--compact) conservan su línea única. */
+.page-shell .fluent-data-grid.data-panel:not(.data-panel--compact) td {
+    min-height: 44px;
+    padding-block: 6px;
+    box-sizing: border-box;
+}
+
+/* Fechas, ids, números y nombres de entidad: en una sola línea. La columna toma el ancho del
+   texto y, si no caben todas, la tabla se desplaza en horizontal (overflow-x de arriba) en vez
+   de partir "2026-10-19 / 02:25:20Z" o "generaljournalaccount / entry". */
+.page-shell .fluent-data-grid.data-panel td.cell-nowrap,
+.cell-nowrap {
+    white-space: nowrap;
+    word-break: normal;
+    overflow-wrap: normal;
+}
+
+/* Rutas (PathText): cada tramo entero; solo se corta tras el separador. */
+.cell-path > span {
+    white-space: nowrap;
 }
 
 /* Sin padding horizontal: en la v5 la cabecera ya trae 18px por dentro (6px + 12px del título),

@@ -54,10 +54,10 @@
         <PanelState IsEmpty="@(string.IsNullOrWhiteSpace(_pipelineId))" EmptyText="@L["Page.Parquet.SelectPipeline"]">
             <PanelState IsLoading="@_loading" IsEmpty="@(_allRows.Count == 0)" EmptyText="@L["Page.Parquet.EmptyRows"]">
             <PanelState IsEmpty="@(_totalCount == 0)" EmptyText="@L["Page.Parquet.NoMatches"]">
-                <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" Items="@_rows.AsQueryable()" TGridItem="ArtifactRow">
-                    <PropertyColumn Property="@(r => r.Path)" Title="@L["Page.Parquet.File"]" />
-                    <PropertyColumn Property="@(r => r.Size)" Title="@L["Page.Parquet.Size"]" />
-                    <PropertyColumn Property="@(r => r.Modified)" Title="@L["Page.Parquet.Modified"]" />
+                <FluentDataGrid Class="data-panel" MultiLine="true" Items="@_rows.AsQueryable()" TGridItem="ArtifactRow">
+                    <TemplateColumn Title="@L["Page.Parquet.File"]"><PathText Value="@context.Path" /></TemplateColumn>
+                    <PropertyColumn Property="@(r => r.Size)" Title="@L["Page.Parquet.Size"]" Class="cell-nowrap" />
+                    <PropertyColumn Property="@(r => r.Modified)" Title="@L["Page.Parquet.Modified"]" Class="cell-nowrap" />
                     <TemplateColumn Title="@L["Common.Actions"]" Align="DataGridCellAlignment.End">
                         @* ForceLoad: sin él el router de Blazor busca /api/... como página y muestra "Not found". *@
                         @if (!context.Missing)

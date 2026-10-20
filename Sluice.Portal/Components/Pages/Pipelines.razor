@@ -45,7 +45,7 @@
             <FluentButton Appearance="ButtonAppearance.Outline" OnClick="OpenCreate">@L["Common.Add"]</FluentButton>
         </EmptyAction>
         <ListContent>
-            <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true" Items="@_items.AsQueryable()" TGridItem="Pipeline">
+            <FluentDataGrid Class="data-panel" MultiLine="true" Items="@_items.AsQueryable()" TGridItem="Pipeline">
                 <PropertyColumn Property="@(p => p.Name)" Title="@L["Common.Name"]" />
                 <PropertyColumn Property="@(p => p.SourceId)" Title="@L["Page.Pipelines.Source"]" />
                 <PropertyColumn Property="@(p => p.DestinationId)" Title="@L["Page.Pipelines.Destination"]" />
