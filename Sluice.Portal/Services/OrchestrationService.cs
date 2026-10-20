@@ -355,6 +355,12 @@ public sealed class OrchestrationService : IOrchestrationService
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
 
         var state = stateStore.GetOrCreate(pipelineId);
+        if (state.RestoreInProgress is { } halfDone && halfDone.Snapshot != snapshot)
+        {
+            throw new InvalidOperationException(
+                $"El restore al punto {halfDone.Snapshot} quedó a medias: termínalo restaurando ese mismo punto antes de elegir otro.");
+        }
+
         var from = state.RestoreInProgress is { } inProgress ? inProgress.FromSnapshot : state.LastProcessedSnapshot;
         if (state.PendingRestore.Count > 0)
         {
@@ -378,7 +384,7 @@ public sealed class OrchestrationService : IOrchestrationService
         var tables = new Dictionary<string, TableState>(state.Tables, StringComparer.OrdinalIgnoreCase);
         var pendingReload = new List<string>(state.PendingReload);
         var pendingRestore = new Dictionary<string, PendingRestoreTable>(StringComparer.OrdinalIgnoreCase);
-        var rewound = state with { LastProcessedSnapshot = snapshot, Tables = tables, PendingReload = pendingReload, PendingRestore = pendingRestore, RestoreInProgress = new() { FromSnapshot = from } };
+        var rewound = state with { LastProcessedSnapshot = snapshot, Tables = tables, PendingReload = pendingReload, PendingRestore = pendingRestore, RestoreInProgress = new() { Snapshot = snapshot, FromSnapshot = from } };
         stateStore.Save(rewound);
         foreach (var (entity, version) in plan.Restore)
         {
@@ -422,9 +428,9 @@ public sealed class OrchestrationService : IOrchestrationService
         return job;
     }
 
-    // Termina las tablas que un restore anterior marcó y no llegó a cerrar, sea cual sea el punto que
-    // se pide ahora: si su versión sigue en la lista el fichero no llegó a moverse y se mueve; si no, ya
-    // está en su sitio. Después el estado vuelve a cuadrar con los ficheros y el plan nuevo sale bien.
+    // Termina las tablas que el restore a medias del mismo punto marcó y no llegó a cerrar: si su
+    // versión sigue en la lista el fichero no llegó a moverse y se mueve; si no, ya está en su sitio.
+    // Después el estado vuelve a cuadrar con los ficheros y el plan nuevo sale bien.
     private async Task<PipelineState> FinishPendingRestoreAsync(
         PipelineStateStore stateStore, string pipelineId, PipelineState state, string? from, CancellationToken cancellationToken)
     {
@@ -554,7 +560,7 @@ public sealed class OrchestrationService : IOrchestrationService
         if (_stateStore?.GetOrCreate(pipelineId) is { } state
             && (state.PendingRestore.Count > 0 || state.RestoreInProgress is not null))
         {
-            throw new InvalidOperationException("Hay un restore a medias en este pipeline: vuelve a restaurar el punto para terminarlo.");
+            throw new RestorePendingException(state.RestoreInProgress?.Snapshot);
         }
     }
 

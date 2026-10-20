@@ -311,6 +311,8 @@
   <data name="Page.Parquet.LeftAt" xml:space="preserve"><value>Left behind (UTC)</value></data>
   <data name="Page.Parquet.TablesBack" xml:space="preserve"><value>Tables that go back</value></data>
   <data name="Page.Parquet.RestoreBlocked" xml:space="preserve"><value>A job is running on this pipeline: wait for it to finish before restoring.</value></data>
+  <data name="Page.Parquet.RestoreHalfDone" xml:space="preserve"><value>The restore to point {0} was left half done: finish it before restoring another point or starting any job on this pipeline.</value></data>
+  <data name="Page.Parquet.FinishRestore" xml:space="preserve"><value>Finish restore</value></data>
   <data name="Page.Parquet.ReplacedBy" xml:space="preserve"><value>Replaced by</value></data>
   <data name="Page.Parquet.Restore" xml:space="preserve"><value>Restore</value></data>
   <data name="Page.Parquet.ConfirmRestoreTitle" xml:space="preserve"><value>Restore point</value></data>

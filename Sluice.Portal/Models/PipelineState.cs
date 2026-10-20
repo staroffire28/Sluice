@@ -23,12 +23,15 @@ public sealed record PipelineState
 
     // Restore en curso: se guarda antes de mover la primera tabla y se borra cuando ya no queda nada por
     // mover ni archivar. Los reintentos etiquetan lo que archivan con el snapshot de antes del restore,
-    // porque el estado guardado ya está rebobinado al punto pedido.
+    // porque el estado guardado ya está rebobinado al punto pedido. Mientras exista solo se puede
+    // restaurar ese mismo punto: con otro, las tablas ya movidas se archivarían con esa etiqueta y su
+    // contenido del punto dejaría de poder elegirse.
     public RestoreInProgress? RestoreInProgress { get; init; }
 }
 
 public sealed record RestoreInProgress
 {
+    public required string Snapshot { get; init; }
     public string? FromSnapshot { get; init; }
 }
 
