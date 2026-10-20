@@ -34,7 +34,7 @@
     {
         <FluentMessageBar Intent="MessageBarIntent.Info" data-testid="pipe-created-catalog">
             @L["Page.Pipelines.ChooseTables"]
-            <FluentButton Appearance="ButtonAppearance.Primary" data-testid="pipe-created-catalog-open"
+            <FluentButton Appearance="ButtonAppearance.Outline" data-testid="pipe-created-catalog-open"
                           OnClick="@(() => Nav.NavigateTo($"/catalog?pipeline={Uri.EscapeDataString(createdId)}"))">@L["Page.Pipelines.ChooseTablesAction"]</FluentButton>
         </FluentMessageBar>
     }
@@ -42,7 +42,7 @@
     <PageSection>
     <ListWithEmptyCta HasItems="@(_allItems.Count > 0)" EmptyText="@L["Page.Pipelines.EmptyText"]">
         <EmptyAction>
-            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OpenCreate">@L["Common.Add"]</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="OpenCreate">@L["Common.Add"]</FluentButton>
         </EmptyAction>
         <ListContent>
             <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true" Items="@_items.AsQueryable()" TGridItem="Pipeline">
@@ -62,7 +62,7 @@
                 </TemplateColumn>
                 <TemplateColumn Title="@L["Common.Actions"]">
                     <FluentMenu>
-                        <FluentMenuButton Appearance="ButtonAppearance.Primary" data-testid="@($"actions-{context.Id}")" Label="@L["Common.Actions"]" />
+                        <FluentMenuButton Appearance="ButtonAppearance.Outline" data-testid="@($"actions-{context.Id}")" Label="@L["Common.Actions"]" />
                         <FluentMenuList>
                             <PipelineRunActions PipelineId="@context.Id" OnCompleted="@OnRunCompleted" />
                             <FluentMenuItem data-testid="@($"edit-{context.Id}")" OnClick="@(() => Edit(context))">@L["Common.Edit"]</FluentMenuItem>

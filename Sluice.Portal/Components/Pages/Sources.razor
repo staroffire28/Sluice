@@ -25,7 +25,7 @@
     <PageSection>
     <ListWithEmptyCta HasItems="@(_allItems.Count > 0)" EmptyText="@L["Page.Sources.EmptyText"]">
         <EmptyAction>
-            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OpenCreate">@L["Page.Sources.AddSource"]</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="OpenCreate">@L["Page.Sources.AddSource"]</FluentButton>
         </EmptyAction>
         <ListContent>
             <FluentDataGrid Class="data-panel" RowSize="DataGridRowSize.Large" MultiLine="true" Items="@_items.AsQueryable()" TGridItem="Connection">

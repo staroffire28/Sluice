@@ -27,9 +27,9 @@
             </FluentSelect>
             <FluentTextInput @bind-Value="_search" @bind-Value:after="OnSearchChanged" data-testid="catalog-search"
                              Label="@L["Common.Search"]" Placeholder="@L["Page.Tables.FilterPlaceholder"]" Style="min-width:220px;" />
-            <FluentButton Appearance="ButtonAppearance.Subtle" data-testid="catalog-include-all" OnClick="@(() => SetAll(true))">@L["Page.Catalog.IncludeAll"]</FluentButton>
-            <FluentButton Appearance="ButtonAppearance.Subtle" data-testid="catalog-exclude-all" OnClick="@(() => SetAll(false))">@L["Page.Catalog.ExcludeAll"]</FluentButton>
-            <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.ArrowSync())" OnClick="Reload">@L["Common.Refresh"]</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" data-testid="catalog-include-all" OnClick="@(() => SetAll(true))">@L["Page.Catalog.IncludeAll"]</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" data-testid="catalog-exclude-all" OnClick="@(() => SetAll(false))">@L["Page.Catalog.ExcludeAll"]</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowSync())" OnClick="Reload">@L["Common.Refresh"]</FluentButton>
         </div>
         <p class="field-hint">@L["Page.Catalog.Hint"]</p>
 

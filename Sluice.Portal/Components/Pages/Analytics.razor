@@ -23,7 +23,7 @@
                     <FluentOption TValue="string" Value="@p.Id">@p.Name</FluentOption>
                 }
             </FluentSelect>
-            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="Reload">@L["Common.Refresh"]</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowSync())" OnClick="Reload">@L["Common.Refresh"]</FluentButton>
         </div>
         @if (!string.IsNullOrWhiteSpace(_pipelineFilter))
         {

@@ -23,7 +23,7 @@
                     <FluentOption TValue="string" Value="@p.Id">@p.Name</FluentOption>
                 }
             </FluentSelect>
-            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="Load">@L["Common.Refresh"]</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowSync())" OnClick="Load">@L["Common.Refresh"]</FluentButton>
         </div>
 
         <PanelState IsLoading="@_loading" Error="@_error" IsEmpty="@(string.IsNullOrWhiteSpace(_pipelineId))" EmptyText="@L["Page.Snapshots.SelectPipeline"]">
