@@ -25,7 +25,11 @@ public sealed class PipelineSchedulerService : BackgroundService
     private readonly OrphanedJobWatchdog _watchdog;
     private readonly QueueStallWatch _queueStall;
     private readonly PipelineRunQueue _runQueue;
+    private readonly PipelineStateStore _stateStore;
     private readonly Dictionary<string, DateTimeOffset> _stallAlertsSent = new(StringComparer.OrdinalIgnoreCase);
+    // Aviso de snapshot incompleto ya registrado en el activity log (pipeline → ronda de aviso), para
+    // no repetirlo en cada poll mientras el webhook no lo acepte.
+    private readonly Dictionary<string, string> _incompleteLogged = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _lagAlertsNoticed = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _lagAlertsSent = new(StringComparer.OrdinalIgnoreCase);
     private bool _alertDeliveryFailedThisPoll;
@@ -44,8 +48,10 @@ public sealed class PipelineSchedulerService : BackgroundService
         IActivityLog activity,
         OrphanedJobWatchdog watchdog,
         QueueStallWatch queueStall,
-        PipelineRunQueue runQueue)
+        PipelineRunQueue runQueue,
+        PipelineStateStore stateStore)
     {
+        _stateStore = stateStore;
         _watchdog = watchdog;
         _queueStall = queueStall;
         _runQueue = runQueue;
@@ -202,6 +208,11 @@ public sealed class PipelineSchedulerService : BackgroundService
                         continue;
                     }
 
+                    if (await HoldForIncompleteSnapshotAsync(pipeline, catalog, ct))
+                    {
+                        continue;
+                    }
+
                     _logger.LogInformation(
                         "Scheduler auto-run for pipeline {PipelineId} ({Count} snapshot(s))",
                         pipeline.Id,
@@ -327,17 +338,83 @@ public sealed class PipelineSchedulerService : BackgroundService
 
     // Alertas deduplicadas que se reintentan en cada poll hasta llegar: tras el primer fallo de entrega
     // del poll las demás esperan al siguiente, para no bloquear el ciclo con un webhook caído.
-    private async Task<bool> TrySendPendingAlertAsync(string message, CancellationToken ct)
+    private Task<bool> TrySendPendingAlertAsync(string message, CancellationToken ct) =>
+        TrySendPendingAlertAsync(() => _alerts.SendAsync(message, ct));
+
+    private async Task<bool> TrySendPendingAlertAsync(Func<Task<AlertDeliveryResult>> send)
     {
         if (_alertDeliveryFailedThisPoll)
         {
             return false;
         }
 
-        var sent = (await _alerts.SendAsync(message, ct)).Success;
+        var sent = (await send()).Success;
         _alertDeliveryFailedThisPoll = !sent;
         return sent;
     }
+
+    public static readonly TimeSpan IncompleteSnapshotGrace = TimeSpan.FromMinutes(45);
+    public static readonly TimeSpan IncompleteSnapshotRepeat = TimeSpan.FromHours(24);
+
+    // Snapshot cerrado pero incompleto (el volcado de Synapse no terminó): el ingest se pararía en él y
+    // el job cerraría Ok sin avanzar, en cada poll. Se valida aquí el pendiente más antiguo (solo
+    // metadatos, más barato que el job) y, mientras siga incompleto, no se lanza nada. Tras la gracia
+    // se avisa como warning, y de nuevo cada 24 h; desde cuándo y la última alerta quedan en el estado
+    // del pipeline, así que sobreviven a un reinicio. Otro snapshot, o uno ya completo, lo rearma.
+    private async Task<bool> HoldForIncompleteSnapshotAsync(Models.Pipeline pipeline, SnapshotCatalogResult catalog, CancellationToken ct)
+    {
+        var oldest = catalog.PendingSnapshots.Min(StringComparer.Ordinal)!;
+        var adls = await _adlsFactory.CreateAsync(pipeline.SourceId, ct);
+        var integrity = await adls.ValidateSnapshotAsync(oldest, ct);
+        var state = _stateStore.GetOrCreate(pipeline.Id);
+        if (integrity.IsComplete)
+        {
+            if (state.IncompleteSnapshot is not null)
+            {
+                _stateStore.Update(pipeline.Id, s => s with { IncompleteSnapshot = null });
+            }
+
+            return false;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var current = state.IncompleteSnapshot?.Name == oldest
+            ? state.IncompleteSnapshot
+            : new IncompleteSnapshot { Name = oldest, FirstSeenAt = now };
+        if (current != state.IncompleteSnapshot)
+        {
+            _stateStore.Update(pipeline.Id, s => s with { IncompleteSnapshot = current });
+        }
+
+        _logger.LogInformation("Scheduler hold {PipelineId}: snapshot {Snapshot} incompleto ({Reason})", pipeline.Id, oldest, integrity.Reason);
+
+        var waiting = now - current.FirstSeenAt;
+        var due = waiting >= IncompleteSnapshotGrace
+            && (current.LastAlertedAt is not { } last || now - last >= IncompleteSnapshotRepeat);
+        if (due)
+        {
+            var message = $"Pipeline {pipeline.Name} parado: el snapshot {oldest} está cerrado pero incompleto desde hace {FormatWait(waiting)} ({integrity.Reason}). " +
+                "No se procesa nada más hasta que el volcado de Synapse Link se complete; revisa la exportación.";
+            var round = $"{oldest}|{current.LastAlertedAt:O}";
+            if (_incompleteLogged.GetValueOrDefault(pipeline.Id) != round)
+            {
+                _incompleteLogged[pipeline.Id] = round;
+                _activity.LogSystem("snapshot.incomplete", message, pipeline.Id, level: "warning");
+            }
+
+            if (await TrySendPendingAlertAsync(() => _alerts.SendSnapshotIncompleteAsync(pipeline.Id, pipeline.Name, oldest, message, ct)))
+            {
+                _stateStore.Update(pipeline.Id, s => s.IncompleteSnapshot?.Name == oldest
+                    ? s with { IncompleteSnapshot = s.IncompleteSnapshot with { LastAlertedAt = now } }
+                    : s);
+            }
+        }
+
+        return true;
+    }
+
+    private static string FormatWait(TimeSpan wait) =>
+        wait.TotalHours >= 1 ? $"{wait.TotalHours:0} h" : $"{wait.TotalMinutes:0} min";
 
     // Cuándo se cerró el snapshot pendiente más antiguo: cuando empezó la carpeta siguiente.
     private static DateTimeOffset? OldestPendingClosedAt(SnapshotCatalogResult catalog)

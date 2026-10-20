@@ -86,6 +86,32 @@ public sealed class AlertService
         }, cancellationToken);
     }
 
+    // Snapshot cerrado pero incompleto que frena el pipeline: es un aviso (el pipeline se reanuda solo
+    // cuando Synapse completa el volcado), no un fallo de un job.
+    public async Task<AlertDeliveryResult> SendSnapshotIncompleteAsync(
+        string pipelineId, string? pipelineName, string snapshot, string message, CancellationToken cancellationToken = default)
+    {
+        _logger.LogWarning("ALERT: {Message}", message);
+
+        var url = ResolveWebhookUrl();
+        if (url is null)
+        {
+            return AlertDeliveryResult.NotConfigured;
+        }
+
+        return await DeliverAsync(url, "snapshot.incomplete", new
+        {
+            eventType = "snapshot.incomplete",
+            timestamp = DateTimeOffset.UtcNow,
+            pipelineId,
+            pipelineName,
+            snapshot,
+            status = "warning",
+            text = message,
+            message,
+        }, cancellationToken);
+    }
+
     // Conciliación: estructurado para que el receptor (p. ej. la Logic App de correo) pinte la tabla
     // de entidades y el estado de la corrección automática. text/message se conservan para los
     // consumidores que solo leen el texto.

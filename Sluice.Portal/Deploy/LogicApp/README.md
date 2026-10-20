@@ -19,6 +19,7 @@ imagen de Sluice. Abre `email-preview.html` para ver cómo llega cada tipo de av
 | `reconcile.divergence` | La divergencia de conteos supera el umbral de Ajustes | **DIVERGENCIA**, con las tablas afectadas |
 | `reconcile.values` | «Comparar valores» encuentra filas distintas, faltantes o sobrantes | **VALORES**, con las tablas afectadas |
 | `test.ping` | Botón «Probar alerta» de Ajustes | **PRUEBA** |
+| `snapshot.incomplete` | Un snapshot cerrado pero incompleto frena el pipeline | **ALERTA** |
 | `system.alert` | Otros avisos del sistema (bloqueos de SQL, retención) | **ALERTA** |
 
 Las alertas de conciliación dicen además el estado de la **corrección automática** (programada,

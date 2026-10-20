@@ -39,6 +39,14 @@ public sealed class PipelineStateStore
         }
     }
 
+    public void Update(string pipelineId, Func<PipelineState, PipelineState> change)
+    {
+        lock (_lock)
+        {
+            Save(change(GetOrCreate(pipelineId)));
+        }
+    }
+
     public void Delete(string pipelineId)
     {
         lock (_lock)
