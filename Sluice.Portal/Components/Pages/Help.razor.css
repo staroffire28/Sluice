@@ -40,21 +40,31 @@
 
 /* El HTML viene de MarkupString (sin atributo de scope), así que se estiliza con ::deep.
    DocsService baja un nivel los encabezados (el h1 es la cabecera de la página): h2 es el
-   título del documento, h3 sus secciones y h4 las subsecciones. */
+   título del documento, h3 sus secciones y h4 las subsecciones. Siempre por debajo del
+   título de la página (Base600), con los tokens de Fluent. */
+.docs-content ::deep h2,
+.docs-content ::deep h3,
+.docs-content ::deep h4 {
+    font-weight: var(--fontWeightSemibold, 600);
+}
+
 .docs-content ::deep h2 {
-    font-size: 1.6rem;
+    font-size: var(--fontSizeBase500, 20px);
+    line-height: var(--lineHeightBase500, 28px);
     margin: 0 0 0.5em;
 }
 
 .docs-content ::deep h3 {
-    font-size: 1.3rem;
+    font-size: var(--fontSizeBase400, 16px);
+    line-height: var(--lineHeightBase400, 22px);
     margin: 1.4em 0 0.4em;
     border-bottom: 1px solid var(--colorNeutralStroke2, #e1dfdd);
     padding-bottom: 0.2em;
 }
 
 .docs-content ::deep h4 {
-    font-size: 1.1rem;
+    font-size: var(--fontSizeBase300, 14px);
+    line-height: var(--lineHeightBase300, 20px);
     margin: 1.2em 0 0.3em;
 }
 

@@ -131,11 +131,15 @@ h1:focus {
     min-width: 0;
 }
 
-/* <h1> semántico para FocusOnNavigate/lectores de pantalla, sin alterar el layout flex
-   existente: display:contents no genera caja propia, el FluentLabel hijo sigue siendo
-   el flex item real (mismo resultado visual que antes de envolverlo). */
-.page-header__title-heading {
-    display: contents;
+/* Escala tipográfica única (tokens de Fluent): título de página Base600, sección Base400 y
+   texto Base300. En la v5 FluentLabel ya no tiene Typo: el <h1> lleva el estilo directamente
+   (y sigue siendo el destino de FocusOnNavigate). */
+.page-header__title {
+    margin: 0;
+    font-size: var(--fontSizeBase600, 24px);
+    line-height: var(--lineHeightBase600, 32px);
+    font-weight: var(--fontWeightSemibold, 600);
+    color: var(--colorNeutralForeground1, #242424);
 }
 
 .page-header__meta {
@@ -231,6 +235,10 @@ h1:focus {
 .section-panel__title {
     display: block;
     margin: 0 0 0.75rem;
+    font-size: var(--fontSizeBase400, 16px);
+    line-height: var(--lineHeightBase400, 22px);
+    font-weight: var(--fontWeightSemibold, 600);
+    color: var(--colorNeutralForeground1, #242424);
 }
 
 .section-panel__body {
