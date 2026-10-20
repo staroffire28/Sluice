@@ -288,41 +288,6 @@ public static class ParquetVersions
         }
     }
 
-    // El plan que sigue RestorePointAsync con un restore a medias: primero termina las tablas marcadas
-    // (vuelven con la versión de su marca) y planifica el resto sobre el estado ya terminado, sin las
-    // versiones que esas tablas consumen.
-    public static RestorePlan PlanFinishingPending(
-        IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>> versions,
-        PipelineState state,
-        string snapshot)
-    {
-        if (state.PendingRestore.Count == 0)
-        {
-            return Plan(versions, state.Tables, snapshot);
-        }
-
-        var pending = new Dictionary<string, PendingRestoreTable>(state.PendingRestore, StringComparer.OrdinalIgnoreCase);
-        var tables = new Dictionary<string, TableState>(state.Tables, StringComparer.OrdinalIgnoreCase);
-        foreach (var (entity, mark) in pending)
-        {
-            SetTable(tables, entity, mark.Table);
-        }
-
-        var remaining = versions.ToDictionary(
-            kv => kv.Key,
-            kv => (IReadOnlyList<ParquetVersion>)kv.Value
-                .Where(v => !(pending.TryGetValue(kv.Key, out var mark) && mark.VersionId == v.Id)).ToList(),
-            StringComparer.OrdinalIgnoreCase);
-        var plan = Plan(remaining, tables, snapshot);
-        var finished = pending
-            .Where(m => !plan.Restore.Any(r => string.Equals(r.Entity, m.Key, StringComparison.OrdinalIgnoreCase))
-                && !plan.Archive.Contains(m.Key, StringComparer.OrdinalIgnoreCase))
-            .Select(m => (m.Key, new ParquetVersion { Id = m.Value.VersionId, Table = m.Value.Table }));
-        return new RestorePlan(
-            plan.Restore.Concat(finished).OrderBy(r => r.Item1, StringComparer.OrdinalIgnoreCase).ToList(),
-            plan.Archive);
-    }
-
     // Tablas que restaurar un punto recarga en SQL: las que vuelven atrás y las que un restore
     // anterior ya movió sin llegar a recargarlas (PipelineState.PendingReload).
     public static IReadOnlyList<string> ToReload(RestorePlan plan, IEnumerable<string> pendingReload) =>

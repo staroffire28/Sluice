@@ -373,6 +373,7 @@ public sealed class OrchestrationService : IOrchestrationService
             if (state.RestoreInProgress is not null)
             {
                 stateStore.Save(state with { RestoreInProgress = null });
+                return null;
             }
 
             throw new InvalidOperationException($"El pipeline ya está en el punto {snapshot}.");
