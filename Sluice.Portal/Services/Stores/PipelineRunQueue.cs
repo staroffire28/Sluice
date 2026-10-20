@@ -2,12 +2,14 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
+using Sluice.Portal.Services.Logging;
 
 namespace Sluice.Portal.Services.Stores;
 
 // Una ejecución pedida mientras el pipeline estaba ocupado: el scheduler la lanza en su vuelta
-// cuando el pipeline queda libre (también si el job en curso falla o se cancela).
-public sealed record QueuedRun(JobType Type, DateTimeOffset RequestedAt);
+// cuando el pipeline queda libre (también si el job en curso falla o se cancela). RequestedBy: null
+// en peticiones anteriores a la auditoría.
+public sealed record QueuedRun(JobType Type, DateTimeOffset RequestedAt, AuditActor? RequestedBy = null);
 
 // Un hueco por pipeline, en {pipeline}/state/queued_run.json junto al resto de su estado. No es un
 // job: el job se crea al arrancar, así que no cuenta como activo ni lo ve el vigilante de huérfanos.

@@ -1,9 +1,9 @@
 @using Sluice.Portal.Services
 @using Sluice.Portal.Services.Logging
 @using Sluice.Portal.Services.Stores
-@inject PipelineRunQueue RunQueue
+@inject IOrchestrationService Orchestration
 @inject INotificationService NotificationService
-@inject IActivityLog ActivityLog
+@inject CircuitAuditActor Audit
 @inject IStringLocalizer<SharedResource> L
 
 @* La ejecución que espera a que termine el job en curso, con la opción de quitarla. *@
@@ -36,10 +36,9 @@
 
         // Si el scheduler ya lo reservó para lanzarlo, no se puede quitar: se avisa y se refresca.
         var label = JobTypeLabels.Get(L, queued.Type);
-        if (RunQueue.Remove(PipelineId))
+        if (Orchestration.DequeueRun(Audit.Current, PipelineId) is not null)
         {
             await NotificationService.ShowSuccessToastAsync(string.Format(L["Page.Pipelines.Unqueued"].Value, label));
-            ActivityLog.LogUser("pipeline.queue.removed", $"{queued.Type} quitado de la cola del pipeline {PipelineId}.", PipelineId);
         }
         else
         {

@@ -18,7 +18,7 @@
 @inject IJSRuntime Js
 @inject INotificationService NotificationService
 @inject IDialogService DialogService
-@inject IActivityLog ActivityLog
+@inject CircuitAuditActor Audit
 @inject ILogger<JobDetail> Logger
 @inject NavigationManager Nav
 @inject IStringLocalizer<SharedResource> L
@@ -661,7 +661,7 @@
 
         try
         {
-            await Orchestration.CancelAsync(jobId);
+            await Orchestration.CancelAsync(Audit.Current, jobId);
             await NotificationService.ShowInfoToastAsync(string.Format(L["Common.JobCancelled"].Value, jobId));
             await RefreshAsync();
         }
@@ -685,9 +685,8 @@
 
         try
         {
-            var job = await Orchestration.RetryJobAsync(jobId);
+            var job = await Orchestration.RetryJobAsync(Audit.Current, jobId);
             await NotificationService.ShowSuccessToastAsync(string.Format(L["Common.RetryStarted"].Value, job.Id));
-            ActivityLog.LogUser("pipeline.retry", $"Reintento del job {jobId} (nuevo job {job.Id}).", job.PipelineId, job.Id);
             // Navega al nuevo job con recarga completa: es el mismo componente @page, así que
             // sin forceLoad el JobId del parámetro no se refresca y la página quedaría mostrando
             // el job fallido. forceLoad re-inicializa el componente con el job nuevo.

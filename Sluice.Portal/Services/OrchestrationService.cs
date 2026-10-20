@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
+using Sluice.Portal.Services.Logging;
 using Sluice.Portal.Services.Pipeline;
 using Sluice.Portal.Services.Stores;
 
@@ -13,33 +14,45 @@ public interface IOrchestrationService
     QueueSnapshot GetQueueSnapshot();
     IReadOnlyList<WorkerStatus> GetWorkers();
     IReadOnlyList<Job> GetActiveJobs();
-    Task<Job> RunPipelineAsync(string pipelineId, JobType type, CancellationToken cancellationToken = default);
-    Task<Job> RetryJobAsync(string jobId, CancellationToken cancellationToken = default);
-    Task<Job> ResyncTableAsync(string pipelineId, string entity, ResyncMode mode, CancellationToken cancellationToken = default);
 
-    // Varias tablas en un solo job (un solo job activo por pipeline). triggeredBy: "user" | "auto".
-    // Por defecto no soportado, para los dobles de test que no lo ejercitan.
-    Task<Job> ResyncTablesAsync(string pipelineId, IReadOnlyList<string> entities, ResyncMode mode, string triggeredBy, CancellationToken cancellationToken = default) =>
+    // Lo que muta recibe quién actúa (AuditActor) y queda en el registro de actividad: el
+    // resultado, el rechazo o el error.
+    Task<Job> RunPipelineAsync(AuditActor actor, string pipelineId, JobType type, CancellationToken cancellationToken = default);
+    Task<Job> RetryJobAsync(AuditActor actor, string jobId, CancellationToken cancellationToken = default);
+    Task<Job> ResyncTableAsync(AuditActor actor, string pipelineId, string entity, ResyncMode mode, CancellationToken cancellationToken = default);
+
+    // Varias tablas en un solo job (un solo job activo por pipeline); con el actor AutoFix es la
+    // corrección automática. Por defecto no soportado, para los dobles de test que no lo ejercitan.
+    Task<Job> ResyncTablesAsync(AuditActor actor, string pipelineId, IReadOnlyList<string> entities, ResyncMode mode, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 
-    Task<Job> ReloadFromParquetAsync(string pipelineId, CancellationToken cancellationToken = default);
+    Task<Job> ReloadFromParquetAsync(AuditActor actor, string pipelineId, CancellationToken cancellationToken = default);
 
     // Devuelve todo el pipeline al punto de restauración de un snapshot y recarga SQL de las
     // tablas que volvieron atrás (null si ninguna volvió atrás y solo se archivaron tablas).
-    Task<Job?> RestorePointAsync(string pipelineId, string snapshot, CancellationToken cancellationToken = default) =>
+    Task<Job?> RestorePointAsync(AuditActor actor, string pipelineId, string snapshot, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 
     // Comparación de valores (hash por fila) de una tabla o, con entity null, de todo el pipeline.
-    Task<Job> CompareValuesAsync(string pipelineId, string? entity, CancellationToken cancellationToken = default) =>
+    Task<Job> CompareValuesAsync(AuditActor actor, string pipelineId, string? entity, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
-    Task CancelAsync(string jobId, CancellationToken cancellationToken = default);
+    Task CancelAsync(AuditActor actor, string jobId, CancellationToken cancellationToken = default);
 
     // Si el pipeline tiene un job activo (o uno cancelado que aún se detiene): un Run se rechazaría.
     Task<bool> IsBusyAsync(string pipelineId, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 
     // Deja una ejecución en cola para cuando el pipeline quede libre; la lanza el scheduler.
-    QueuedRun QueueRun(string pipelineId, JobType type) =>
+    QueuedRun QueueRun(AuditActor actor, string pipelineId, JobType type) =>
+        throw new NotSupportedException();
+
+    // Lo quitado de la cola, o null si no había nada (o ya estaba reservado para arrancar).
+    QueuedRun? DequeueRun(AuditActor actor, string pipelineId) =>
+        throw new NotSupportedException();
+
+    // El scheduler lanza lo que estaba en cola. Actúa la cola (AuditActor.Queue); el job guarda
+    // como TriggeredBy a quien lo pidió.
+    Task<Job> StartQueuedAsync(string pipelineId, QueuedRun queued, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 }
 
@@ -53,8 +66,9 @@ public sealed class OrchestrationService : IOrchestrationService
     private readonly IngestManifestStore _manifests;
     private readonly ReportStore _reports;
     private readonly IParquetArtifactService _parquet;
+    private readonly IAuditLog _audit;
     private readonly PipelineStateStore? _stateStore;
-    private readonly PipelineRunQueue? _runQueue;
+    private readonly RunQueueService? _runQueue;
 
     public OrchestrationService(
         IOptions<AppOptions> options,
@@ -65,9 +79,11 @@ public sealed class OrchestrationService : IOrchestrationService
         IngestManifestStore manifests,
         ReportStore reports,
         IParquetArtifactService parquet,
+        IAuditLog audit,
         PipelineStateStore? stateStore = null,
-        PipelineRunQueue? runQueue = null)
+        RunQueueService? runQueue = null)
     {
+        _audit = audit;
         _stateStore = stateStore;
         _runQueue = runQueue;
         _options = options.Value;
@@ -102,13 +118,26 @@ public sealed class OrchestrationService : IOrchestrationService
     // Cancelación cooperativa: purga las tareas Pending del job para que no se procesen más
     // stages, y marca el job Cancelled. La tarea Claimed sigue siendo de su worker: su latido ve
     // Cancelled, detiene el stage y la libera; el router no avanza un job cancelado.
-    public async Task CancelAsync(string jobId, CancellationToken cancellationToken = default)
+    // Un job que ya no está en curso no se toca (no lanza): queda como rechazo en el registro.
+    public Task CancelAsync(AuditActor actor, string jobId, CancellationToken cancellationToken = default) =>
+        _audit.AuditAsync(
+            actor,
+            "job.cancel",
+            _jobs.Get(jobId)?.PipelineId,
+            () => CancelCoreAsync(jobId, cancellationToken),
+            cancelled => cancelled
+                ? new AuditResult($"Cancelación del job {jobId}.")
+                : new AuditResult($"El job {jobId} no estaba en curso: no se canceló.", Outcome: AuditOutcome.Rejected),
+            $"No se pudo cancelar el job {jobId}",
+            jobId: jobId);
+
+    private async Task<bool> CancelCoreAsync(string jobId, CancellationToken cancellationToken)
     {
         // Partial sin FinishedAt también está en curso (ingest parcial que sigue con SQL).
         var job = _jobs.Get(jobId);
         if (job is null || !JobProgressHelper.IsActive(job))
         {
-            return;
+            return false;
         }
 
         await _tasks.CancelJobTasksAsync(jobId, cancellationToken);
@@ -118,7 +147,7 @@ public sealed class OrchestrationService : IOrchestrationService
         job = _jobs.Get(jobId);
         if (job is null || !JobProgressHelper.IsActive(job))
         {
-            return;
+            return false;
         }
 
         var stageStatus = new Dictionary<string, string>(job.StageStatus);
@@ -137,10 +166,17 @@ public sealed class OrchestrationService : IOrchestrationService
             StageStatus = stageStatus,
         });
         _jobs.AppendEvent(jobId, EventLevel.Warning, "Job cancelado por el usuario.");
+        return true;
     }
 
-    public Task<Job> RunPipelineAsync(string pipelineId, JobType type, CancellationToken cancellationToken = default) =>
-        StartAsync(pipelineId, type, entity: null, cancellationToken);
+    public Task<Job> RunPipelineAsync(AuditActor actor, string pipelineId, JobType type, CancellationToken cancellationToken = default) =>
+        _audit.AuditAsync(
+            actor,
+            "pipeline.run",
+            pipelineId,
+            () => StartAsync(actor, pipelineId, type, entity: null, cancellationToken),
+            job => new AuditResult($"Ejecución {type} del pipeline {pipelineId} (job {job.Id}).", job.Id),
+            $"No se pudo iniciar {type} en {pipelineId}");
 
     public async Task<bool> IsBusyAsync(string pipelineId, CancellationToken cancellationToken = default)
     {
@@ -157,7 +193,16 @@ public sealed class OrchestrationService : IOrchestrationService
 
     // Un hueco por pipeline: pedir de nuevo lo mismo avisa de que ya está, y otra cosa se rechaza
     // nombrando lo que hay, para que nada se sustituya sin saberlo.
-    public QueuedRun QueueRun(string pipelineId, JobType type)
+    public QueuedRun QueueRun(AuditActor actor, string pipelineId, JobType type) =>
+        _audit.Audit(
+            actor,
+            "pipeline.queue",
+            pipelineId,
+            () => Enqueue(actor, pipelineId, type),
+            _ => new AuditResult($"{type} en cola en el pipeline {pipelineId}: arranca cuando termine el job en curso."),
+            $"No se pudo dejar {type} en cola en {pipelineId}");
+
+    private QueuedRun Enqueue(AuditActor actor, string pipelineId, JobType type)
     {
         var queue = _runQueue
             ?? throw new InvalidOperationException("Queueing a run requires the run queue.");
@@ -168,7 +213,7 @@ public sealed class OrchestrationService : IOrchestrationService
             throw new InvalidOperationException($"{type} no se puede dejar en cola.");
         }
 
-        var run = new QueuedRun(type, DateTimeOffset.UtcNow);
+        var run = new QueuedRun(type, DateTimeOffset.UtcNow, actor);
         return queue.TryEnqueue(pipelineId, run) switch
         {
             null => run,
@@ -178,11 +223,36 @@ public sealed class OrchestrationService : IOrchestrationService
         };
     }
 
-    // Comparación de valores bajo demanda: de una tabla o, sin entity, de todas las del pipeline.
-    public Task<Job> CompareValuesAsync(string pipelineId, string? entity, CancellationToken cancellationToken = default) =>
-        StartAsync(pipelineId, JobType.CompareValues, string.IsNullOrWhiteSpace(entity) ? null : entity.Trim(), cancellationToken);
+    public QueuedRun? DequeueRun(AuditActor actor, string pipelineId) =>
+        (_runQueue ?? throw new InvalidOperationException("Dequeueing a run requires the run queue."))
+            .Dequeue(actor, pipelineId);
 
-    private async Task<Job> StartAsync(string pipelineId, JobType type, string? entity, CancellationToken cancellationToken)
+    public Task<Job> StartQueuedAsync(string pipelineId, QueuedRun queued, CancellationToken cancellationToken = default) =>
+        _audit.AuditAsync(
+            AuditActor.Queue,
+            "pipeline.queue.started",
+            pipelineId,
+            () => StartAsync(queued.RequestedBy ?? AuditActor.Queue, pipelineId, queued.Type, entity: null, cancellationToken),
+            job => new AuditResult(
+                $"Arranca {queued.Type} en cola del pipeline {pipelineId} (job {job.Id}), pedido por {queued.RequestedBy?.Label ?? "un actor sin registrar"}.",
+                job.Id),
+            $"No se pudo lanzar {queued.Type} en cola del pipeline {pipelineId}");
+
+    // Comparación de valores bajo demanda: de una tabla o, sin entity, de todas las del pipeline.
+    public Task<Job> CompareValuesAsync(AuditActor actor, string pipelineId, string? entity, CancellationToken cancellationToken = default)
+    {
+        entity = string.IsNullOrWhiteSpace(entity) ? null : entity.Trim();
+        return _audit.AuditAsync(
+            actor,
+            "reconcile.values",
+            pipelineId,
+            () => StartAsync(actor, pipelineId, JobType.CompareValues, entity, cancellationToken),
+            job => new AuditResult($"Comparación de valores de {entity ?? "todas las tablas"} (job {job.Id}).", job.Id),
+            "No se pudo iniciar la comparación de valores",
+            target: entity);
+    }
+
+    private async Task<Job> StartAsync(AuditActor actor, string pipelineId, JobType type, string? entity, CancellationToken cancellationToken)
     {
         _ = _pipelines.Get(pipelineId)
             ?? throw new InvalidOperationException("Pipeline not found.");
@@ -193,7 +263,7 @@ public sealed class OrchestrationService : IOrchestrationService
         // Force tiene su propio camino (con la misma guarda y el mismo lock, que no es reentrante).
         if (type == JobType.Force)
         {
-            return await EnqueueParquetReloadAsync(pipelineId, JobType.Force, cancellationToken);
+            return await EnqueueParquetReloadAsync(actor, pipelineId, JobType.Force, cancellationToken);
         }
 
         // Guardia anti-doble-run: si ya hay un job en curso para este pipeline, no se arranca
@@ -219,6 +289,7 @@ public sealed class OrchestrationService : IOrchestrationService
             Type = type,
             Status = JobStatus.Running,
             CurrentStage = firstStage,
+            TriggeredBy = actor,
             StageStatus = new Dictionary<string, string>
             {
                 ["ingest"] = countOnly ? "skipped" : "pending",
@@ -249,11 +320,21 @@ public sealed class OrchestrationService : IOrchestrationService
     }
 
     // Reintento de un job terminado en error: re-ejecuta el pipeline desde Ingest reusando
-    // RunPipelineAsync, salvo que el fallo fuera en SQL tras un ingest completo (entonces recarga
+    // StartAsync, salvo que el fallo fuera en SQL tras un ingest completo (entonces recarga
     // SQL desde el parquet consolidado). Crea un Job NUEVO; el job fallido se conserva como historial
-    // (no se edita ni se borra). La guarda anti-doble-run de RunPipelineAsync evita arrancar si
+    // (no se edita ni se borra). La guarda anti-doble-run de StartAsync evita arrancar si
     // ya hay uno en curso. La tarea fallida en tasks/{stage}/error/ queda como evidencia.
-    public async Task<Job> RetryJobAsync(string jobId, CancellationToken cancellationToken = default)
+    public Task<Job> RetryJobAsync(AuditActor actor, string jobId, CancellationToken cancellationToken = default) =>
+        _audit.AuditAsync(
+            actor,
+            "pipeline.retry",
+            _jobs.Get(jobId)?.PipelineId,
+            () => RetryCoreAsync(actor, jobId, cancellationToken),
+            job => new AuditResult($"Reintento del job {jobId} (nuevo job {job.Id}).", job.Id),
+            $"No se pudo reintentar el job {jobId}",
+            target: jobId);
+
+    private async Task<Job> RetryCoreAsync(AuditActor actor, string jobId, CancellationToken cancellationToken)
     {
         var job = _jobs.Get(jobId)
             ?? throw new InvalidOperationException("Job not found.");
@@ -272,7 +353,7 @@ public sealed class OrchestrationService : IOrchestrationService
 
         if (job.Type is JobType.ReloadFromParquet or JobType.Force)
         {
-            return await EnqueueParquetReloadAsync(job.PipelineId, JobType.Force, cancellationToken);
+            return await EnqueueParquetReloadAsync(actor, job.PipelineId, JobType.Force, cancellationToken);
         }
 
         // Ingest terminó pero SQL no (falló, o el watchdog cerró el job con SQL en pending/running):
@@ -282,7 +363,7 @@ public sealed class OrchestrationService : IOrchestrationService
         if (job.StageStatus.GetValueOrDefault("ingest") == "done"
             && job.StageStatus.GetValueOrDefault("sql") != "done")
         {
-            return await EnqueueParquetReloadAsync(job.PipelineId, JobType.Force, cancellationToken);
+            return await EnqueueParquetReloadAsync(actor, job.PipelineId, JobType.Force, cancellationToken);
         }
 
         // Ingest y SQL hechos pero Reconcile no (falló o el watchdog cerró el job): los datos ya
@@ -291,7 +372,7 @@ public sealed class OrchestrationService : IOrchestrationService
             && job.StageStatus.GetValueOrDefault("sql") == "done"
             && job.StageStatus.GetValueOrDefault("reconcile") != "done")
         {
-            return await RunPipelineAsync(job.PipelineId, JobType.Reconcile, cancellationToken);
+            return await StartAsync(actor, job.PipelineId, JobType.Reconcile, entity: null, cancellationToken);
         }
 
         // ResyncTable arranca en SQL con un manifest sintético de una entidad; reintentarlo como
@@ -300,19 +381,29 @@ public sealed class OrchestrationService : IOrchestrationService
         var retryType = job.Type == JobType.ResyncTable
             ? JobType.Incremental
             : job.Type;
-        return await RunPipelineAsync(job.PipelineId, retryType, cancellationToken);
+        return await StartAsync(actor, job.PipelineId, retryType, entity: null, cancellationToken);
     }
 
     // Re-sincronización de UNA tabla sin reprocesar el pipeline: arranca en el stage SQL
     // (sin ingest) re-mergeando el parquet consolidado durable ya existente; el StageRouter
     // encadena SQL → Reconcile como siempre. Modo Reload = upsert + borrado de huérfanas, sin
     // vaciar la tabla (corrige ambas direcciones, ver SqlExecutor); Remerge = solo upsert.
-    public Task<Job> ResyncTableAsync(string pipelineId, string entity, ResyncMode mode, CancellationToken cancellationToken = default) =>
-        ResyncTablesAsync(pipelineId, string.IsNullOrWhiteSpace(entity) ? [] : [entity], mode, AutoRemediation.TriggeredByUser, cancellationToken);
+    public Task<Job> ResyncTableAsync(AuditActor actor, string pipelineId, string entity, ResyncMode mode, CancellationToken cancellationToken = default) =>
+        ResyncTablesAsync(actor, pipelineId, string.IsNullOrWhiteSpace(entity) ? [] : [entity], mode, cancellationToken);
 
     // Varias tablas en un solo job: la corrección automática re-sincroniza de una vez todas las que
     // divergen (un solo job activo por pipeline). El payload "entity" las lleva separadas por comas.
-    public async Task<Job> ResyncTablesAsync(string pipelineId, IReadOnlyList<string> entities, ResyncMode mode, string triggeredBy, CancellationToken cancellationToken = default)
+    public Task<Job> ResyncTablesAsync(AuditActor actor, string pipelineId, IReadOnlyList<string> entities, ResyncMode mode, CancellationToken cancellationToken = default) =>
+        _audit.AuditAsync(
+            actor,
+            "table.resync",
+            pipelineId,
+            () => ResyncTablesCoreAsync(actor, pipelineId, entities, mode, cancellationToken),
+            job => new AuditResult($"Re-sync {mode} de {string.Join(", ", entities)} en {pipelineId} (job {job.Id}).", job.Id),
+            $"No se pudo iniciar el re-sync de {string.Join(", ", entities)}",
+            target: string.Join(",", entities));
+
+    private async Task<Job> ResyncTablesCoreAsync(AuditActor actor, string pipelineId, IReadOnlyList<string> entities, ResyncMode mode, CancellationToken cancellationToken)
     {
         _ = _pipelines.Get(pipelineId)
             ?? throw new InvalidOperationException("Pipeline not found.");
@@ -330,7 +421,7 @@ public sealed class OrchestrationService : IOrchestrationService
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
         ThrowIfRestorePending(pipelineId);
 
-        return await EnqueueResyncAsync(pipelineId, entities, mode, triggeredBy, cancellationToken);
+        return await EnqueueResyncAsync(actor, pipelineId, entities, mode, cancellationToken);
     }
 
     // Devuelve el pipeline al punto de un snapshot (ParquetVersions.Plan): cada tabla que cambió desde
@@ -342,7 +433,21 @@ public sealed class OrchestrationService : IOrchestrationService
     // consolidado deduplica por Id) y ninguna tabla ya movida pierde filas. Solo se recargan en SQL
     // las tablas que volvieron atrás. Todo bajo el lock de ejecución: entre mover ficheros y encolar
     // el re-sync no puede arrancar otro job.
-    public async Task<Job?> RestorePointAsync(string pipelineId, string snapshot, CancellationToken cancellationToken = default)
+    public Task<Job?> RestorePointAsync(AuditActor actor, string pipelineId, string snapshot, CancellationToken cancellationToken = default) =>
+        _audit.AuditAsync(
+            actor,
+            "pipeline.restore",
+            pipelineId,
+            () => RestorePointCoreAsync(actor, pipelineId, snapshot, cancellationToken),
+            job => new AuditResult(
+                job is null
+                    ? $"Restaurado el punto {snapshot} en {pipelineId}, sin tablas que recargar en SQL."
+                    : $"Restaurado el punto {snapshot} en {pipelineId}; recarga en SQL en el job {job.Id}.",
+                job?.Id),
+            $"No se pudo restaurar el punto {snapshot} en {pipelineId}",
+            target: snapshot);
+
+    private async Task<Job?> RestorePointCoreAsync(AuditActor actor, string pipelineId, string snapshot, CancellationToken cancellationToken)
     {
         _ = _pipelines.Get(pipelineId)
             ?? throw new InvalidOperationException("Pipeline not found.");
@@ -421,7 +526,7 @@ public sealed class OrchestrationService : IOrchestrationService
 
         // La recarga de SQL vacía PendingReload (SqlExecutor), así que un re-sync fallido las deja
         // pendientes para el siguiente intento.
-        var job = await EnqueueResyncAsync(pipelineId, toReload, ResyncMode.Reload, AutoRemediation.TriggeredByUser, cancellationToken);
+        var job = await EnqueueResyncAsync(actor, pipelineId, toReload, ResyncMode.Reload, cancellationToken);
         _jobs.AppendEvent(job.Id, EventLevel.Info,
             $"Restaurado el punto del snapshot {snapshot}: {plan.Restore.Count} tabla(s) vuelven a su versión de entonces"
             + (plan.Archive.Count > 0 ? $" y {plan.Archive.Count} que aún no existían se archivan ({string.Join(", ", plan.Archive)})" : "")
@@ -466,7 +571,7 @@ public sealed class OrchestrationService : IOrchestrationService
     };
 
     // Crea y encola el job de re-sync. Quien llama ya tiene el lock de ejecución del pipeline.
-    private async Task<Job> EnqueueResyncAsync(string pipelineId, IReadOnlyList<string> entities, ResyncMode mode, string triggeredBy, CancellationToken cancellationToken)
+    private async Task<Job> EnqueueResyncAsync(AuditActor actor, string pipelineId, IReadOnlyList<string> entities, ResyncMode mode, CancellationToken cancellationToken)
     {
         var jobId = NewJobId(pipelineId, "resync");
 
@@ -484,7 +589,7 @@ public sealed class OrchestrationService : IOrchestrationService
                 Snapshot = "",
             }).ToList(),
         });
-        var automatic = triggeredBy == AutoRemediation.TriggeredByAuto;
+        var automatic = actor == AuditActor.AutoFix;
 
         var job = new Job
         {
@@ -493,6 +598,7 @@ public sealed class OrchestrationService : IOrchestrationService
             Type = JobType.ResyncTable,
             Status = JobStatus.Running,
             CurrentStage = PipelineStage.Sql,
+            TriggeredBy = actor,
             StageStatus = new Dictionary<string, string>
             {
                 // El re-sync no ingesta: marca el stage como omitido para que StageFlow no lo
@@ -530,7 +636,7 @@ public sealed class OrchestrationService : IOrchestrationService
                 Entity = entity,
                 JobId = jobId,
                 Mode = mode,
-                TriggeredBy = triggeredBy,
+                TriggeredBy = automatic ? AutoRemediation.TriggeredByAuto : AutoRemediation.TriggeredByUser,
                 DivergenceBefore = before,
             });
         }
@@ -574,12 +680,19 @@ public sealed class OrchestrationService : IOrchestrationService
         $"job-{pipelineId}-{(kind is null ? "" : kind + "-")}{DateTimeOffset.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6]}";
 
     // Alias de API: mismo comportamiento que Force (recarga desde parquet consolidado).
-    public Task<Job> ReloadFromParquetAsync(string pipelineId, CancellationToken cancellationToken = default) =>
-        EnqueueParquetReloadAsync(pipelineId, JobType.Force, cancellationToken);
+    public Task<Job> ReloadFromParquetAsync(AuditActor actor, string pipelineId, CancellationToken cancellationToken = default) =>
+        _audit.AuditAsync(
+            actor,
+            "pipeline.reload-from-parquet",
+            pipelineId,
+            () => EnqueueParquetReloadAsync(actor, pipelineId, JobType.Force, cancellationToken),
+            job => new AuditResult($"Recarga desde parquet del pipeline {pipelineId} (job {job.Id}).", job.Id),
+            $"No se pudo iniciar la recarga desde parquet de {pipelineId}");
 
     // Recarga SQL completa desde parquet consolidado (sin re-leer CSV de snapshots).
     // Force y reload-from-parquet comparten este camino: el origen durable es el parquet en ADLS.
     private async Task<Job> EnqueueParquetReloadAsync(
+        AuditActor actor,
         string pipelineId,
         JobType jobType,
         CancellationToken cancellationToken = default)
@@ -633,6 +746,7 @@ public sealed class OrchestrationService : IOrchestrationService
             Type = JobType.Force,
             Status = JobStatus.Running,
             CurrentStage = PipelineStage.Sql,
+            TriggeredBy = actor,
             StageStatus = new Dictionary<string, string>
             {
                 ["ingest"] = "skipped",

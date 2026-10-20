@@ -20,6 +20,10 @@ public sealed record Job
     public List<JobEvent> Events { get; init; } = [];
     public Dictionary<string, object?> Summary { get; init; } = new();
 
+    // Quién lanzó el job (canal, IP y hash de la sesión); el de la cola, quien lo pidió. Null en
+    // jobs anteriores a la auditoría.
+    public Sluice.Portal.Services.Logging.AuditActor? TriggeredBy { get; init; }
+
     // Concurrencia optimista: se incrementa en cada guardado (JobStore.TrySave/JobService).
     // Job.json puede ser escrito por varios workers de stage + la API de cancelación; sin
     // esto, un read-modify-write concurrente podía pisar silenciosamente al otro escritor.

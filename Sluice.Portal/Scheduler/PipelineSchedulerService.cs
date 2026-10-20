@@ -24,7 +24,7 @@ public sealed class PipelineSchedulerService : BackgroundService
     private readonly IActivityLog _activity;
     private readonly OrphanedJobWatchdog _watchdog;
     private readonly QueueStallWatch _queueStall;
-    private readonly PipelineRunQueue _runQueue;
+    private readonly RunQueueService _runQueue;
     private readonly PipelineStateStore _stateStore;
     private readonly Dictionary<string, DateTimeOffset> _stallAlertsSent = new(StringComparer.OrdinalIgnoreCase);
     // Aviso de snapshot incompleto ya registrado en el activity log (pipeline → ronda de aviso), para
@@ -52,7 +52,7 @@ public sealed class PipelineSchedulerService : BackgroundService
         IActivityLog activity,
         OrphanedJobWatchdog watchdog,
         QueueStallWatch queueStall,
-        PipelineRunQueue runQueue,
+        RunQueueService runQueue,
         PipelineStateStore stateStore)
     {
         _stateStore = stateStore;
@@ -227,8 +227,7 @@ public sealed class PipelineSchedulerService : BackgroundService
                         "Scheduler auto-run for pipeline {PipelineId} ({Count} snapshot(s))",
                         pipeline.Id,
                         catalog.PendingSnapshots.Count);
-                    var job = await _orchestration.RunPipelineAsync(pipeline.Id, JobType.Incremental, ct);
-                    _activity.LogSystem("scheduler.run", $"Auto-run del scheduler en el pipeline {pipeline.Id} ({catalog.PendingSnapshots.Count} snapshot(s), job {job.Id}).", pipeline.Id, job.Id);
+                    await _orchestration.RunPipelineAsync(AuditActor.Scheduler, pipeline.Id, JobType.Incremental, ct);
                 }
                 finally
                 {
@@ -293,11 +292,10 @@ public sealed class PipelineSchedulerService : BackgroundService
 
             try
             {
-                var job = await _orchestration.RunPipelineAsync(pipeline.Id, queued.Type, ct);
+                var job = await _orchestration.StartQueuedAsync(pipeline.Id, queued, ct);
                 _runQueue.Complete(pipeline.Id);
                 var requestedAt = queued.RequestedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
                 _jobs.AppendEvent(job.Id, EventLevel.Info, $"Lanzado desde la cola (pedido el {requestedAt} UTC).");
-                _activity.LogSystem("pipeline.queue.started", $"Arranca {queued.Type} en cola del pipeline {pipeline.Id} (job {job.Id}).", pipeline.Id, job.Id);
             }
             catch (PipelineBusyException ex)
             {
@@ -312,7 +310,6 @@ public sealed class PipelineSchedulerService : BackgroundService
                 _runQueue.Complete(pipeline.Id);
                 var message = $"No se pudo lanzar {queued.Type} en cola del pipeline {pipeline.Id}: {ex.Message}";
                 _logger.LogWarning(ex, "Queued run failed for pipeline {PipelineId}", pipeline.Id);
-                _activity.LogSystem("pipeline.queue.failed", message, pipeline.Id, level: "error");
                 await _alerts.SendAsync(message, ct);
             }
         }

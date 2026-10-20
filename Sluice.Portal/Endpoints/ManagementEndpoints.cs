@@ -167,11 +167,11 @@ public static class ManagementEndpoints
         });
         api.MapGet("/storage/overview", async (IStorageOverviewService storage, CancellationToken ct) =>
             Results.Ok(await storage.GetOverviewAsync(ct)));
-        api.MapPost("/pipelines/{id}/reload-from-parquet", async (string id, IOrchestrationService o, CancellationToken ct) =>
+        api.MapPost("/pipelines/{id}/reload-from-parquet", async (string id, HttpContext http, IOrchestrationService o, CancellationToken ct) =>
         {
             try
             {
-                var job = await o.ReloadFromParquetAsync(id, ct);
+                var job = await o.ReloadFromParquetAsync(AuditActor.FromHttp(http), id, ct);
                 return Results.Accepted($"/api/jobs/{job.Id}", job);
             }
             catch (InvalidOperationException ex)
@@ -181,18 +181,18 @@ public static class ManagementEndpoints
         });
         // Con queue=true y el pipeline ocupado, la ejecución queda en cola (202 con lo encolado) y la
         // lanza el scheduler cuando el pipeline queda libre.
-        api.MapPost("/pipelines/{id}/run", async (string id, JobType? type, bool? queue, IOrchestrationService o, CancellationToken ct) =>
+        api.MapPost("/pipelines/{id}/run", async (string id, JobType? type, bool? queue, HttpContext http, IOrchestrationService o, CancellationToken ct) =>
         {
             try
             {
                 try
                 {
-                    var job = await o.RunPipelineAsync(id, type ?? JobType.Incremental, ct);
+                    var job = await o.RunPipelineAsync(AuditActor.FromHttp(http), id, type ?? JobType.Incremental, ct);
                     return Results.Accepted($"/api/jobs/{job.Id}", job);
                 }
                 catch (PipelineBusyException) when (queue == true)
                 {
-                    return Results.Accepted(uri: null, o.QueueRun(id, type ?? JobType.Incremental));
+                    return Results.Accepted(uri: null, o.QueueRun(AuditActor.FromHttp(http), id, type ?? JobType.Incremental));
                 }
             }
             catch (InvalidOperationException ex)
@@ -201,15 +201,15 @@ public static class ManagementEndpoints
             }
         });
         // 409 si el scheduler ya la reservó para arrancar: ya no se puede quitar.
-        api.MapDelete("/pipelines/{id}/queue", (string id, PipelineRunQueue runQueue) =>
-            runQueue.Remove(id) ? Results.NoContent()
+        api.MapDelete("/pipelines/{id}/queue", (string id, HttpContext http, IOrchestrationService o, RunQueueService runQueue) =>
+            o.DequeueRun(AuditActor.FromHttp(http), id) is not null ? Results.NoContent()
             : runQueue.Get(id) is not null ? Results.Problem(detail: "La ejecución en cola ya está arrancando.", statusCode: StatusCodes.Status409Conflict)
             : Results.NotFound());
-        api.MapPost("/pipelines/{id}/reconcile", async (string id, IOrchestrationService o, CancellationToken ct) =>
+        api.MapPost("/pipelines/{id}/reconcile", async (string id, HttpContext http, IOrchestrationService o, CancellationToken ct) =>
         {
             try
             {
-                var job = await o.RunPipelineAsync(id, JobType.Reconcile, ct);
+                var job = await o.RunPipelineAsync(AuditActor.FromHttp(http), id, JobType.Reconcile, ct);
                 return Results.Accepted($"/api/jobs/{job.Id}", job);
             }
             catch (InvalidOperationException ex)
@@ -217,11 +217,11 @@ public static class ManagementEndpoints
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid operation.");
             }
         });
-        api.MapPost("/pipelines/{id}/diff", async (string id, IOrchestrationService o, CancellationToken ct) =>
+        api.MapPost("/pipelines/{id}/diff", async (string id, HttpContext http, IOrchestrationService o, CancellationToken ct) =>
         {
             try
             {
-                var job = await o.RunPipelineAsync(id, JobType.Diff, ct);
+                var job = await o.RunPipelineAsync(AuditActor.FromHttp(http), id, JobType.Diff, ct);
                 return Results.Accepted($"/api/jobs/{job.Id}", job);
             }
             catch (InvalidOperationException ex)
@@ -230,11 +230,11 @@ public static class ManagementEndpoints
             }
         });
         // Comparación de valores (hash por fila parquet vs SQL) de una tabla o, sin entity, de todas.
-        api.MapPost("/pipelines/{id}/compare-values", async (string id, string? entity, IOrchestrationService o, CancellationToken ct) =>
+        api.MapPost("/pipelines/{id}/compare-values", async (string id, string? entity, HttpContext http, IOrchestrationService o, CancellationToken ct) =>
         {
             try
             {
-                var job = await o.CompareValuesAsync(id, entity, ct);
+                var job = await o.CompareValuesAsync(AuditActor.FromHttp(http), id, entity, ct);
                 return Results.Accepted($"/api/jobs/{job.Id}", job);
             }
             catch (InvalidOperationException ex)
@@ -359,11 +359,11 @@ public static class ManagementEndpoints
         });
         api.MapGet("/jobs/{id}/download", (string id, IJobService svc) =>
             svc.Get(id) is { } j ? Results.Ok(j) : Results.NotFound());
-        api.MapPost("/jobs/{id}/retry", async (string id, IOrchestrationService o, CancellationToken ct) =>
+        api.MapPost("/jobs/{id}/retry", async (string id, HttpContext http, IOrchestrationService o, CancellationToken ct) =>
         {
             try
             {
-                var job = await o.RetryJobAsync(id, ct);
+                var job = await o.RetryJobAsync(AuditActor.FromHttp(http), id, ct);
                 return Results.Accepted($"/api/jobs/{job.Id}", job);
             }
             catch (InvalidOperationException ex)

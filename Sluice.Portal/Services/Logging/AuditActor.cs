@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Serialization;
 using Sluice.Portal.Services.Auth;
 
 namespace Sluice.Portal.Services.Logging;
@@ -18,6 +19,10 @@ public sealed record AuditActor(string Source, string Channel, string? Client)
     public static readonly AuditActor Retention = System("retention");
     public static readonly AuditActor Worker = System("worker");
     public static readonly AuditActor Demo = System("demo");
+
+    // Canal y cliente, como la columna Actor de Logs. Se guarda dentro de Job y QueuedRun: no se serializa.
+    [JsonIgnore]
+    public string Label => Client is null ? Channel : $"{Channel} · {Client}";
 
     public static AuditActor Ui(string? client = null) => new(UserSource, "ui", client);
 
