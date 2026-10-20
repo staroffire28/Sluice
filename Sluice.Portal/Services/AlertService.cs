@@ -8,6 +8,10 @@ namespace Sluice.Portal.Services;
 
 public sealed class AlertService
 {
+    // Cliente propio sin los loggers de IHttpClientFactory: redactan la query, pero escriben la ruta,
+    // y hay webhooks (Slack, Teams, Discord) con el token en la ruta.
+    public const string HttpClientName = "alert-webhook";
+
     private static readonly TimeSpan HttpTimeout = TimeSpan.FromSeconds(10);
     private const int MaxResponseBodyInDetail = 300;
 
@@ -229,7 +233,7 @@ public sealed class AlertService
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(HttpTimeout);
 
-            using var response = await _httpFactory.CreateClient().PostAsJsonAsync(url, payload, cts.Token);
+            using var response = await _httpFactory.CreateClient(HttpClientName).PostAsJsonAsync(url, payload, cts.Token);
             var status = (int)response.StatusCode;
             if (response.IsSuccessStatusCode)
             {
@@ -267,7 +271,7 @@ public sealed class AlertService
         }
     }
 
-    // La URL lleva la firma (sig=...) en la query: es un secreto, en los logs solo el host.
+    // La URL lleva un secreto (la firma sig=... en la query, o un token en la ruta): en los logs solo el host.
     private static string WebhookHost(string url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : "(invalid URL)";
 }

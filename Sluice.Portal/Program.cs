@@ -87,6 +87,7 @@ if (!builder.Environment.IsDevelopment() && !appOptions.IsOpenAccess)
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient(DeadmanService.HttpClientName).RemoveAllLoggers();
+builder.Services.AddHttpClient(AlertService.HttpClientName).RemoveAllLoggers();
 builder.Services.AddProblemDetails();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
