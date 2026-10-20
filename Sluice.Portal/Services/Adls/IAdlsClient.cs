@@ -11,8 +11,8 @@ public interface IAdlsClient
     Task<string?> GetSettledSnapshotAsync(CancellationToken cancellationToken = default);
     Task<DateTimeOffset?> GetChangelogLastModifiedAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> ListSnapshotFoldersAsync(CancellationToken cancellationToken = default);
-    // Confirma que una carpeta sellada se volcó completa (cada entidad presente tiene
-    // al menos un CSV con datos). Defiende ante un fallo de volcado de Synapse.
+    // Confirma que una carpeta sellada se volcó completa (cada partition declarada en el model.json
+    // de su raíz existe y no está vacía; ver SnapshotManifest). Defiende ante un fallo de volcado de Synapse.
     Task<SnapshotIntegrity> ValidateSnapshotAsync(string snapshot, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> ListEntitiesAsync(string snapshot, CancellationToken cancellationToken = default);
     Task<CdmEntitySchema> GetEntitySchemaAsync(string entity, string snapshot, string? settledSnapshot, CancellationToken cancellationToken = default);

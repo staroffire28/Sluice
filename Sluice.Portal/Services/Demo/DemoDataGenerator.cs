@@ -176,6 +176,32 @@ public sealed class DemoDataGenerator
         Directory.CreateDirectory(Path.GetDirectoryName(optionsets)!);
         File.WriteAllLines(optionsets, Optionsets.Select(o =>
             $"{o.Column},{o.Option},False,1033,{Quote(o.Label)},,{o.Entity},{o.Label}"));
+        WriteSnapshotModel(folder);
+    }
+
+    // model.json de la raíz del snapshot, como Synapse Link: todas las tablas, y "partitions" (URL
+    // de cada CSV) solo en las que traen datos en esta carpeta. El portal valida el snapshot con él.
+    private void WriteSnapshotModel(string folder)
+    {
+        var entities = Entities.Select(entity =>
+        {
+            var dir = Path.Combine(ContainerPath, folder, entity.Name);
+            var files = Directory.Exists(dir)
+                ? Directory.GetFiles(dir, "*.csv").Select(Path.GetFileName).Order(StringComparer.Ordinal).ToList()
+                : [];
+            return files.Count == 0
+                ? (object)new { name = entity.Name }
+                : new
+                {
+                    name = entity.Name,
+                    partitions = files.Select(file => new
+                    {
+                        name = Path.GetFileNameWithoutExtension(file),
+                        location = $"https://localhost/{Container}/{folder}/{entity.Name}/{file}",
+                    }).ToArray(),
+                };
+        }).ToArray();
+        File.WriteAllText(Path.Combine(ContainerPath, folder, "model.json"), JsonSerializer.Serialize(new { name = "cdm", entities }));
     }
 
     private static string Row(Entity entity, int index, DateTimeOffset at, long version, Random rng)

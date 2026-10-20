@@ -111,17 +111,16 @@ public sealed class LocalFolderClient : IAdlsClient, IParquetStore
 
     public async Task<SnapshotIntegrity> ValidateSnapshotAsync(string snapshot, CancellationToken cancellationToken = default)
     {
-        // Mismo criterio que AdlsClient: basta una entidad con un CSV no vacío.
+        // Mismo criterio que AdlsClient: cada partition del model.json de la raíz existe y no está vacía.
         var entities = await ListEntitiesAsync(snapshot, cancellationToken);
-        if (entities.Count == 0)
+        var folder = SourcePath(snapshot);
+        var model = Path.Combine(folder, SnapshotManifest.ModelFile);
+        var modelJson = File.Exists(model) ? await File.ReadAllTextAsync(model, cancellationToken) : null;
+        return SnapshotManifest.Evaluate(snapshot, modelJson, entities.Count > 0, relative =>
         {
-            return new SnapshotIntegrity(true, null, null);
-        }
-
-        var hasData = entities.Any(entity => CsvFiles(snapshot, entity).Any(f => new FileInfo(f).Length > 0));
-        return hasData
-            ? new SnapshotIntegrity(true, null, null)
-            : new SnapshotIntegrity(false, null, $"Snapshot '{snapshot}' has no non-empty CSV in any entity (empty or in-progress export).");
+            var file = new FileInfo(Confine(folder, relative));
+            return file.Exists ? file.Length : null;
+        });
     }
 
     public Task<IReadOnlyList<string>> ListEntitiesAsync(string snapshot, CancellationToken cancellationToken = default)
