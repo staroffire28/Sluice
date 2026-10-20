@@ -20,6 +20,10 @@ playwright-report/
 data/
 .gstack/
 
+# Copias del DATA_DIR (scripts/backup-data-dir.ps1): llevan datos del cliente
+backups/
+*.tar.gz
+
 # Material de referencia/análisis: pipeline de Microsoft y datos de la instancia
 # F&O (model.json, GlobalOptionsetMetadata.csv). No es código del proyecto.
 references/
