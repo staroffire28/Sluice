@@ -130,7 +130,7 @@ void main() {
   float h = hash(cell);
   float thickness = mix(0.5, ROW * 0.45, density);
   if (h < 0.15) thickness += 0.6 * (1.0 - 0.7 * clean) * sin(u_time * 2.0 + h * 40.0);
-  float edge = smoothstep(0.0, 0.08, u) * smoothstep(1.0, 0.97, u);
+  float edge = smoothstep(0.0, 0.08, u) * (1.0 - smoothstep(0.97, 1.0, u));
   float a = clamp(0.5 - (abs(px.y - center.y) - thickness * 0.5) * u_dpr, 0.0, 1.0) * alpha * edge;
   outColor = vec4(color * a, a);
 }`;
@@ -152,8 +152,14 @@ void main() {
         return gl.getProgramParameter(program, gl.LINK_STATUS) ? program : null;
     }
 
+    // Canvases ya enganchados, y los que siguen en marcha (para soltarlos al salir del DOM). La
+    // guarda no puede ser el atributo: el sincronizado del DOM de Blazor lo devuelve a "".
+    const started = new WeakSet();
+    const active = new Set();
+
     function start(canvas) {
-        canvas.dataset.sluiceFlow = 'running';
+        started.add(canvas);
+        canvas.dataset.sluiceFlow = 'running'; // solo informativo (lo miran los tests de UI)
         const gl = canvas.getContext('webgl2', { alpha: true, antialias: false, depth: false });
         const program = gl && compile(gl);
         if (!program) {
@@ -165,7 +171,10 @@ void main() {
         const time = gl.getUniformLocation(program, 'u_time');
         const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const startedAt = performance.now();
-        let visible = true;
+        // Se dibuja solo si el canvas está en pantalla y la pestaña visible: el primer aviso del
+        // IntersectionObserver llega justo tras observe().
+        let intersecting = false;
+        let visible = false;
         let raf = 0;
         let lastDraw = 0;
 
@@ -209,24 +218,56 @@ void main() {
             }
         }
 
-        new IntersectionObserver(function (entries) {
-            visible = entries[0].isIntersecting && document.visibilityState === 'visible';
+        function updateVisibility() {
+            visible = intersecting && document.visibilityState === 'visible';
             resume();
-        }).observe(canvas);
-        document.addEventListener('visibilitychange', function () {
-            visible = document.visibilityState === 'visible';
-            resume();
+        }
+
+        const intersection = new IntersectionObserver(function (entries) {
+            intersecting = entries[entries.length - 1].isIntersecting;
+            updateVisibility();
         });
-        new ResizeObserver(function () {
+        intersection.observe(canvas);
+        document.addEventListener('visibilitychange', updateVisibility);
+        const resize = new ResizeObserver(function () {
             if (reducedMotion) {
                 resume();
             }
-        }).observe(canvas);
+        });
+        resize.observe(canvas);
+
+        // Fuera del DOM (p. ej. tras una navegación de Blazor) se suelta todo, también el
+        // contexto WebGL: el navegador solo admite unos pocos a la vez.
+        const flow = {
+            canvas: canvas,
+            stop: function () {
+                active.delete(flow);
+                cancelAnimationFrame(raf);
+                raf = 0;
+                intersection.disconnect();
+                resize.disconnect();
+                document.removeEventListener('visibilitychange', updateVisibility);
+                const lose = gl.getExtension('WEBGL_lose_context');
+                if (lose) {
+                    lose.loseContext();
+                }
+            },
+        };
+        active.add(flow);
         resume();
     }
 
     function scan() {
-        document.querySelectorAll('canvas[data-sluice-flow=""]').forEach(start);
+        active.forEach(function (flow) {
+            if (!flow.canvas.isConnected) {
+                flow.stop();
+            }
+        });
+        document.querySelectorAll('canvas[data-sluice-flow]').forEach(function (canvas) {
+            if (!started.has(canvas)) {
+                start(canvas);
+            }
+        });
     }
 
     if (document.readyState === 'loading') {
