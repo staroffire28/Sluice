@@ -4,7 +4,9 @@
 <FluentDialog @ref="_dialog" Modal="true" Class="@Class" OnStateChange="OnStateChangeAsync">
     <FluentDialogBody>
         <TitleTemplate>@Title</TitleTemplate>
-        <ChildContent>@ChildContent</ChildContent>
+        @* Apila el contenido en vertical con un espaciado común: sin esto, los diálogos sencillos
+           (texto + casilla) quedaban en una sola línea. *@
+        <ChildContent><div class="dialog-body">@ChildContent</div></ChildContent>
         <ActionTemplate>@Actions</ActionTemplate>
     </FluentDialogBody>
 </FluentDialog>

@@ -468,6 +468,13 @@ html[data-nav-mode="expanded"] .app-sidebar [data-nav-mode-set="expanded"] {
     background: #fdecee;
 }
 
+/* Contenedor que InlineDialog pone alrededor de cualquier contenido. */
+.dialog-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
 .dialog-form {
     display: flex;
     flex-direction: column;
