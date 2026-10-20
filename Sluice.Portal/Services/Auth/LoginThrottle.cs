@@ -22,9 +22,18 @@ public sealed class LoginThrottle
     public LoginThrottle(TimeProvider? time = null) => _time = time ?? TimeProvider.System;
 
     public bool IsBlocked(string client) =>
+        _entries.TryGetValue(client, out var entry) && IsBlocked(entry);
+
+    // True solo la primera vez que se informa del bloqueo del cliente en la ventana actual, para
+    // dejar una única entrada de bloqueo por ventana en el registro de actividad.
+    public bool TryMarkBlockReported(string client) =>
         _entries.TryGetValue(client, out var entry)
-        && _time.GetUtcNow() - entry.WindowStart < Window
-        && entry.Failures >= MaxFailures;
+        && IsBlocked(entry)
+        && !entry.BlockReported
+        && _entries.TryUpdate(client, entry with { BlockReported = true }, entry);
+
+    private bool IsBlocked(Entry entry) =>
+        _time.GetUtcNow() - entry.WindowStart < Window && entry.Failures >= MaxFailures;
 
     public void RecordFailure(string client)
     {
@@ -42,11 +51,11 @@ public sealed class LoginThrottle
 
         _entries.AddOrUpdate(
             client,
-            _ => new Entry(now, 1),
-            (_, entry) => now - entry.WindowStart >= Window ? new Entry(now, 1) : entry with { Failures = entry.Failures + 1 });
+            _ => new Entry(now, 1, false),
+            (_, entry) => now - entry.WindowStart >= Window ? new Entry(now, 1, false) : entry with { Failures = entry.Failures + 1 });
     }
 
     public void Reset(string client) => _entries.TryRemove(client, out _);
 
-    private sealed record Entry(DateTimeOffset WindowStart, int Failures);
+    private sealed record Entry(DateTimeOffset WindowStart, int Failures, bool BlockReported);
 }

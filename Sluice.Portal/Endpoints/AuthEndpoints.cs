@@ -11,27 +11,42 @@ public static class AuthEndpoints
 
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        // Cada intento queda en el registro de actividad (nunca la clave): el correcto, la clave
-        // incorrecta o vacía, el bloqueo por fuerza bruta y el formulario sin token antiforgery.
+        // Los intentos quedan en el registro de actividad (nunca la clave). Para que nadie sin clave
+        // pueda inundarlo, cada fallo (formulario sin token antiforgery, clave vacía o incorrecta)
+        // cuenta en LoginThrottle y solo se registra mientras el cliente no está bloqueado; el
+        // bloqueo se registra una sola vez por ventana.
         app.MapPost("/auth/login", async (HttpContext context, IAuthService auth, IAntiforgery antiforgery, LoginThrottle throttle, IAuditLog audit) =>
         {
             var isJson = context.Request.HasJsonContentType();
             var actor = AuditActor.FromHttp(context, isJson ? "api" : "ui");
+            var client = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
             void Record(AuditOutcome outcome, string message) =>
                 audit.Record(actor, "auth.login", outcome, null, null, null, message);
+            void RecordFailure(string message)
+            {
+                throttle.RecordFailure(client);
+                Record(AuditOutcome.Rejected, message);
+            }
 
             if (!isJson && !await TryValidateFormAntiforgeryAsync(context, antiforgery))
             {
-                Record(AuditOutcome.Rejected, "Inicio de sesión rechazado: el formulario no trae un token antiforgery válido.");
+                if (!throttle.IsBlocked(client))
+                {
+                    RecordFailure("Inicio de sesión rechazado: el formulario no trae un token antiforgery válido.");
+                }
+
                 return Results.Redirect("/login?error=csrf");
             }
 
             // Fuerza bruta: demasiados fallos recientes desde este cliente => se rechaza sin
             // comprobar la clave (ni siquiera la correcta) hasta que expire la ventana.
-            var client = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
             if (throttle.IsBlocked(client))
             {
-                Record(AuditOutcome.Rejected, "Inicio de sesión bloqueado: demasiados intentos fallidos recientes desde este cliente.");
+                if (throttle.TryMarkBlockReported(client))
+                {
+                    Record(AuditOutcome.Rejected, "Inicio de sesión bloqueado: demasiados intentos fallidos recientes desde este cliente.");
+                }
+
                 return isJson
                     ? Results.StatusCode(StatusCodes.Status429TooManyRequests)
                     : Results.Redirect("/login?error=throttled");
@@ -41,7 +56,7 @@ public static class AuthEndpoints
 
             if (string.IsNullOrWhiteSpace(key))
             {
-                Record(AuditOutcome.Rejected, "Inicio de sesión rechazado: no se indicó la clave.");
+                RecordFailure("Inicio de sesión rechazado: no se indicó la clave.");
                 return isJson
                     ? Results.BadRequest(new { error = "Key is required in request body." })
                     : Results.Redirect("/login?error=required");
@@ -49,8 +64,7 @@ public static class AuthEndpoints
 
             if (!auth.TryLogin(key, context))
             {
-                throttle.RecordFailure(client);
-                Record(AuditOutcome.Rejected, "Inicio de sesión rechazado: clave incorrecta.");
+                RecordFailure("Inicio de sesión rechazado: clave incorrecta.");
                 return isJson
                     ? Results.Unauthorized()
                     : Results.Redirect("/login?error=invalid");
@@ -82,8 +96,13 @@ public static class AuthEndpoints
             var actor = AuditActor.FromHttp(context, "ui");
             if (!await TryValidateFormAntiforgeryAsync(context, antiforgery))
             {
-                audit.Record(actor, "auth.logout", AuditOutcome.Rejected, null, null, null,
-                    "Cierre de sesión rechazado: el formulario no trae un token antiforgery válido.");
+                // Sin sesión válida no se registra: cualquiera podría inundar el registro.
+                if (auth.HasValidUiSession(context))
+                {
+                    audit.Record(actor, "auth.logout", AuditOutcome.Rejected, null, null, null,
+                        "Cierre de sesión rechazado: el formulario no trae un token antiforgery válido.");
+                }
+
                 return Results.BadRequest();
             }
 
