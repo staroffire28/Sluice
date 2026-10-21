@@ -1,4 +1,4 @@
-# Restaura un backup de pipeline-data (ver scripts\backup-data-dir.ps1) DENTRO de un
+﻿# Restaura un backup de pipeline-data (ver scripts\backup-data-dir.ps1) DENTRO de un
 # volumen Docker existente. SOBRESCRIBE el contenido actual del volumen -- confirma
 # antes de continuar. Detén api/worker-* antes de restaurar (el rename atómico de la
 # cola no espera a que el volumen cambie por debajo).

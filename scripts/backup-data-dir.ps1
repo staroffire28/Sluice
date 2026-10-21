@@ -1,4 +1,4 @@
-# Backup del volumen Docker pipeline-data (DATA_DIR compartido entre api/worker-*).
+﻿# Backup del volumen Docker pipeline-data (DATA_DIR compartido entre api/worker-*).
 # Incluye conexiones (secretos cifrados at-rest), pipelines, jobs, cola de tareas,
 # reportes y el keyring de Data Protection que descifra los secretos de conexión --
 # perder el keyring vuelve irrecuperables las credenciales ADLS/SQL ya guardadas
