@@ -17,9 +17,9 @@
 # Demo-only SQL password, shared by both services. Override it with DEMO_SQL_PASSWORD.
 x-demo-sql-password: &demo-sql-password ${DEMO_SQL_PASSWORD:-Sluice_Demo_0nly!}
 
-# Log rotation for every service: up to 5 files of 20 MB each. The driver is pinned to json-file, which these options require.
+# Log rotation for every service: up to 5 files of 20 MB each, with the compressed local driver.
 x-logging: &default-logging
-  driver: json-file
+  driver: local
   options:
     max-size: 20m
     max-file: "5"

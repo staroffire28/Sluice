@@ -19,9 +19,9 @@
 # Mide dónde satura antes de escalar: el cuello puede ser
 # SQL/ADLS, no el worker — y eso no se arregla con más réplicas.
 
-# Rotación de logs: hasta 5 ficheros de 20 MB. Driver json-file fijo: son opciones exclusivas de json-file/local.
+# Rotación de logs: hasta 5 ficheros de 20 MB, con el driver local (comprimido).
 x-logging: &default-logging
-  driver: json-file
+  driver: local
   options:
     max-size: 20m
     max-file: "5"
