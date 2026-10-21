@@ -67,6 +67,12 @@ $tempDir = $null
 if ($Recipient) {
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "sluice-backup-$([guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Path $tempDir | Out-Null
+    if ($IsWindows -eq $false) {
+        chmod 700 $tempDir
+        if ($LASTEXITCODE -ne 0) {
+            throw "No se pudo restringir la carpeta temporal $tempDir (chmod exit code $LASTEXITCODE)."
+        }
+    }
     $tarDir = $tempDir
 }
 
