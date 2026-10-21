@@ -18,6 +18,14 @@
 # (TaskStore.TryClaimAsync) no colisiona entre réplicas del mismo stage.
 # Mide dónde satura antes de escalar: el cuello puede ser
 # SQL/ADLS, no el worker — y eso no se arregla con más réplicas.
+
+# Rotación de logs: hasta 5 ficheros de 20 MB, con el driver json-file (los daemons de Windows no registran el driver local).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: 20m
+    max-file: "5"
+
 services:
   api:
     build:
@@ -47,6 +55,7 @@ services:
     restart: unless-stopped
     mem_limit: 2g
     cpus: 2
+    logging: *default-logging
 
   worker-ingest:
     build:
@@ -71,6 +80,7 @@ services:
     # cientos de MB); un tope arbitrario solo pospone el mismo problema con otra tabla. El
     # worker usa la memoria real disponible del host en vez de un techo artificial.
     cpus: 2
+    logging: *default-logging
 
   worker-sql:
     build:
@@ -93,6 +103,7 @@ services:
     restart: unless-stopped
     # Ver comentario de mem_limit en worker-ingest: memoria dinámica, sin tope fijo.
     cpus: 2
+    logging: *default-logging
 
   worker-reconcile:
     build:
@@ -114,6 +125,7 @@ services:
     restart: unless-stopped
     # Ver comentario de mem_limit en worker-ingest: memoria dinámica, sin tope fijo.
     cpus: 2
+    logging: *default-logging
 
 volumes:
   pipeline-data:
