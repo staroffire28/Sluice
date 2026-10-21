@@ -91,7 +91,7 @@ Then open `http://localhost:58472/login`, sign in with your `UI_API_KEY` (with `
 > **Project name `sluice`:** the compose files set `name: sluice`, so the volume is always `sluice_pipeline-data`, whatever folder you run them from. Before, Compose took the project name from the folder: if you deployed from a folder not named `Sluice`, your data is in `<project>_pipeline-data`, where `<project>` is that folder's name in lowercase (check with `docker volume ls`), and the update would start the stack on a new, empty volume. Before step 2, pick one:
 >
 > - **Keep the old name:** add `COMPOSE_PROJECT_NAME=<project>` to `.env` (it takes precedence over `name:`).
-> - **Move the data to `sluice_pipeline-data`**, with the old stack stopped (`docker compose -p <project> -f <compose file> down`), using the [backup scripts](../BACKUP.md):
+> - **Move the data to `sluice_pipeline-data`** (Linux containers only: the scripts run an `alpine` helper container; with Windows containers, `docker-compose.yml` or `docker-compose.monolith.yml`, use the first option), with the old stack stopped (`docker compose -p <project> -f <compose file> down`), using the [backup scripts](../BACKUP.md):
 >
 >   ```powershell
 >   .\scripts\backup-data-dir.ps1 -VolumeName <project>_pipeline-data
