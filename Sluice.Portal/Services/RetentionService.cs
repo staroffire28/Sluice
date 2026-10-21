@@ -96,6 +96,7 @@ public sealed class RetentionService
             TaskFiles = OrphanTerminalTaskFiles(orphans),
             RunDirectories = OrphanRunDirectories(orphans),
             StagingDirectories = OrphanStagingDirectories(orphans, FailedJobIds(jobs, now)),
+            ActivityLogFiles = OldActivityLogFiles(cutoff),
         };
     }
 
@@ -112,6 +113,7 @@ public sealed class RetentionService
             Tasks = DeleteFiles(plan.TaskFiles),
             Runs = DeleteDirectories(plan.RunDirectories),
             Staging = DeleteDirectories(plan.StagingDirectories),
+            ActivityLogs = DeleteFiles(plan.ActivityLogFiles),
         };
 
         if (result.Total > 0)
@@ -119,7 +121,7 @@ public sealed class RetentionService
             _activity.LogSystem(
                 "retention.sweep",
                 $"Retención: {result.Jobs} jobs, {result.Reports} reportes, {result.Tasks} tareas, " +
-                $"{result.Runs} runs, {result.Staging} staging eliminados " +
+                $"{result.Runs} runs, {result.Staging} staging, {result.ActivityLogs} logs de actividad eliminados " +
                 $"(antigüedad {settings.RetentionDays}d, piso {KeepLastPerPipeline}/pipeline).");
         }
 
@@ -250,6 +252,31 @@ public sealed class RetentionService
         return result;
     }
 
+    // logs/activity-*.jsonl (incluye los .1 rotados): el nombre no lleva fecha, así que se purgan
+    // por la última escritura. Cubre también los archivos de réplicas que ya no existen. El archivo
+    // activo de este proceso nunca se borra.
+    private List<string> OldActivityLogFiles(DateTimeOffset cutoff)
+    {
+        var result = new List<string>();
+        var logsDir = Path.Combine(_options.DataDir, "logs");
+        if (!Directory.Exists(logsDir))
+        {
+            return result;
+        }
+
+        var active = ActivityLogStore.GetCurrentFilePath(logsDir);
+        foreach (var file in Directory.GetFiles(logsDir, "activity-*.jsonl"))
+        {
+            if (!string.Equals(file, active, StringComparison.OrdinalIgnoreCase)
+                && new DateTimeOffset(File.GetLastWriteTimeUtc(file), TimeSpan.Zero) < cutoff)
+            {
+                result.Add(file);
+            }
+        }
+
+        return result;
+    }
+
     private void CollectOrphansByJobId(string dir, OrphanFilter orphans, List<string> sink)
     {
         if (!Directory.Exists(dir))
@@ -351,6 +378,7 @@ public sealed record RetentionPlan
     public IReadOnlyList<string> TaskFiles { get; init; } = [];
     public IReadOnlyList<string> RunDirectories { get; init; } = [];
     public IReadOnlyList<string> StagingDirectories { get; init; } = [];
+    public IReadOnlyList<string> ActivityLogFiles { get; init; } = [];
 }
 
 public sealed record RetentionSweepResult
@@ -360,5 +388,6 @@ public sealed record RetentionSweepResult
     public int Tasks { get; init; }
     public int Runs { get; init; }
     public int Staging { get; init; }
-    public int Total => Jobs + Reports + Tasks + Runs + Staging;
+    public int ActivityLogs { get; init; }
+    public int Total => Jobs + Reports + Tasks + Runs + Staging + ActivityLogs;
 }
