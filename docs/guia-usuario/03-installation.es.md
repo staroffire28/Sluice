@@ -94,12 +94,12 @@ Luego abre `http://localhost:58472/login`, inicia sesión con tu `UI_API_KEY` (c
 > - **Pasar los datos a `sluice_pipeline-data`** (solo con contenedores Linux: los scripts usan un contenedor auxiliar `alpine`; con contenedores Windows, `docker-compose.yml` o `docker-compose.monolith.yml`, usa la primera opción), con el stack anterior parado (`docker compose -p <proyecto> -f <fichero compose> down`), con los [scripts de backup](../BACKUP.md):
 >
 >   ```powershell
->   .\scripts\backup-data-dir.ps1 -VolumeName <proyecto>_pipeline-data
+>   .\scripts\backup-data-dir.ps1 -VolumeName <proyecto>_pipeline-data -NoEncrypt
 >   docker compose -f <fichero compose> create   # crea sluice_pipeline-data sin arrancar nada
 >   .\scripts\restore-data-dir.ps1 -BackupFile .\backups\pipeline-data-<timestamp>.tar.gz -VolumeName sluice_pipeline-data
 >   ```
 >
->   Después, ejecuta el paso 2. Conserva el volumen anterior hasta haber comprobado el portal.
+>   Después, ejecuta el paso 2 y borra el backup sin cifrar. Conserva el volumen anterior hasta haber comprobado el portal.
 
 ## Acceso remoto con TLS
 

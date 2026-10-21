@@ -12,13 +12,30 @@
 # Sin -VolumeName, busca el volumen por la etiqueta que le pone Compose
 # (com.docker.compose.volume=pipeline-data), sea cual sea el nombre del proyecto.
 #
-# Uso: .\scripts\backup-data-dir.ps1 [-VolumeName sluice_pipeline-data] [-OutputDir .\backups]
+# El backup se cifra con age (https://age-encryption.org) para la clave pública -Recipient;
+# para restaurarlo hace falta la clave privada (ver docs\BACKUP.md). Sin cifrar, solo con
+# -NoEncrypt explícito: el tar lleva los secretos y el keyring que los descifra.
+#
+# Uso: .\scripts\backup-data-dir.ps1 -Recipient age1... [-VolumeName sluice_pipeline-data] [-OutputDir .\backups]
+#      .\scripts\backup-data-dir.ps1 -NoEncrypt [...]
 param(
     [string]$VolumeName,
-    [string]$OutputDir = ".\backups"
+    [string]$OutputDir = ".\backups",
+    [string]$Recipient,
+    [switch]$NoEncrypt
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Recipient -and $NoEncrypt) {
+    throw "Usa -Recipient o -NoEncrypt, no los dos."
+}
+if (-not $Recipient -and -not $NoEncrypt) {
+    throw "Indica la clave pública de age con -Recipient (age1...). El backup lleva los secretos de conexión y el keyring que los descifra; para guardarlo sin cifrar, pasa -NoEncrypt."
+}
+if ($Recipient -and -not (Get-Command age -ErrorAction SilentlyContinue)) {
+    throw "No se encuentra 'age' en el PATH. Instálalo (https://age-encryption.org) antes de hacer el backup."
+}
 
 if (-not $VolumeName) {
     $candidates = @(docker volume ls --quiet --filter "label=com.docker.compose.volume=pipeline-data")
@@ -44,18 +61,47 @@ $outputDirFull = (Resolve-Path $OutputDir).Path
 $timestamp = Get-Date -Format "yyyyMMddHHmmss"
 $archiveName = "pipeline-data-$timestamp.tar.gz"
 
-Write-Host "Empaquetando volumen '$VolumeName' -> $OutputDir\$archiveName ..."
-docker run --rm `
-    -v "${VolumeName}:/data:ro" `
-    -v "${outputDirFull}:/backup" `
-    alpine `
-    tar czf "/backup/$archiveName" -C /data .
-
-if ($LASTEXITCODE -ne 0) {
-    throw "El backup falló (docker run exit code $LASTEXITCODE)."
+$archivePath = Join-Path $outputDirFull $archiveName
+$tarDir = $outputDirFull
+$tempDir = $null
+if ($Recipient) {
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "sluice-backup-$([guid]::NewGuid().ToString('N'))"
+    New-Item -ItemType Directory -Path $tempDir | Out-Null
+    if ($IsWindows -eq $false) {
+        chmod 700 $tempDir
+        if ($LASTEXITCODE -ne 0) {
+            throw "No se pudo restringir la carpeta temporal $tempDir (chmod exit code $LASTEXITCODE)."
+        }
+    }
+    $tarDir = $tempDir
 }
 
-$archivePath = Join-Path $outputDirFull $archiveName
+try {
+    Write-Host "Empaquetando volumen '$VolumeName' -> $tarDir\$archiveName ..."
+    docker run --rm `
+        -v "${VolumeName}:/data:ro" `
+        -v "${tarDir}:/backup" `
+        alpine `
+        tar czf "/backup/$archiveName" -C /data .
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "El backup falló (docker run exit code $LASTEXITCODE)."
+    }
+
+    if ($Recipient) {
+        Write-Host "Cifrando con age -> $archivePath.age ..."
+        age -r $Recipient -o "$archivePath.age" (Join-Path $tarDir $archiveName)
+        if ($LASTEXITCODE -ne 0) {
+            throw "El cifrado falló (age exit code $LASTEXITCODE)."
+        }
+        $archivePath = "$archivePath.age"
+    }
+} finally {
+    # El tar sin cifrar no llega a -OutputDir ni se queda en disco, ni siquiera si tar o age fallan.
+    if ($tempDir) {
+        Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
+    }
+}
 $sizeMb = [math]::Round((Get-Item $archivePath).Length / 1MB, 1)
 Write-Host "Backup completado: $archivePath ($sizeMb MB)"
 Write-Host "Recuerda probar la restauración periódicamente (scripts\restore-data-dir.ps1) — un backup nunca probado no cuenta como backup."

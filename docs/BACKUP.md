@@ -20,13 +20,45 @@ No incluye el parquet consolidado guardado en ADLS ni los snapshots de ADLS (eso
 Azure, fuera del volumen local, y tiene su propia durabilidad/replicación gestionada por
 Azure Storage).
 
-## Cómo hacer un backup
+## La clave de cifrado
+
+El backup lleva los secretos de conexión **y** el keyring que los descifra, así que se
+guarda cifrado con [age](https://age-encryption.org) (`winget install FiloSottile.age`,
+`brew install age` o el paquete de tu distribución). Genera el par de claves una vez:
 
 ```powershell
-.\scripts\backup-data-dir.ps1
-# o con parámetros explícitos:
-.\scripts\backup-data-dir.ps1 -VolumeName sluice_pipeline-data -OutputDir .\backups
+age-keygen -o sluice-backup.key
+# Public key: age1...   <- la clave pública, para -Recipient
 ```
+
+- La **clave pública** (`age1...`) no es secreta: puede quedarse en el host y en la tarea
+  programada que haga los backups.
+- La **clave privada** (`sluice-backup.key`) es la única forma de restaurar. Guárdala
+  **fuera** del host y lejos de los backups: en un gestor de contraseñas o en una caja fuerte
+  de secretos, con una segunda copia en otro sitio. Quien tenga el backup y la clave privada
+  tiene las credenciales ADLS/SQL; quien pierda la clave privada pierde todos los backups.
+  Borra `sluice-backup.key` del host en cuanto la hayas guardado.
+
+## Cómo hacer un backup
+
+Para el stack antes del backup: con los contenedores escribiendo (cola de tareas, jobs,
+estado), el tar puede quedar a medias e inconsistente.
+
+```powershell
+# 1. Para el portal y los workers (los contenedores se conservan):
+docker compose -f docker-compose.linux.yml stop
+
+# 2. Backup cifrado para tu clave pública:
+.\scripts\backup-data-dir.ps1 -Recipient age1...
+# o con parámetros explícitos:
+.\scripts\backup-data-dir.ps1 -Recipient age1... -VolumeName sluice_pipeline-data -OutputDir .\backups
+
+# 3. Vuelve a arrancarlos:
+docker compose -f docker-compose.linux.yml start
+```
+
+Sin `-Recipient` el script falla. Para un backup sin cifrar (por ejemplo, para mover los
+datos a otro volumen en el mismo host), pasa `-NoEncrypt` y borra el tar en cuanto acabes.
 
 Sin `-VolumeName`, los scripts de backup y restore buscan el volumen por la etiqueta que le
 pone Compose (`com.docker.compose.volume=pipeline-data`), sea cual sea el nombre del
@@ -34,13 +66,14 @@ proyecto. Si no encuentran ninguno, o encuentran varios (por ejemplo, el de un d
 anterior desde otra carpeta), fallan sin tocar nada y piden que indiques cuál con
 `-VolumeName`.
 
-Genera `backups\pipeline-data-<timestamp>.tar.gz`. Guarda esta copia **fuera** del host
-(otro disco, blob storage, etc.) — un backup en el mismo disco que el volumen original no
-protege contra un fallo de disco.
+Genera `backups\pipeline-data-<timestamp>.tar.gz.age` (el tar sin cifrar se genera en una
+carpeta temporal y se borra en cuanto age termina o falla: nunca llega a `-OutputDir`).
+Guarda esta copia **fuera** del host (otro disco, blob storage, etc.) — un backup en el
+mismo disco que el volumen original no protege contra un fallo de disco.
 
-Recomendación operativa: automatizar esta llamada con el Programador de tareas de Windows
-o un cron equivalente (p.ej. diario), rotando/purgando backups antiguos según tu política
-de retención.
+Recomendación operativa: automatizar los tres pasos (parar, backup y arrancar) con el
+Programador de tareas de Windows o un cron equivalente (p.ej. diario, en una hora sin
+cargas programadas), rotando/purgando backups antiguos según tu política de retención.
 
 ## Cómo restaurar
 
@@ -48,14 +81,18 @@ de retención.
 # 1. Detén el portal y los workers (evita escribir mientras se restaura):
 docker compose -f docker-compose.linux.yml down
 
-# 2. Restaura (sobrescribe TODO el contenido actual del volumen, pide confirmación):
-.\scripts\restore-data-dir.ps1 -BackupFile .\backups\pipeline-data-20260701120000.tar.gz
+# 2. Restaura con la clave privada (sobrescribe TODO el contenido actual del volumen, pide confirmación):
+.\scripts\restore-data-dir.ps1 -BackupFile .\backups\pipeline-data-20260701120000.tar.gz.age -Identity .\sluice-backup.key
 
 # 3. Levanta de nuevo y verifica:
 docker compose -f docker-compose.linux.yml up -d
 curl http://localhost:58472/health
 curl http://localhost:58472/health/ready   # valida además conectividad ADLS/SQL real
 ```
+
+Antes de tocar el volumen, el script descifra el backup y lista el tar entero: si la clave
+privada no es la buena o el backup está dañado, falla sin borrar nada. El tar descifrado se
+borra al terminar.
 
 Tras restaurar, confirma en el portal (Sources/Destinations → "Test de conexión") que las
 conexiones existentes descifran correctamente — el keyring de Data Protection viaja junto
