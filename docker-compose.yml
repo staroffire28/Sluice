@@ -19,9 +19,9 @@
 # Mide dónde satura antes de escalar: el cuello puede ser
 # SQL/ADLS, no el worker — y eso no se arregla con más réplicas.
 
-# Rotación de logs: hasta 5 ficheros de 20 MB, con el driver local (comprimido).
+# Rotación de logs: hasta 5 ficheros de 20 MB, con el driver json-file (los daemons de Windows no registran el driver local).
 x-logging: &default-logging
-  driver: local
+  driver: json-file
   options:
     max-size: 20m
     max-file: "5"

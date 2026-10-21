@@ -4,9 +4,9 @@
 # Azure (ADLS) y SQL se configuran DESDE EL PORTAL (Sources/Destinations).
 # Los parámetros operativos (poll/lease/divergencia) se editan en /settings.
 
-# Rotación de logs: hasta 5 ficheros de 20 MB, con el driver local (comprimido).
+# Rotación de logs: hasta 5 ficheros de 20 MB, con el driver json-file (los daemons de Windows no registran el driver local).
 x-logging: &default-logging
-  driver: local
+  driver: json-file
   options:
     max-size: 20m
     max-file: "5"
