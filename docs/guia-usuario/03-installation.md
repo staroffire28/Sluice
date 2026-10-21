@@ -94,12 +94,12 @@ Then open `http://localhost:58472/login`, sign in with your `UI_API_KEY` (with `
 > - **Move the data to `sluice_pipeline-data`** (Linux containers only: the scripts run an `alpine` helper container; with Windows containers, `docker-compose.yml` or `docker-compose.monolith.yml`, use the first option), with the old stack stopped (`docker compose -p <project> -f <compose file> down`), using the [backup scripts](../BACKUP.md):
 >
 >   ```powershell
->   .\scripts\backup-data-dir.ps1 -VolumeName <project>_pipeline-data
+>   .\scripts\backup-data-dir.ps1 -VolumeName <project>_pipeline-data -NoEncrypt
 >   docker compose -f <compose file> create   # creates sluice_pipeline-data without starting anything
 >   .\scripts\restore-data-dir.ps1 -BackupFile .\backups\pipeline-data-<timestamp>.tar.gz -VolumeName sluice_pipeline-data
 >   ```
 >
->   Then run step 2. Keep the old volume until you have checked the portal.
+>   Then run step 2 and delete the unencrypted backup. Keep the old volume until you have checked the portal.
 
 ## Remote access with TLS
 

@@ -12,13 +12,30 @@
 # Sin -VolumeName, busca el volumen por la etiqueta que le pone Compose
 # (com.docker.compose.volume=pipeline-data), sea cual sea el nombre del proyecto.
 #
-# Uso: .\scripts\backup-data-dir.ps1 [-VolumeName sluice_pipeline-data] [-OutputDir .\backups]
+# El backup se cifra con age (https://age-encryption.org) para la clave pública -Recipient;
+# para restaurarlo hace falta la clave privada (ver docs\BACKUP.md). Sin cifrar, solo con
+# -NoEncrypt explícito: el tar lleva los secretos y el keyring que los descifra.
+#
+# Uso: .\scripts\backup-data-dir.ps1 -Recipient age1... [-VolumeName sluice_pipeline-data] [-OutputDir .\backups]
+#      .\scripts\backup-data-dir.ps1 -NoEncrypt [...]
 param(
     [string]$VolumeName,
-    [string]$OutputDir = ".\backups"
+    [string]$OutputDir = ".\backups",
+    [string]$Recipient,
+    [switch]$NoEncrypt
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Recipient -and $NoEncrypt) {
+    throw "Usa -Recipient o -NoEncrypt, no los dos."
+}
+if (-not $Recipient -and -not $NoEncrypt) {
+    throw "Indica la clave pública de age con -Recipient (age1...). El backup lleva los secretos de conexión y el keyring que los descifra; para guardarlo sin cifrar, pasa -NoEncrypt."
+}
+if ($Recipient -and -not (Get-Command age -ErrorAction SilentlyContinue)) {
+    throw "No se encuentra 'age' en el PATH. Instálalo (https://age-encryption.org) antes de hacer el backup."
+}
 
 if (-not $VolumeName) {
     $candidates = @(docker volume ls --quiet --filter "label=com.docker.compose.volume=pipeline-data")
@@ -56,6 +73,19 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $archivePath = Join-Path $outputDirFull $archiveName
+if ($Recipient) {
+    Write-Host "Cifrando con age -> $archiveName.age ..."
+    try {
+        age -r $Recipient -o "$archivePath.age" $archivePath
+        if ($LASTEXITCODE -ne 0) {
+            throw "El cifrado falló (age exit code $LASTEXITCODE)."
+        }
+    } finally {
+        # El tar sin cifrar no se queda en disco, ni siquiera si age falla.
+        Remove-Item $archivePath -Force -ErrorAction SilentlyContinue
+    }
+    $archivePath = "$archivePath.age"
+}
 $sizeMb = [math]::Round((Get-Item $archivePath).Length / 1MB, 1)
 Write-Host "Backup completado: $archivePath ($sizeMb MB)"
 Write-Host "Recuerda probar la restauración periódicamente (scripts\restore-data-dir.ps1) — un backup nunca probado no cuenta como backup."
