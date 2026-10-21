@@ -1,4 +1,4 @@
-# Despliega la Logic App de alertas de Sluice (azuredeploy.json) con Azure CLI.
+﻿# Despliega la Logic App de alertas de Sluice (azuredeploy.json) con Azure CLI.
 #
 #   ./deploy.ps1 -ResourceGroup rg-sluice -Location westeurope `
 #     -Recipients "operaciones@contoso.com;dba@contoso.com" -PortalUrl "https://sluice.contoso.com"

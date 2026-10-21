@@ -1,4 +1,4 @@
-# Reconstruye el container monolito con el código actual PRESERVANDO las
+﻿# Reconstruye el container monolito con el código actual PRESERVANDO las
 # credenciales del container en ejecución (o el último parado).
 # Las env se leen en runtime desde el container actual; no se escriben a disco.
 $ErrorActionPreference = 'Stop'
