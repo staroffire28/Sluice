@@ -4,6 +4,9 @@
 # Azure (ADLS) y SQL se configuran DESDE EL PORTAL (Sources/Destinations).
 # Los parámetros operativos (poll/lease/divergencia) se editan en /settings.
 
+# Nombre de proyecto fijo: el volumen es siempre sluice_pipeline-data, sea cual sea la carpeta.
+name: sluice
+
 # Rotación de logs: hasta 5 ficheros de 20 MB, con el driver json-file (los daemons de Windows no registran el driver local).
 x-logging: &default-logging
   driver: json-file

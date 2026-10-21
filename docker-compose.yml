@@ -19,6 +19,9 @@
 # Mide dónde satura antes de escalar: el cuello puede ser
 # SQL/ADLS, no el worker — y eso no se arregla con más réplicas.
 
+# Nombre de proyecto fijo: el volumen es siempre sluice_pipeline-data, sea cual sea la carpeta.
+name: sluice
+
 # Rotación de logs: hasta 5 ficheros de 20 MB, con el driver json-file (los daemons de Windows no registran el driver local).
 x-logging: &default-logging
   driver: json-file

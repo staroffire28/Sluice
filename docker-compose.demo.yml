@@ -14,6 +14,9 @@
 # reachable from the portal container; the portal only on this machine (127.0.0.1).
 # Remove everything: docker compose -f docker-compose.demo.yml down -v
 
+# Its own project name, so the demo never shares containers or volumes with a production stack.
+name: sluice-demo
+
 # Demo-only SQL password, shared by both services. Override it with DEMO_SQL_PASSWORD.
 x-demo-sql-password: &demo-sql-password ${DEMO_SQL_PASSWORD:-Sluice_Demo_0nly!}
 
