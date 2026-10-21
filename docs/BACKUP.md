@@ -66,9 +66,10 @@ proyecto. Si no encuentran ninguno, o encuentran varios (por ejemplo, el de un d
 anterior desde otra carpeta), fallan sin tocar nada y piden que indiques cuál con
 `-VolumeName`.
 
-Genera `backups\pipeline-data-<timestamp>.tar.gz.age` (el tar sin cifrar no se queda en
-disco). Guarda esta copia **fuera** del host (otro disco, blob storage, etc.) — un backup en
-el mismo disco que el volumen original no protege contra un fallo de disco.
+Genera `backups\pipeline-data-<timestamp>.tar.gz.age` (el tar sin cifrar se genera en una
+carpeta temporal y se borra en cuanto age termina o falla: nunca llega a `-OutputDir`).
+Guarda esta copia **fuera** del host (otro disco, blob storage, etc.) — un backup en el
+mismo disco que el volumen original no protege contra un fallo de disco.
 
 Recomendación operativa: automatizar los tres pasos (parar, backup y arrancar) con el
 Programador de tareas de Windows o un cron equivalente (p.ej. diario, en una hora sin

@@ -61,30 +61,40 @@ $outputDirFull = (Resolve-Path $OutputDir).Path
 $timestamp = Get-Date -Format "yyyyMMddHHmmss"
 $archiveName = "pipeline-data-$timestamp.tar.gz"
 
-Write-Host "Empaquetando volumen '$VolumeName' -> $OutputDir\$archiveName ..."
-docker run --rm `
-    -v "${VolumeName}:/data:ro" `
-    -v "${outputDirFull}:/backup" `
-    alpine `
-    tar czf "/backup/$archiveName" -C /data .
-
-if ($LASTEXITCODE -ne 0) {
-    throw "El backup falló (docker run exit code $LASTEXITCODE)."
+$archivePath = Join-Path $outputDirFull $archiveName
+$tarDir = $outputDirFull
+$tempDir = $null
+if ($Recipient) {
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "sluice-backup-$([guid]::NewGuid().ToString('N'))"
+    New-Item -ItemType Directory -Path $tempDir | Out-Null
+    $tarDir = $tempDir
 }
 
-$archivePath = Join-Path $outputDirFull $archiveName
-if ($Recipient) {
-    Write-Host "Cifrando con age -> $archiveName.age ..."
-    try {
-        age -r $Recipient -o "$archivePath.age" $archivePath
+try {
+    Write-Host "Empaquetando volumen '$VolumeName' -> $tarDir\$archiveName ..."
+    docker run --rm `
+        -v "${VolumeName}:/data:ro" `
+        -v "${tarDir}:/backup" `
+        alpine `
+        tar czf "/backup/$archiveName" -C /data .
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "El backup falló (docker run exit code $LASTEXITCODE)."
+    }
+
+    if ($Recipient) {
+        Write-Host "Cifrando con age -> $archivePath.age ..."
+        age -r $Recipient -o "$archivePath.age" (Join-Path $tarDir $archiveName)
         if ($LASTEXITCODE -ne 0) {
             throw "El cifrado falló (age exit code $LASTEXITCODE)."
         }
-    } finally {
-        # El tar sin cifrar no se queda en disco, ni siquiera si age falla.
-        Remove-Item $archivePath -Force -ErrorAction SilentlyContinue
+        $archivePath = "$archivePath.age"
     }
-    $archivePath = "$archivePath.age"
+} finally {
+    # El tar sin cifrar no llega a -OutputDir ni se queda en disco, ni siquiera si tar o age fallan.
+    if ($tempDir) {
+        Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
+    }
 }
 $sizeMb = [math]::Round((Get-Item $archivePath).Length / 1MB, 1)
 Write-Host "Backup completado: $archivePath ($sizeMb MB)"
