@@ -13,8 +13,9 @@
 # Escalado por etapa:
 #   docker compose -f docker-compose.linux.yml up -d --build --scale worker-ingest=3
 
-# Rotación de logs: hasta 5 ficheros de 20 MB. El driver es el que tenga el motor por defecto.
+# Rotación de logs: hasta 5 ficheros de 20 MB. Driver json-file fijo: son opciones exclusivas de json-file/local.
 x-logging: &default-logging
+  driver: json-file
   options:
     max-size: 20m
     max-file: "5"
