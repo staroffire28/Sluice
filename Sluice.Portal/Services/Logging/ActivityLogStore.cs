@@ -305,7 +305,8 @@ public sealed class ActivityLogStore : IActivityLog, IAuditLog
 
     private string GetLogDirectory() => Path.Combine(_options.DataDir, "logs");
 
-    private static string GetCurrentFilePath(string dir) =>
+    // internal: la retención lo usa para no purgar nunca el archivo activo de este proceso.
+    internal static string GetCurrentFilePath(string dir) =>
         Path.Combine(dir, $"activity-{Sanitize(Environment.MachineName)}.jsonl");
 
     private static string RotatedPath(string currentPath) =>
