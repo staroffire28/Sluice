@@ -13,6 +13,9 @@
 # Escalado por etapa:
 #   docker compose -f docker-compose.linux.yml up -d --build --scale worker-ingest=3
 
+# Nombre de proyecto fijo: el volumen es siempre sluice_pipeline-data, sea cual sea la carpeta.
+name: sluice
+
 # Rotación de logs: hasta 5 ficheros de 20 MB, con el driver local (comprimido).
 x-logging: &default-logging
   driver: local
