@@ -17,6 +17,12 @@
 # Demo-only SQL password, shared by both services. Override it with DEMO_SQL_PASSWORD.
 x-demo-sql-password: &demo-sql-password ${DEMO_SQL_PASSWORD:-Sluice_Demo_0nly!}
 
+# Log rotation for every service: up to 5 files of 20 MB each. The driver stays the engine default.
+x-logging: &default-logging
+  options:
+    max-size: 20m
+    max-file: "5"
+
 services:
   sql:
     image: mcr.microsoft.com/mssql/server:2022-latest
@@ -33,6 +39,7 @@ services:
       retries: 20
       start_period: 20s
     mem_limit: 2560m
+    logging: *default-logging
 
   portal:
     build:
@@ -58,6 +65,7 @@ services:
       sql:
         condition: service_healthy
     mem_limit: 2g
+    logging: *default-logging
 
 volumes:
   demo-data:

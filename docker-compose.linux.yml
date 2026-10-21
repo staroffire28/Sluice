@@ -12,6 +12,13 @@
 #
 # Escalado por etapa:
 #   docker compose -f docker-compose.linux.yml up -d --build --scale worker-ingest=3
+
+# Rotación de logs: hasta 5 ficheros de 20 MB. El driver es el que tenga el motor por defecto.
+x-logging: &default-logging
+  options:
+    max-size: 20m
+    max-file: "5"
+
 services:
   api:
     build:
@@ -38,6 +45,7 @@ services:
     restart: unless-stopped
     mem_limit: 2g
     cpus: 2
+    logging: *default-logging
 
   worker-ingest:
     build:
@@ -61,6 +69,7 @@ services:
     # cientos de MB); un tope arbitrario solo pospone el mismo problema con otra tabla. El
     # worker usa la memoria real disponible del host en vez de un techo artificial.
     cpus: 2
+    logging: *default-logging
 
   worker-sql:
     build:
@@ -82,6 +91,7 @@ services:
     restart: unless-stopped
     # Ver comentario de mem_limit en worker-ingest: memoria dinámica, sin tope fijo.
     cpus: 2
+    logging: *default-logging
 
   worker-reconcile:
     build:
@@ -102,6 +112,7 @@ services:
     restart: unless-stopped
     # Ver comentario de mem_limit en worker-ingest: memoria dinámica, sin tope fijo.
     cpus: 2
+    logging: *default-logging
 
 volumes:
   pipeline-data:
