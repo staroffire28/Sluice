@@ -25,8 +25,14 @@ Azure Storage).
 ```powershell
 .\scripts\backup-data-dir.ps1
 # o con parámetros explícitos:
-.\scripts\backup-data-dir.ps1 -VolumeName pipeline-data -OutputDir .\backups
+.\scripts\backup-data-dir.ps1 -VolumeName sluice_pipeline-data -OutputDir .\backups
 ```
+
+Sin `-VolumeName`, los scripts de backup y restore buscan el volumen por la etiqueta que le
+pone Compose (`com.docker.compose.volume=pipeline-data`), sea cual sea el nombre del
+proyecto. Si no encuentran ninguno, o encuentran varios (por ejemplo, el de un despliegue
+anterior desde otra carpeta), fallan sin tocar nada y piden que indiques cuál con
+`-VolumeName`.
 
 Genera `backups\pipeline-data-<timestamp>.tar.gz`. Guarda esta copia **fuera** del host
 (otro disco, blob storage, etc.) — un backup en el mismo disco que el volumen original no

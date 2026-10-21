@@ -3,17 +3,34 @@
 # antes de continuar. Detén api/worker-* antes de restaurar (el rename atómico de la
 # cola no espera a que el volumen cambie por debajo).
 #
-# Uso: .\scripts\restore-data-dir.ps1 -BackupFile .\backups\pipeline-data-20260701120000.tar.gz [-VolumeName pipeline-data]
+# Sin -VolumeName, busca el volumen por la etiqueta que le pone Compose
+# (com.docker.compose.volume=pipeline-data), sea cual sea el nombre del proyecto.
+#
+# Uso: .\scripts\restore-data-dir.ps1 -BackupFile .\backups\pipeline-data-20260701120000.tar.gz [-VolumeName sluice_pipeline-data]
 param(
     [Parameter(Mandatory = $true)]
     [string]$BackupFile,
-    [string]$VolumeName = "pipeline-data"
+    [string]$VolumeName
 )
 
 $ErrorActionPreference = "Stop"
 
 if (-not (Test-Path $BackupFile)) {
     throw "No se encontró el archivo de backup: $BackupFile"
+}
+
+if (-not $VolumeName) {
+    $candidates = @(docker volume ls --quiet --filter "label=com.docker.compose.volume=pipeline-data")
+    if ($LASTEXITCODE -ne 0) {
+        throw "No se pudieron listar los volúmenes (docker volume ls exit code $LASTEXITCODE)."
+    }
+    if ($candidates.Count -eq 0) {
+        throw "No hay ningún volumen 'pipeline-data' creado por Compose. Créalo primero (p.ej. con 'docker compose create') o indica el volumen con -VolumeName."
+    }
+    if ($candidates.Count -gt 1) {
+        throw "Hay varios volúmenes 'pipeline-data' creados por Compose: $($candidates -join ', '). Indica cuál con -VolumeName."
+    }
+    $VolumeName = $candidates[0]
 }
 
 $volumeExists = docker volume inspect $VolumeName 2>$null

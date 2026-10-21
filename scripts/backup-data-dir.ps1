@@ -9,13 +9,30 @@
 # despliegue documentado en docker-compose.linux.yml). Para Windows containers,
 # adapta el contenedor helper (p.ej. mcr.microsoft.com/windows/nanoserver + Compress-Archive).
 #
-# Uso: .\scripts\backup-data-dir.ps1 [-VolumeName pipeline-data] [-OutputDir .\backups]
+# Sin -VolumeName, busca el volumen por la etiqueta que le pone Compose
+# (com.docker.compose.volume=pipeline-data), sea cual sea el nombre del proyecto.
+#
+# Uso: .\scripts\backup-data-dir.ps1 [-VolumeName sluice_pipeline-data] [-OutputDir .\backups]
 param(
-    [string]$VolumeName = "pipeline-data",
+    [string]$VolumeName,
     [string]$OutputDir = ".\backups"
 )
 
 $ErrorActionPreference = "Stop"
+
+if (-not $VolumeName) {
+    $candidates = @(docker volume ls --quiet --filter "label=com.docker.compose.volume=pipeline-data")
+    if ($LASTEXITCODE -ne 0) {
+        throw "No se pudieron listar los volúmenes (docker volume ls exit code $LASTEXITCODE)."
+    }
+    if ($candidates.Count -eq 0) {
+        throw "No hay ningún volumen 'pipeline-data' creado por Compose. Indica el volumen con -VolumeName (docker volume ls)."
+    }
+    if ($candidates.Count -gt 1) {
+        throw "Hay varios volúmenes 'pipeline-data' creados por Compose: $($candidates -join ', '). Indica cuál con -VolumeName."
+    }
+    $VolumeName = $candidates[0]
+}
 
 $volumeExists = docker volume inspect $VolumeName 2>$null
 if (-not $volumeExists) {

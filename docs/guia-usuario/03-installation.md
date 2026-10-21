@@ -88,6 +88,19 @@ Then open `http://localhost:58472/login`, sign in with your `UI_API_KEY` (with `
 > docker run --rm -v <volume>:/data alpine chown -R 1654:1654 /data
 > ```
 
+> **Project name `sluice`:** the compose files set `name: sluice`, so the volume is always `sluice_pipeline-data`, whatever folder you run them from. Before, Compose took the project name from the folder: if you deployed from a folder not named `Sluice`, your data is in `<project>_pipeline-data`, where `<project>` is that folder's name in lowercase (check with `docker volume ls`), and the update would start the stack on a new, empty volume. Before step 2, pick one:
+>
+> - **Keep the old name:** add `COMPOSE_PROJECT_NAME=<project>` to `.env` (it takes precedence over `name:`).
+> - **Move the data to `sluice_pipeline-data`**, with the old stack stopped (`docker compose -p <project> -f <compose file> down`), using the [backup scripts](../BACKUP.md):
+>
+>   ```powershell
+>   .\scripts\backup-data-dir.ps1 -VolumeName <project>_pipeline-data
+>   docker compose -f <compose file> create   # creates sluice_pipeline-data without starting anything
+>   .\scripts\restore-data-dir.ps1 -BackupFile .\backups\pipeline-data-<timestamp>.tar.gz -VolumeName sluice_pipeline-data
+>   ```
+>
+>   Then run step 2. Keep the old volume until you have checked the portal.
+
 ## Remote access with TLS
 
 By default the compose files publish the portal only on the machine itself (`127.0.0.1:58472`): no certificate is needed, and you reach it at `http://localhost:58472` or through an SSH tunnel or VPN. To open it to other machines, put TLS in front first. The session cookie is `Secure` outside Development, so over plain HTTP from another machine the login does not work.
