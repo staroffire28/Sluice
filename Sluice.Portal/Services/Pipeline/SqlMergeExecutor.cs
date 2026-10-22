@@ -458,7 +458,14 @@ public sealed class SqlMergeExecutor : ISqlMergeExecutor
             if (_created && connection.State == ConnectionState.Open)
             {
                 _created = false;
-                await ExecuteNonQueryAsync(connection, SqlMergeBuilder.BuildDropStaging(_keyTable), CancellationToken.None);
+                try
+                {
+                    await ExecuteNonQueryAsync(connection, SqlMergeBuilder.BuildDropStaging(_keyTable), CancellationToken.None);
+                }
+                catch (Exception ex) when (ex is SqlException or InvalidOperationException)
+                {
+                    // Sesión rota: la #keys muere con ella; no tapar la excepción original.
+                }
             }
         }
     }
