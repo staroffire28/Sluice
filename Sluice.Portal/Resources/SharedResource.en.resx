@@ -791,4 +791,56 @@
   <data name="Page.Sources.ParquetStorage.Portal" xml:space="preserve"><value>Portal disk (DATA_DIR)</value></data>
   <data name="Page.Sources.ParquetStorageHint" xml:space="preserve"><value>On the portal disk you need no Parquet container or write access to ADLS, but it takes space on the DATA_DIR volume. When you change it, Sluice copies the consolidated Parquet to the new place without deleting the old one.</value></data>
   <data name="Page.Sources.ParquetCopied" xml:space="preserve"><value>Consolidated Parquet copied to the new place: {0} table(s).</value></data>
+  <data name="Report.Generated" xml:space="preserve"><value>Generated {0}</value></data>
+  <data name="Report.Overline" xml:space="preserve"><value>RECONCILIATION REPORT</value></data>
+  <data name="Report.Subtitle" xml:space="preserve"><value>Row counts per entity: source (Synapse Link, ADLS) versus destination (SQL Server).</value></data>
+  <data name="Report.Meta.Start" xml:space="preserve"><value>Start</value></data>
+  <data name="Report.Meta.End" xml:space="preserve"><value>End</value></data>
+  <data name="Report.Meta.Duration" xml:space="preserve"><value>Duration</value></data>
+  <data name="Report.Meta.Source" xml:space="preserve"><value>Detail source</value></data>
+  <data name="Report.Meta.TimeZone" xml:space="preserve"><value>Time zone</value></data>
+  <data name="Report.Meta.SnapshotsStopped" xml:space="preserve"><value>{0} · stopped</value></data>
+  <data name="Report.Meta.CsvRows" xml:space="preserve"><value>Rows read (CSV)</value></data>
+  <data name="Report.Meta.MergedRows" xml:space="preserve"><value>Merged rows</value></data>
+  <data name="Report.Meta.FailedEntities" xml:space="preserve"><value>Entities with errors</value></data>
+  <data name="Report.Source.Both" xml:space="preserve"><value>Reconciliation + Diff</value></data>
+  <data name="Report.Source.ReconcilePartial" xml:space="preserve"><value>Reconciliation report (partial)</value></data>
+  <data name="Report.Source.Reconcile" xml:space="preserve"><value>Reconciliation report</value></data>
+  <data name="Report.Source.Diff" xml:space="preserve"><value>Diff report</value></data>
+  <data name="Report.Source.Job" xml:space="preserve"><value>Job results</value></data>
+  <data name="Report.Kpi.Entities" xml:space="preserve"><value>Entities</value></data>
+  <data name="Report.Kpi.WithErrors" xml:space="preserve"><value>{0} with errors</value></data>
+  <data name="Report.Kpi.WithDifferences" xml:space="preserve"><value>{0} with differences</value></data>
+  <data name="Report.Kpi.NoDifferences" xml:space="preserve"><value>no differences</value></data>
+  <data name="Report.Kpi.NoneCompared" xml:space="preserve"><value>none compared</value></data>
+  <data name="Report.Kpi.MissingInSql" xml:space="preserve"><value>{0} missing in SQL</value></data>
+  <data name="Report.Kpi.ExtraInSql" xml:space="preserve"><value>{0} extra in SQL</value></data>
+  <data name="Report.Kpi.NoNetDifference" xml:space="preserve"><value>no net difference</value></data>
+  <data name="Report.Kpi.TotalDelta" xml:space="preserve"><value>Total delta</value></data>
+  <data name="Report.Kpi.MaxDivergence" xml:space="preserve"><value>Max divergence</value></data>
+  <data name="Report.Kpi.MaxDivergenceShort" xml:space="preserve"><value>max diverg. {0}</value></data>
+  <data name="Report.Kpi.PartialReconcile" xml:space="preserve"><value>partial reconciliation</value></data>
+  <data name="Report.Kpi.JobStatus" xml:space="preserve"><value>Job status</value></data>
+  <data name="Report.Kpi.NoComparison" xml:space="preserve"><value>no comparison</value></data>
+  <data name="Report.Callout.JobFailed" xml:space="preserve"><value>The job ended with an error.</value></data>
+  <data name="Report.Callout.DifferencesOne" xml:space="preserve"><value>Differences found in 1 entity. Check the detail by entity.</value></data>
+  <data name="Report.Callout.DifferencesMany" xml:space="preserve"><value>Differences found in {0} entities. Check the detail by entity.</value></data>
+  <data name="Report.Callout.NoNewData" xml:space="preserve"><value>This job had no new data to reconcile. The pipeline's latest reconciliation is on the Reconcile page.</value></data>
+  <data name="Report.Callout.NothingCompared" xml:space="preserve"><value>This job did not get to compare any entity.</value></data>
+  <data name="Report.Callout.AllMatch" xml:space="preserve"><value>No differences: source and SQL match in every entity.</value></data>
+  <data name="Report.Detail.Title" xml:space="preserve"><value>Detail by entity</value></data>
+  <data name="Report.Detail.CountOne" xml:space="preserve"><value>1 entity · alphabetical order</value></data>
+  <data name="Report.Detail.CountMany" xml:space="preserve"><value>{0} entities · alphabetical order</value></data>
+  <data name="Report.Detail.Empty" xml:space="preserve"><value>No entities recorded for this job.</value></data>
+  <data name="Report.Col.Entity" xml:space="preserve"><value>Entity</value></data>
+  <data name="Report.Col.SourceRows" xml:space="preserve"><value>Source rows</value></data>
+  <data name="Report.Col.SqlRows" xml:space="preserve"><value>SQL rows</value></data>
+  <data name="Report.Col.Divergence" xml:space="preserve"><value>Divergence</value></data>
+  <data name="Report.Col.Status" xml:space="preserve"><value>Status</value></data>
+  <data name="Report.EntityStatus.Difference" xml:space="preserve"><value>Difference</value></data>
+  <data name="Report.Note.Reconcile" xml:space="preserve"><value>Divergence = |source − SQL| ÷ max(source, SQL), from the reconciliation report. “—”: no data.</value></data>
+  <data name="Report.Note.Diff" xml:space="preserve"><value>Delta = source rows − SQL rows (positive: rows missing in SQL; negative: SQL has extra rows); Total delta = Σ|Delta|. Divergence = |Delta| ÷ source rows. “—”: no data.</value></data>
+  <data name="Report.Note.Job" xml:space="preserve"><value>Divergence = |source − SQL| ÷ source rows, from the job's own counts. “—”: no data.</value></data>
+  <data name="Report.Footer.Page" xml:space="preserve"><value>Page</value></data>
+  <data name="Report.FileName" xml:space="preserve"><value>report-{0}.pdf</value></data>
 </root>

@@ -790,4 +790,56 @@
   <data name="Page.Sources.ParquetStorage.Portal" xml:space="preserve"><value>Disco del portal (DATA_DIR)</value></data>
   <data name="Page.Sources.ParquetStorageHint" xml:space="preserve"><value>En el disco del portal no hace falta un contenedor de Parquet ni permiso de escritura en ADLS, pero ocupa espacio en el volumen de DATA_DIR. Al cambiarlo, Sluice copia los Parquet consolidados al sitio nuevo sin borrar los anteriores.</value></data>
   <data name="Page.Sources.ParquetCopied" xml:space="preserve"><value>Parquet consolidado copiado al sitio nuevo: {0} tabla(s).</value></data>
+  <data name="Report.Generated" xml:space="preserve"><value>Generado {0}</value></data>
+  <data name="Report.Overline" xml:space="preserve"><value>INFORME DE CONCILIACIÓN</value></data>
+  <data name="Report.Subtitle" xml:space="preserve"><value>Recuento de filas por entidad: origen (Synapse Link, ADLS) frente a destino (SQL Server).</value></data>
+  <data name="Report.Meta.Start" xml:space="preserve"><value>Inicio</value></data>
+  <data name="Report.Meta.End" xml:space="preserve"><value>Fin</value></data>
+  <data name="Report.Meta.Duration" xml:space="preserve"><value>Duración</value></data>
+  <data name="Report.Meta.Source" xml:space="preserve"><value>Fuente del detalle</value></data>
+  <data name="Report.Meta.TimeZone" xml:space="preserve"><value>Zona horaria</value></data>
+  <data name="Report.Meta.SnapshotsStopped" xml:space="preserve"><value>{0} · detenido</value></data>
+  <data name="Report.Meta.CsvRows" xml:space="preserve"><value>Filas leídas (CSV)</value></data>
+  <data name="Report.Meta.MergedRows" xml:space="preserve"><value>Filas fusionadas</value></data>
+  <data name="Report.Meta.FailedEntities" xml:space="preserve"><value>Entidades con error</value></data>
+  <data name="Report.Source.Both" xml:space="preserve"><value>Conciliación + Diff</value></data>
+  <data name="Report.Source.ReconcilePartial" xml:space="preserve"><value>Reporte de conciliación (parcial)</value></data>
+  <data name="Report.Source.Reconcile" xml:space="preserve"><value>Reporte de conciliación</value></data>
+  <data name="Report.Source.Diff" xml:space="preserve"><value>Reporte Diff</value></data>
+  <data name="Report.Source.Job" xml:space="preserve"><value>Resultados del job</value></data>
+  <data name="Report.Kpi.Entities" xml:space="preserve"><value>Entidades</value></data>
+  <data name="Report.Kpi.WithErrors" xml:space="preserve"><value>{0} con error</value></data>
+  <data name="Report.Kpi.WithDifferences" xml:space="preserve"><value>{0} con diferencias</value></data>
+  <data name="Report.Kpi.NoDifferences" xml:space="preserve"><value>sin diferencias</value></data>
+  <data name="Report.Kpi.NoneCompared" xml:space="preserve"><value>ninguna comparada</value></data>
+  <data name="Report.Kpi.MissingInSql" xml:space="preserve"><value>faltan {0} en SQL</value></data>
+  <data name="Report.Kpi.ExtraInSql" xml:space="preserve"><value>sobran {0} en SQL</value></data>
+  <data name="Report.Kpi.NoNetDifference" xml:space="preserve"><value>sin diferencia neta</value></data>
+  <data name="Report.Kpi.TotalDelta" xml:space="preserve"><value>Delta total</value></data>
+  <data name="Report.Kpi.MaxDivergence" xml:space="preserve"><value>Divergencia máx.</value></data>
+  <data name="Report.Kpi.MaxDivergenceShort" xml:space="preserve"><value>diverg. máx. {0}</value></data>
+  <data name="Report.Kpi.PartialReconcile" xml:space="preserve"><value>conciliación parcial</value></data>
+  <data name="Report.Kpi.JobStatus" xml:space="preserve"><value>Estado del job</value></data>
+  <data name="Report.Kpi.NoComparison" xml:space="preserve"><value>sin comparación</value></data>
+  <data name="Report.Callout.JobFailed" xml:space="preserve"><value>El job terminó con error.</value></data>
+  <data name="Report.Callout.DifferencesOne" xml:space="preserve"><value>Se detectaron diferencias en 1 entidad. Revisa el detalle por entidad.</value></data>
+  <data name="Report.Callout.DifferencesMany" xml:space="preserve"><value>Se detectaron diferencias en {0} entidades. Revisa el detalle por entidad.</value></data>
+  <data name="Report.Callout.NoNewData" xml:space="preserve"><value>Este job no tuvo datos nuevos que conciliar. La última conciliación del pipeline está en la página Reconcile.</value></data>
+  <data name="Report.Callout.NothingCompared" xml:space="preserve"><value>Este job no llegó a comparar ninguna entidad.</value></data>
+  <data name="Report.Callout.AllMatch" xml:space="preserve"><value>Sin diferencias: origen y SQL coinciden en todas las entidades.</value></data>
+  <data name="Report.Detail.Title" xml:space="preserve"><value>Detalle por entidad</value></data>
+  <data name="Report.Detail.CountOne" xml:space="preserve"><value>1 entidad · orden alfabético</value></data>
+  <data name="Report.Detail.CountMany" xml:space="preserve"><value>{0} entidades · orden alfabético</value></data>
+  <data name="Report.Detail.Empty" xml:space="preserve"><value>Sin entidades registradas para este job.</value></data>
+  <data name="Report.Col.Entity" xml:space="preserve"><value>Entidad</value></data>
+  <data name="Report.Col.SourceRows" xml:space="preserve"><value>Filas origen</value></data>
+  <data name="Report.Col.SqlRows" xml:space="preserve"><value>Filas SQL</value></data>
+  <data name="Report.Col.Divergence" xml:space="preserve"><value>Divergencia</value></data>
+  <data name="Report.Col.Status" xml:space="preserve"><value>Estado</value></data>
+  <data name="Report.EntityStatus.Difference" xml:space="preserve"><value>Diferencia</value></data>
+  <data name="Report.Note.Reconcile" xml:space="preserve"><value>Divergencia = |origen − SQL| ÷ máx(origen, SQL), según el reporte de conciliación. «—»: sin dato.</value></data>
+  <data name="Report.Note.Diff" xml:space="preserve"><value>Delta = filas origen − filas SQL (positivo: faltan filas en SQL; negativo: SQL tiene filas de más); Delta total = Σ|Delta|. Divergencia = |Delta| ÷ filas origen. «—»: sin dato.</value></data>
+  <data name="Report.Note.Job" xml:space="preserve"><value>Divergencia = |origen − SQL| ÷ filas origen, con los recuentos del propio job. «—»: sin dato.</value></data>
+  <data name="Report.Footer.Page" xml:space="preserve"><value>Página</value></data>
+  <data name="Report.FileName" xml:space="preserve"><value>reporte-{0}.pdf</value></data>
 </root>

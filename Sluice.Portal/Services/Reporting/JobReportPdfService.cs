@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Resources;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -8,8 +9,11 @@ namespace Sluice.Portal.Services.Reporting;
 
 public interface IJobReportPdfService
 {
-    // Genera el PDF del reporte "Equity" para un job. reconcile/diff pueden ser null.
-    byte[] GenerateEquityReport(Job job, ReconcileReport? reconcile, DiffReport? diff);
+    // Genera el PDF del reporte "Equity" para un job. reconcile/diff pueden ser null. Textos y
+    // números en la cultura indicada (por defecto, la actual) y fechas en la zona indicada (la del
+    // navegador; por defecto, la del servidor).
+    byte[] GenerateEquityReport(Job job, ReconcileReport? reconcile, DiffReport? diff,
+        CultureInfo? cultura = null, TimeZoneInfo? zona = null);
 }
 
 public sealed class JobReportPdfService : IJobReportPdfService
@@ -45,17 +49,16 @@ public sealed class JobReportPdfService : IJobReportPdfService
     // Desplazamiento de la pill en filas alineadas arriba para que su base cuadre con la del nombre.
     private const float PillAjusteArriba = 1f;
 
-    // Números es-ES con un NumberFormatInfo propio (no CultureInfo("es-ES")) para no depender
-    // de ICU en el contenedor.
-    private static readonly NumberFormatInfo Num = new()
-    {
-        NumberGroupSeparator = ".",
-        NumberDecimalSeparator = ",",
-        NumberGroupSizes = [3],
-    };
+    // Textos del resx compartido (Report.*, Common.JobType.*, Common.JobStatus.*) en la cultura
+    // del hilo, que GenerateEquityReport fija mientras genera: así los helpers siguen siendo
+    // estáticos. Los números también salen con esa cultura.
+    private static readonly ResourceManager Recursos =
+        new("Sluice.Portal.Resources.SharedResource", typeof(SharedResource).Assembly);
 
-    private const string Subtitulo =
-        "Recuento de filas por entidad: origen (Synapse Link, ADLS) frente a destino (SQL Server).";
+    private static string T(string clave) => Recursos.GetString(clave, CultureInfo.CurrentUICulture) ?? clave;
+
+    private static string T(string clave, params object[] args) =>
+        string.Format(CultureInfo.CurrentCulture, T(clave), args);
 
     // Configuración global de QuestPDF; debe fijarse antes de generar cualquier documento.
     // Licencia Community (gratuita para ingresos < $1M USD/año). Solo la Lato embebida: un
@@ -69,11 +72,33 @@ public sealed class JobReportPdfService : IJobReportPdfService
         QuestPDF.Settings.ThrowOnMissingTextGlyphs = false;
     }
 
-    public byte[] GenerateEquityReport(Job job, ReconcileReport? reconcile, DiffReport? diff)
+    public byte[] GenerateEquityReport(Job job, ReconcileReport? reconcile, DiffReport? diff,
+        CultureInfo? cultura = null, TimeZoneInfo? zona = null)
     {
         // Nunca lanzar por null: normalizamos las entradas.
         ArgumentNullException.ThrowIfNull(job);
 
+        // La generación es síncrona: la cultura del hilo se fija solo mientras dura.
+        var (culturaPrevia, culturaUiPrevia) = (CultureInfo.CurrentCulture, CultureInfo.CurrentUICulture);
+        if (cultura is not null)
+        {
+            CultureInfo.CurrentCulture = cultura;
+            CultureInfo.CurrentUICulture = cultura;
+        }
+
+        try
+        {
+            return Generar(job, reconcile, diff, zona ?? TimeZoneInfo.Local);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = culturaPrevia;
+            CultureInfo.CurrentUICulture = culturaUiPrevia;
+        }
+    }
+
+    private static byte[] Generar(Job job, ReconcileReport? reconcile, DiffReport? diff, TimeZoneInfo zona)
+    {
         // Un Diff no tiene reconcile propio: cualquiera que llegue es de OTRO job y pisaría filas
         // y KPI. Su detalle es su diff.
         if (job.Type == JobType.Diff)
@@ -129,16 +154,16 @@ public sealed class JobReportPdfService : IJobReportPdfService
             : FuenteDetalle.Job;
         var fuenteTexto = (reconcile, diff) switch
         {
-            (not null, not null) => "Conciliación + Diff",
-            (not null, null) => reconcile.IsPartial ? "Reporte de conciliación (parcial)" : "Reporte de conciliación",
-            (null, not null) => "Reporte Diff",
-            _ => "Resultados del job",
+            (not null, not null) => T("Report.Source.Both"),
+            (not null, null) => reconcile.IsPartial ? T("Report.Source.ReconcilePartial") : T("Report.Source.Reconcile"),
+            (null, not null) => T("Report.Source.Diff"),
+            _ => T("Report.Source.Job"),
         };
 
         var informe = new Informe(
             job, TipoTexto(job.Type), fuenteTexto, fuente, job.Type == JobType.Diff, filas,
             totalFilasOrigen, totalFilasSql, divergenciaMax, divergenciaMaxTexto,
-            reconcile?.IsPartial == true, conDiferencias);
+            reconcile?.IsPartial == true, conDiferencias, zona);
 
         var document = Document.Create(container =>
         {
@@ -174,12 +199,12 @@ public sealed class JobReportPdfService : IJobReportPdfService
                 row.AutoItem().PaddingLeft(8).AlignBottom().PaddingBottom(0.5f).Text("EQUITY REPORT")
                     .FontSize(7.5f).SemiBold().FontColor(Terciario).LetterSpacing(0.08f).LineHeight(1f);
 
-                // Página 1: fecha de generación (ancho fijo, yyyy-MM-dd HH:mm). Resto: tipo e id
-                // del job para no perder el contexto al imprimir hojas sueltas.
+                // Página 1: fecha de generación. Resto: tipo e id del job para no perder el
+                // contexto al imprimir hojas sueltas.
                 row.RelativeItem().AlignRight().AlignBottom().PaddingBottom(0.5f).Column(der =>
                 {
                     der.Item().ShowOnce().AlignRight()
-                        .Text($"Generado {DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} UTC")
+                        .Text(T("Report.Generated", $"{Fecha(DateTimeOffset.UtcNow, informe.Zona)} ({Desfase(DateTimeOffset.UtcNow, informe.Zona)})"))
                         .FontSize(7.5f).FontColor(Terciario).LineHeight(1f).EnableFontFeature(Tnum);
                     der.Item().SkipOnce().AlignRight()
                         .Text($"{informe.TipoTexto} · {informe.Job.Id}")
@@ -217,11 +242,11 @@ public sealed class JobReportPdfService : IJobReportPdfService
         var job = informe.Job;
         container.Column(col =>
         {
-            col.Item().Text("INFORME DE CONCILIACIÓN")
+            col.Item().Text(T("Report.Overline"))
                 .FontSize(7.5f).SemiBold().FontColor(Marca).LetterSpacing(0.08f);
             col.Item().PaddingTop(2).Text($"{informe.TipoTexto} · {job.PipelineId}")
                 .FontSize(17).Bold().LineHeight(1.15f);
-            col.Item().PaddingTop(3).Text(Subtitulo).FontColor(Secundario);
+            col.Item().PaddingTop(3).Text(T("Report.Subtitle")).FontColor(Secundario);
 
             col.Item().PaddingTop(12)
                 .Background(Superficie).Border(0.5f).BorderColor(Filete)
@@ -274,11 +299,13 @@ public sealed class JobReportPdfService : IJobReportPdfService
         var job = informe.Job;
         var pares = new List<(string, string, string)>
         {
-            ("Inicio", FechaUtc(job.StartedAt), Texto),
-            ("Fin", job.FinishedAt is { } fin ? FechaUtc(fin) : "—", Texto),
+            (T("Report.Meta.Start"), Fecha(job.StartedAt, informe.Zona), Texto),
+            (T("Report.Meta.End"), job.FinishedAt is { } fin ? Fecha(fin, informe.Zona) : "—", Texto),
             // Sin fin no hay duración: medir contra "ahora" daría un número que cambia en cada descarga.
-            ("Duración", job.FinishedAt is { } f ? Duracion(f - job.StartedAt) : "—", Texto),
-            ("Fuente del detalle", informe.FuenteTexto, Texto),
+            (T("Report.Meta.Duration"), job.FinishedAt is { } f ? Duracion(f - job.StartedAt) : "—", Texto),
+            (T("Report.Meta.Source"), informe.FuenteTexto, Texto),
+            // Inicio y fin van en la zona de quien descarga el PDF: queda escrita una vez.
+            (T("Report.Meta.TimeZone"), Desfase(job.StartedAt, informe.Zona), Texto),
         };
 
         if (JobSummary.GetLong(job, "snapshotsProcessed") is { } procesados)
@@ -287,7 +314,7 @@ public sealed class JobReportPdfService : IJobReportPdfService
             var snapshots = seleccionados > 0 ? $"{Entero(procesados)} / {Entero(seleccionados)}" : Entero(procesados);
             if (JobSummary.GetString(job, "stoppedAtIncompleteSnapshot") is not null)
             {
-                snapshots += " · detenido";
+                snapshots = T("Report.Meta.SnapshotsStopped", snapshots);
             }
 
             pares.Add(("Snapshots", snapshots, Texto));
@@ -295,17 +322,17 @@ public sealed class JobReportPdfService : IJobReportPdfService
 
         if (JobSummary.GetLong(job, "csvRows") is { } csvRows)
         {
-            pares.Add(("Filas leídas (CSV)", Entero(csvRows), Texto));
+            pares.Add((T("Report.Meta.CsvRows"), Entero(csvRows), Texto));
         }
 
         if (JobSummary.GetLong(job, "sqlMergedRows") is { } fusionadas)
         {
-            pares.Add(("Filas fusionadas", Entero(fusionadas), Texto));
+            pares.Add((T("Report.Meta.MergedRows"), Entero(fusionadas), Texto));
         }
 
         if (JobSummary.GetLong(job, "entityFailures") is { } fallidas && fallidas > 0)
         {
-            pares.Add(("Entidades con error", Entero(fallidas), Rojo.Texto));
+            pares.Add((T("Report.Meta.FailedEntities"), Entero(fallidas), Rojo.Texto));
         }
 
         return pares;
@@ -321,12 +348,12 @@ public sealed class JobReportPdfService : IJobReportPdfService
         var conError = filas.Count(f => EsError(f.Estado));
         var soloDiferencias = informe.ConDiferencias - conError;
         var partes = new List<string>();
-        if (conError > 0) partes.Add($"{conError} con error");
-        if (soloDiferencias > 0) partes.Add($"{soloDiferencias} con diferencias");
+        if (conError > 0) partes.Add(T("Report.Kpi.WithErrors", conError));
+        if (soloDiferencias > 0) partes.Add(T("Report.Kpi.WithDifferences", soloDiferencias));
         var (notaEntidades, colorEntidades) = partes.Count > 0
             // Una línea por parte: "1 con error · 2 con diferencias" no cabe en la celda.
             ? (string.Join("\n", partes), conError > 0 ? Rojo.Texto : Ambar.Texto)
-            : n > 0 ? ("sin diferencias", Verde.Texto) : ("ninguna comparada", Terciario);
+            : n > 0 ? (T("Report.Kpi.NoDifferences"), Verde.Texto) : (T("Report.Kpi.NoneCompared"), Terciario);
 
         // 2-3. Filas origen / SQL, con la diferencia neta como nota.
         var origen = n > 0 && filas.Any(f => f.FilasOrigen.HasValue) ? Entero(informe.TotalFilasOrigen) : "—";
@@ -336,9 +363,9 @@ public sealed class JobReportPdfService : IJobReportPdfService
         if (haySql)
         {
             var neto = informe.TotalFilasOrigen - informe.TotalFilasSql;
-            notaSql = neto > 0 ? ($"faltan {Entero(neto)} en SQL", Ambar.Texto)
-                : neto < 0 ? ($"sobran {Entero(-neto)} en SQL", Ambar.Texto)
-                : ("sin diferencia neta", Terciario);
+            notaSql = neto > 0 ? (T("Report.Kpi.MissingInSql", Entero(neto)), Ambar.Texto)
+                : neto < 0 ? (T("Report.Kpi.ExtraInSql", Entero(-neto)), Ambar.Texto)
+                : (T("Report.Kpi.NoNetDifference"), Terciario);
         }
 
         // 4. Divergencia máxima (o delta total en un Diff).
@@ -348,23 +375,23 @@ public sealed class JobReportPdfService : IJobReportPdfService
         {
             var deltaTotal = JobSummary.GetLong(informe.Job, "diffTotalDelta")
                 ?? (n > 0 ? filas.Sum(f => Math.Abs(f.Delta ?? 0)) : (long?)null);
-            etiqueta4 = "Delta total";
+            etiqueta4 = T("Report.Kpi.TotalDelta");
             valor4 = deltaTotal is { } d ? Entero(d) : "—";
             color4 = deltaTotal > 0 ? Ambar.Texto : Texto;
             if (n > 0)
             {
                 // En dos líneas: en una sola no cabía y se recortaba.
-                nota4 = ($"Σ|Delta|\ndiverg. máx. {informe.DivergenciaMaxTexto}", Terciario);
+                nota4 = ($"Σ|Delta|\n{T("Report.Kpi.MaxDivergenceShort", informe.DivergenciaMaxTexto)}", Terciario);
             }
         }
         else
         {
-            etiqueta4 = "Divergencia máx.";
+            etiqueta4 = T("Report.Kpi.MaxDivergence");
             valor4 = informe.DivergenciaMaxTexto;
             color4 = informe.DivergenciaMax > 0 && valor4 != "—" ? Ambar.Texto : Texto;
             if (informe.ConciliacionParcial)
             {
-                nota4 = ("conciliación parcial", Ambar.Texto);
+                nota4 = (T("Report.Kpi.PartialReconcile"), Ambar.Texto);
             }
             else if (informe.DivergenciaMax > 0 && n > 0)
             {
@@ -385,11 +412,11 @@ public sealed class JobReportPdfService : IJobReportPdfService
             col.Item().LineHorizontal(1.25f).LineColor(Marca);
             col.Item().Row(row =>
             {
-                row.RelativeItem().Element(c => CeldaKpi(c, false, "Entidades",
+                row.RelativeItem().Element(c => CeldaKpi(c, false, T("Report.Kpi.Entities"),
                     v => ValorKpi(v, valores[0], tamano, Texto), notaEntidades, colorEntidades, lineasNota: 2));
-                row.RelativeItem().Element(c => CeldaKpi(c, true, "Filas origen",
+                row.RelativeItem().Element(c => CeldaKpi(c, true, T("Report.Col.SourceRows"),
                     v => ValorKpi(v, origen, tamano, Texto), null, Terciario));
-                row.RelativeItem().Element(c => CeldaKpi(c, true, "Filas SQL",
+                row.RelativeItem().Element(c => CeldaKpi(c, true, T("Report.Col.SqlRows"),
                     v => ValorKpi(v, sql, tamano, Texto), notaSql.Texto, notaSql.Color));
                 row.RelativeItem().Element(c => CeldaKpi(c, true, etiqueta4,
                     v => ValorKpi(v, valor4, tamano, color4), nota4.Texto, nota4.Color, lineasNota: informe.EsDiff ? 2 : 1));
@@ -400,11 +427,11 @@ public sealed class JobReportPdfService : IJobReportPdfService
                 {
                     if (estadoKpi == "—")
                     {
-                        CeldaKpi(c, true, "Estado del job", v => ValorKpi(v, "—", 16, Terciario), "sin comparación", Terciario);
+                        CeldaKpi(c, true, T("Report.Kpi.JobStatus"), v => ValorKpi(v, "—", 16, Terciario), T("Report.Kpi.NoComparison"), Terciario);
                     }
                     else
                     {
-                        CeldaKpi(c, true, "Estado del job",
+                        CeldaKpi(c, true, T("Report.Kpi.JobStatus"),
                             v => v.AlignLeft().AlignBottom().Element(p =>
                                 Pill(p, estadoKpi, TonoJob(informe.Job.Status), tamano: 9, paddingH: 8, paddingV: 2.5f)),
                             null, Terciario);
@@ -464,7 +491,7 @@ public sealed class JobReportPdfService : IJobReportPdfService
         {
             row.ConstantItem(3).Background(tono.Barra);
             row.RelativeItem().Background(tono.Fondo).PaddingVertical(7).PaddingHorizontal(10)
-                .Text((estado is JobStatus.Error or JobStatus.Blocked ? "El job terminó con error. " : "")
+                .Text((estado is JobStatus.Error or JobStatus.Blocked ? T("Report.Callout.JobFailed") + " " : "")
                     + TextoCallout(n, informe.ConDiferencias, estado))
                 .LineHeight(1.3f).FontColor(tono.Texto);
         });
@@ -476,17 +503,17 @@ public sealed class JobReportPdfService : IJobReportPdfService
     {
         if (conDiferencias > 0)
         {
-            return $"Se detectaron diferencias en {conDiferencias} {(conDiferencias == 1 ? "entidad" : "entidades")}. Revisa el detalle por entidad.";
+            return conDiferencias == 1 ? T("Report.Callout.DifferencesOne") : T("Report.Callout.DifferencesMany", conDiferencias);
         }
 
         if (entidades == 0)
         {
             return estadoJob == JobStatus.Ok
-                ? "Este job no tuvo datos nuevos que conciliar. La última conciliación del pipeline está en la página Reconcile."
-                : "Este job no llegó a comparar ninguna entidad.";
+                ? T("Report.Callout.NoNewData")
+                : T("Report.Callout.NothingCompared");
         }
 
-        return "Sin diferencias: origen y SQL coinciden en todas las entidades.";
+        return T("Report.Callout.AllMatch");
     }
 
     // Un job Ok sin entidades no validó nada: "OK" en el KPI se leería como "todo cuadra".
@@ -501,11 +528,11 @@ public sealed class JobReportPdfService : IJobReportPdfService
         {
             col.Item().PaddingTop(18).PaddingBottom(6).Row(row =>
             {
-                row.AutoItem().Text("Detalle por entidad").FontSize(11).Bold();
+                row.AutoItem().Text(T("Report.Detail.Title")).FontSize(11).Bold();
                 if (filas.Count > 0)
                 {
                     row.RelativeItem().AlignRight().AlignBottom()
-                        .Text($"{filas.Count} {(filas.Count == 1 ? "entidad" : "entidades")} · orden alfabético")
+                        .Text(filas.Count == 1 ? T("Report.Detail.CountOne") : T("Report.Detail.CountMany", filas.Count))
                         .FontSize(8).FontColor(Terciario).EnableFontFeature(Tnum);
                 }
             });
@@ -514,7 +541,7 @@ public sealed class JobReportPdfService : IJobReportPdfService
             if (filas.Count == 0)
             {
                 col.Item().Border(0.5f).BorderColor(Filete).Padding(14).AlignCenter()
-                    .Text("Sin entidades registradas para este job.").FontColor(Secundario);
+                    .Text(T("Report.Detail.Empty")).FontColor(Secundario);
                 return;
             }
 
@@ -547,14 +574,14 @@ public sealed class JobReportPdfService : IJobReportPdfService
             var columnas = esDiff
                 ? new (string Titulo, float Ancho, Alineacion Alineacion)[]
                 {
-                    ("Filas origen", 66, Alineacion.Derecha), ("Filas SQL", 66, Alineacion.Derecha),
-                    ("Delta", 66, Alineacion.Derecha), ("Divergencia", 60, Alineacion.Derecha),
-                    ("Estado", 66, Alineacion.Centro),
+                    (T("Report.Col.SourceRows"), 66, Alineacion.Derecha), (T("Report.Col.SqlRows"), 66, Alineacion.Derecha),
+                    ("Delta", 66, Alineacion.Derecha), (T("Report.Col.Divergence"), 60, Alineacion.Derecha),
+                    (T("Report.Col.Status"), 66, Alineacion.Centro),
                 }
                 : new (string Titulo, float Ancho, Alineacion Alineacion)[]
                 {
-                    ("Filas origen", 72, Alineacion.Derecha), ("Filas SQL", 72, Alineacion.Derecha),
-                    ("Divergencia", 64, Alineacion.Derecha), ("Estado", 70, Alineacion.Centro),
+                    (T("Report.Col.SourceRows"), 72, Alineacion.Derecha), (T("Report.Col.SqlRows"), 72, Alineacion.Derecha),
+                    (T("Report.Col.Divergence"), 64, Alineacion.Derecha), (T("Report.Col.Status"), 70, Alineacion.Centro),
                 };
 
             table.ColumnsDefinition(cols =>
@@ -575,7 +602,7 @@ public sealed class JobReportPdfService : IJobReportPdfService
                     .Background(CabeceraTabla).BorderBottom(0.75f).BorderColor(Marca)
                     .Row(row =>
                     {
-                        row.RelativeItem().Element(c => TituloColumna(c, "Entidad", Alineacion.Izquierda));
+                        row.RelativeItem().Element(c => TituloColumna(c, T("Report.Col.Entity"), Alineacion.Izquierda));
                         foreach (var columna in columnas)
                         {
                             row.ConstantItem(columna.Ancho).Element(c => TituloColumna(c, columna.Titulo, columna.Alineacion));
@@ -672,12 +699,9 @@ public sealed class JobReportPdfService : IJobReportPdfService
     // Qué significa la columna Divergencia depende de dónde salen los recuentos.
     private static string NotaAlPie(FuenteDetalle fuente) => fuente switch
     {
-        FuenteDetalle.Conciliacion =>
-            "Divergencia = |origen − SQL| ÷ máx(origen, SQL), según el reporte de conciliación. «—»: sin dato.",
-        FuenteDetalle.Diff =>
-            "Delta = filas origen − filas SQL (positivo: faltan filas en SQL; negativo: SQL tiene filas de más); Delta total = Σ|Delta|. Divergencia = |Delta| ÷ filas origen. «—»: sin dato.",
-        _ =>
-            "Divergencia = |origen − SQL| ÷ filas origen, con los recuentos del propio job. «—»: sin dato.",
+        FuenteDetalle.Conciliacion => T("Report.Note.Reconcile"),
+        FuenteDetalle.Diff => T("Report.Note.Diff"),
+        _ => T("Report.Note.Job"),
     };
 
     // -------------------- PIE --------------------
@@ -694,7 +718,7 @@ public sealed class JobReportPdfService : IJobReportPdfService
                 row.RelativeItem().AlignRight().Text(text =>
                 {
                     text.DefaultTextStyle(s => s.FontSize(7.5f).FontColor(Terciario).EnableFontFeature(Tnum));
-                    text.Span("Página ");
+                    text.Span(T("Report.Footer.Page") + " ");
                     text.CurrentPageNumber();
                     text.Span(" / ");
                     text.TotalPages();
@@ -762,15 +786,15 @@ public sealed class JobReportPdfService : IJobReportPdfService
             origenMostrado, filasSql, divergencia, estado, e?.Message, delta);
     }
 
-    // 1.682.160
-    internal static string Entero(long n) => n.ToString("#,0", Num);
+    // 1.682.160 (es) / 1,682,160 (en).
+    internal static string Entero(long n) => n.ToString("#,0", CultureInfo.CurrentCulture);
 
     // +5.950 / −120 / 0 (signo menos tipográfico U+2212).
-    internal static string ConSigno(long n) => n.ToString("+#,0;−#,0;0", Num);
+    internal static string ConSigno(long n) => n.ToString("+#,0;−#,0;0", CultureInfo.CurrentCulture);
 
     // 11,63 % / 8.076,92 %; por debajo de 0,005 se muestra "<0,01 %" para no presentar como 0 una diferencia real.
     internal static string Pct(double p) =>
-        p > 0 && p < 0.005 ? "<0,01 %" : p.ToString("#,0.00", Num) + " %";
+        (p > 0 && p < 0.005 ? "<" + 0.01.ToString("0.00", CultureInfo.CurrentCulture) : p.ToString("#,0.00", CultureInfo.CurrentCulture)) + " %";
 
     // Mismo patrón que JobFlowCanvas.FormatDuration: "7 s", "6 min 02 s", "1 h 05 min".
     internal static string Duracion(TimeSpan d)
@@ -787,8 +811,13 @@ public sealed class JobReportPdfService : IJobReportPdfService
                 : $"{(int)d.TotalSeconds} s";
     }
 
-    private static string FechaUtc(DateTimeOffset fecha) =>
-        fecha.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + " UTC";
+    // Fechas en la zona de quien descarga el PDF; la zona se escribe aparte con Desfase.
+    private static string Fecha(DateTimeOffset fecha, TimeZoneInfo zona) =>
+        TimeZoneInfo.ConvertTime(fecha, zona).ToString("g", CultureInfo.CurrentCulture);
+
+    // "UTC+09:00": la zona tal como queda en esa fecha (con su horario de verano, si lo hay).
+    private static string Desfase(DateTimeOffset fecha, TimeZoneInfo zona) =>
+        "UTC" + TimeZoneInfo.ConvertTime(fecha, zona).ToString("zzz", CultureInfo.InvariantCulture);
 
     private static bool EsOk(string estado) =>
         estado.Equals("ok", StringComparison.OrdinalIgnoreCase);
@@ -811,28 +840,13 @@ public sealed class JobReportPdfService : IJobReportPdfService
     internal static float AnchoLato(string texto, float tamano) =>
         texto.Sum(c => c is >= ' ' and <= '~' ? AvancesLato[c - ' '] : 800) * tamano / 1000f;
 
-    private static string TipoTexto(JobType tipo) => tipo switch
-    {
-        JobType.Incremental => "Incremental",
-        JobType.Force => "Forzar",
-        JobType.Reconcile => "Reconciliar",
-        JobType.Diff => "Diff",
-        JobType.ResyncTable => "Re-sync tabla",
-        JobType.ReloadFromParquet => "Reload parquet",
-        JobType.CompareValues => "Comparar valores",
-        _ => tipo.ToString(),
-    };
+    // Mismas etiquetas que la UI (Common.JobType.* y Common.JobStatus.*); un valor sin clave sale
+    // con su nombre.
+    private static string TipoTexto(JobType tipo) =>
+        Recursos.GetString($"Common.JobType.{tipo}", CultureInfo.CurrentUICulture) ?? tipo.ToString();
 
-    private static string EstadoTexto(JobStatus estado) => estado switch
-    {
-        JobStatus.Ok => "OK",
-        JobStatus.Partial => "Parcial",
-        JobStatus.Error => "Error",
-        JobStatus.Running => "En ejecución",
-        JobStatus.Blocked => "Estancado",
-        JobStatus.Cancelled => "Cancelado",
-        _ => estado.ToString(),
-    };
+    private static string EstadoTexto(JobStatus estado) =>
+        Recursos.GetString($"Common.JobStatus.{estado}", CultureInfo.CurrentUICulture) ?? estado.ToString();
 
     private static Tono TonoJob(JobStatus estado) => estado switch
     {
@@ -848,11 +862,11 @@ public sealed class JobReportPdfService : IJobReportPdfService
         if (string.IsNullOrWhiteSpace(estado)) return "—";
         return estado switch
         {
-            _ when estado.Equals("ok", StringComparison.OrdinalIgnoreCase) => "OK",
-            _ when estado.Equals("partial", StringComparison.OrdinalIgnoreCase) => "Parcial",
-            _ when estado.Equals("error", StringComparison.OrdinalIgnoreCase) => "Error",
+            _ when estado.Equals("ok", StringComparison.OrdinalIgnoreCase) => EstadoTexto(JobStatus.Ok),
+            _ when estado.Equals("partial", StringComparison.OrdinalIgnoreCase) => EstadoTexto(JobStatus.Partial),
+            _ when estado.Equals("error", StringComparison.OrdinalIgnoreCase) => EstadoTexto(JobStatus.Error),
             _ when estado.Equals("diferencia", StringComparison.OrdinalIgnoreCase)
-                || estado.Equals("diff", StringComparison.OrdinalIgnoreCase) => "Diferencia",
+                || estado.Equals("diff", StringComparison.OrdinalIgnoreCase) => T("Report.EntityStatus.Difference"),
             _ => char.ToUpperInvariant(estado[0]) + estado[1..],
         };
     }
@@ -881,7 +895,8 @@ public sealed class JobReportPdfService : IJobReportPdfService
         double DivergenciaMax,
         string DivergenciaMaxTexto,
         bool ConciliacionParcial,
-        int ConDiferencias);
+        int ConDiferencias,
+        TimeZoneInfo Zona);
 
     // Estructura interna para representar una fila del detalle por entidad.
     private sealed record FilaEntidad(
