@@ -1,6 +1,5 @@
 @page "/jobs/{JobId}"
 @rendermode InteractiveServer
-@using System.Globalization
 @using System.Text.Json
 @using Sluice.Portal.Components.Shared
 @using Sluice.Portal.Models
@@ -16,6 +15,7 @@
 @inject Sluice.Portal.Services.Stores.ReportStore Reports
 @inject Sluice.Portal.Services.Reporting.JobReportDownloader ReportDownloader
 @inject IJSRuntime Js
+@inject BrowserTime Time
 @inject INotificationService NotificationService
 @inject IDialogService DialogService
 @inject CircuitAuditActor Audit
@@ -121,7 +121,7 @@
             </div>
 
             <PageSection Title="@L["Page.JobDetail.StageFlow"]">
-                <JobFlowCanvas Flow="_flow" @bind-SelectedKey="_selectedStep" TimeZone="_timeZone"
+                <JobFlowCanvas Flow="_flow" @bind-SelectedKey="_selectedStep" TimeZone="Time.Zone"
                                ParquetLocation="@_parquetLocation" ParquetHref="@_parquetHref" ParquetOnPortal="_parquetOnPortal" />
             </PageSection>
 
@@ -324,7 +324,6 @@
     private string? _error;
     private PageRefreshTimer? _timer;
     private string? _selectedStep;
-    private TimeZoneInfo? _timeZone;
     private string? _entitySearch;
     private int _entityPage = 1;
     private bool _onlyIssues;
@@ -342,26 +341,12 @@
         _timer.Start();
     }
 
+    // La hora "local" es la del navegador: solo se conoce con el circuito conectado.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
+        if (firstRender && await Time.InitAsync())
         {
-            return;
-        }
-
-        // La hora "local" es la del navegador: solo se conoce con el circuito conectado.
-        try
-        {
-            var id = await Js.InvokeAsync<string?>("sluiceUi.timeZone");
-            if (!string.IsNullOrWhiteSpace(id) && TimeZoneInfo.TryFindSystemTimeZoneById(id, out var tz))
-            {
-                _timeZone = tz;
-                StateHasChanged();
-            }
-        }
-        catch (JSException ex)
-        {
-            Logger.LogDebug(ex, "No se pudo leer la zona horaria del navegador.");
+            StateHasChanged();
         }
     }
 
@@ -424,12 +409,10 @@
         }
     }
 
-    private DateTimeOffset ToLocal(DateTimeOffset at) =>
-        _timeZone is null ? at.ToLocalTime() : TimeZoneInfo.ConvertTime(at, _timeZone);
+    private string FormatDateTime(DateTimeOffset at) => Time.Format(at);
 
-    private string FormatDateTime(DateTimeOffset at) => ToLocal(at).ToString("g", CultureInfo.CurrentCulture);
+    private string FormatTime(DateTimeOffset at) => Time.Format(at, "HH:mm:ss");
 
-    private string FormatTime(DateTimeOffset at) => ToLocal(at).ToString("HH:mm:ss", CultureInfo.CurrentCulture);
 
     // ---- Alerta ----
 

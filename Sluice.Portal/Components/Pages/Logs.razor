@@ -7,6 +7,7 @@
 @using Sluice.Portal.Services.Logging
 @inject IActivityLog ActivityLog
 @inject IStringLocalizer<SharedResource> L
+@inject BrowserTime Time
 
 <PageTitle>@L["Page.Logs.Title"]</PageTitle>
 
@@ -47,8 +48,8 @@
             @* Fecha corta ("09 oct 20:28") para que quepa en la columna; la completa, con
                segundos, en el tooltip. *@
             <TemplateColumn Title="@L["Page.Logs.Col.Date"]">
-                <span class="cell-mono" data-testid="log-date" title="@context.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")">
-                    @context.Timestamp.ToLocalTime().ToString("dd MMM HH:mm")
+                <span class="cell-mono" data-testid="log-date" title="@Time.Format(context.Timestamp, "G")">
+                    @Time.Format(context.Timestamp, "dd MMM HH:mm")
                 </span>
             </TemplateColumn>
             <TemplateColumn Title="@L["Page.Logs.Col.Source"]">
@@ -96,6 +97,16 @@
     private int _totalPages = 1;
 
     protected override void OnInitialized() => Load();
+
+    // Las fechas van en la zona del navegador, que solo se conoce con el circuito conectado.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && await Time.InitAsync())
+        {
+            StateHasChanged();
+        }
+    }
+
 
     private void Load()
     {

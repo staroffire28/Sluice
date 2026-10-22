@@ -1,6 +1,5 @@
 @page "/"
 @rendermode InteractiveServer
-@using System.Globalization
 @using Sluice.Portal.Components.Shared
 @using Sluice.Portal.Models
 @using Sluice.Portal.Services
@@ -14,7 +13,7 @@
 @inject IStorageOverviewService StorageOverview
 @inject INotificationService NotificationService
 @inject IDialogService DialogService
-@inject IJSRuntime Js
+@inject BrowserTime Time
 @inject ILogger<Dashboard> Logger
 @inject Sluice.Portal.Services.Pipeline.JobProgressStore ProgressStore
 @inject WorkerRegistry WorkerRegistry
@@ -267,7 +266,6 @@
     private bool _storageLoading;
     private PageRefreshTimer? _timer;
     private int _adlsRefreshGeneration;
-    private TimeZoneInfo? _timeZone;
 
     // Cancela la carga de ADLS en curso al salir de la página (si no, terminaba más tarde y
     // pintaba un componente ya desechado).
@@ -299,26 +297,12 @@
         _timer.Start();
     }
 
+    // Las horas se muestran en la zona del navegador (solo se conoce con el circuito conectado).
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
+        if (firstRender && await Time.InitAsync())
         {
-            return;
-        }
-
-        // Las horas se muestran en la zona del navegador (solo se conoce con el circuito conectado).
-        try
-        {
-            var id = await Js.InvokeAsync<string?>("sluiceUi.timeZone");
-            if (!string.IsNullOrWhiteSpace(id) && TimeZoneInfo.TryFindSystemTimeZoneById(id, out var tz))
-            {
-                _timeZone = tz;
-                StateHasChanged();
-            }
-        }
-        catch (JSException ex)
-        {
-            Logger.LogDebug(ex, "No se pudo leer la zona horaria del navegador.");
+            StateHasChanged();
         }
     }
 
@@ -416,12 +400,10 @@
         && Connections.Get(pipeline.SourceId) is { } source
         && AdlsClientFactory.KeepsParquetOnPortal(source);
 
-    private DateTimeOffset ToLocal(DateTimeOffset at) =>
-        _timeZone is null ? at.ToLocalTime() : TimeZoneInfo.ConvertTime(at, _timeZone);
+    private string FormatDateTime(DateTimeOffset at) => Time.Format(at);
 
-    private string FormatDateTime(DateTimeOffset at) => ToLocal(at).ToString("g", CultureInfo.CurrentCulture);
+    private string FormatTime(DateTimeOffset at) => Time.Format(at, "HH:mm");
 
-    private string FormatTime(DateTimeOffset at) => ToLocal(at).ToString("HH:mm", CultureInfo.CurrentCulture);
 
     // ADLS (storage + changelog) se carga en segundo plano: no bloquea el panel ni el timer de 3s.
     private async Task RefreshAdlsAsync(int generation, CancellationToken ct = default)

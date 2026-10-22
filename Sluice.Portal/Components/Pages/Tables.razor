@@ -13,6 +13,7 @@
 @inject Sluice.Portal.Services.Pipeline.TableCatalogService CatalogService
 @inject CircuitAuditActor Audit
 @inject NavigationManager Nav
+@inject BrowserTime Time
 
 @inject IStringLocalizer<SharedResource> L
 
@@ -42,14 +43,14 @@
                             Items="@_rows.AsQueryable()" TGridItem="TableRow">
                 <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" Class="cell-nowrap" />
                 <PropertyColumn Property="@(r => r.RowCount)" Title="@L["Common.Rows"]" Class="cell-nowrap" />
-                <PropertyColumn Property="@(r => r.Watermark)" Title="@L["Page.Tables.Watermark"]" Class="cell-nowrap" />
+                <PropertyColumn Property="@(r => r.Watermark.HasValue ? Time.Format(r.Watermark.Value) : "-")" Title="@L["Page.Tables.Watermark"]" Class="cell-nowrap" />
                 <TemplateColumn Title="@L["Page.Tables.LastData"]" Class="cell-nowrap">
                     @if (context.LastLoad is { } lastLoad)
                     {
                         var days = (int)(DateTimeOffset.UtcNow - lastLoad).TotalDays;
                         var stale = _staleTableDays > 0 && days >= _staleTableDays;
                         <span class="@(stale ? "table-stale" : null)" data-testid="last-data-@context.Entity" data-stale="@(stale ? "true" : "false")"
-                              title="@(stale ? L["Page.Tables.LastDataStale", days].Value : null)">@lastLoad.ToString("u")</span>
+                              title="@(stale ? L["Page.Tables.LastDataStale", days].Value : null)">@Time.Format(lastLoad)</span>
                     }
                     else
                     {
@@ -131,7 +132,17 @@
         }
     }
 
+    // Las fechas van en la zona del navegador, que solo se conoce con el circuito conectado.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && await Time.InitAsync())
+        {
+            StateHasChanged();
+        }
+    }
+
     private void Load()
+
     {
         if (string.IsNullOrWhiteSpace(_pipelineId))
         {
@@ -160,7 +171,7 @@
             {
                 Entity = kv.Key,
                 RowCount = kv.Value.RowCount,
-                Watermark = kv.Value.Watermark?.ToString("u") ?? "-",
+                Watermark = kv.Value.Watermark,
                 LastLoad = kv.Value.LastLoad,
                 Status = kv.Value.Status,
                 DivergencePct = divergence.TryGetValue(kv.Key, out var pct) ? pct : null,
@@ -209,7 +220,7 @@
     {
         public string Entity { get; init; } = "";
         public long RowCount { get; init; }
-        public string Watermark { get; init; } = "";
+        public DateTimeOffset? Watermark { get; init; }
         public DateTimeOffset? LastLoad { get; init; }
         public string Status { get; init; } = "ok";
         public double? DivergencePct { get; init; }
