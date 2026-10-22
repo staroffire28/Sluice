@@ -41,10 +41,11 @@ html, body {
 }
 
 #blazor-error-ui {
-    background: #fff4ce;
-    border-top: 1px solid #fde7a0;
+    background: var(--colorStatusWarningBackground1, #fff4ce);
+    border-top: 1px solid var(--colorStatusWarningBorder1, #fde7a0);
     bottom: 0;
     box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.08);
+    color: var(--colorNeutralForeground1, #242424);
     display: none;
     left: 0;
     padding: 0.6rem 2.5rem 0.7rem 1.25rem;
@@ -53,8 +54,21 @@ html, body {
     z-index: 1000;
 }
 
-#blazor-error-ui .dismiss {
+#blazor-error-ui button {
+    background: none;
+    border: 0;
+    color: var(--colorBrandForegroundLink, #0f6cbd);
     cursor: pointer;
+    font: inherit;
+    padding: 0 0.25rem;
+}
+
+#blazor-error-ui .reload {
+    text-decoration: underline;
+}
+
+#blazor-error-ui .dismiss {
+    color: inherit;
     position: absolute;
     right: 0.75rem;
     top: 0.5rem;

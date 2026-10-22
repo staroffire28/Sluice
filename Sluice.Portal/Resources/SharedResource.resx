@@ -141,6 +141,12 @@
   <data name="Common.Testing" xml:space="preserve"><value>Probando…</value></data>
   <data name="Common.Retry" xml:space="preserve"><value>Reintentar</value></data>
   <data name="Common.UnexpectedError" xml:space="preserve"><value>Se produjo un error inesperado en esta página. Puedes reintentar o navegar a otra sección.</value></data>
+  <data name="ErrorUi.Message" xml:space="preserve"><value>Se ha producido un error inesperado. Recarga la página para seguir trabajando.</value></data>
+  <data name="ErrorUi.Reload" xml:space="preserve"><value>Recargar</value></data>
+  <data name="ErrorPage.Title" xml:space="preserve"><value>Error</value></data>
+  <data name="ErrorPage.Message" xml:space="preserve"><value>No se pudo procesar la petición.</value></data>
+  <data name="ErrorPage.RequestId" xml:space="preserve"><value>Id. de la petición:</value></data>
+  <data name="ErrorPage.Home" xml:space="preserve"><value>Volver al inicio</value></data>
   <data name="Common.RetryTitle" xml:space="preserve"><value>Reintentar job</value></data>
   <data name="Common.RetryConfirm" xml:space="preserve"><value>¿Reintentar el job {0}? Se crea una nueva ejecución del pipeline; el job actual se conserva como historial.</value></data>
   <data name="Common.RetryStarted" xml:space="preserve"><value>Reintento iniciado (nuevo job {0}).</value></data>

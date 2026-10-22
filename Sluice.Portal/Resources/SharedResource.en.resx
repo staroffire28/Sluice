@@ -141,6 +141,12 @@
   <data name="Common.Testing" xml:space="preserve"><value>Testing…</value></data>
   <data name="Common.Retry" xml:space="preserve"><value>Retry</value></data>
   <data name="Common.UnexpectedError" xml:space="preserve"><value>An unexpected error occurred on this page. You can retry or navigate to another section.</value></data>
+  <data name="ErrorUi.Message" xml:space="preserve"><value>An unexpected error has occurred. Reload the page to keep working.</value></data>
+  <data name="ErrorUi.Reload" xml:space="preserve"><value>Reload</value></data>
+  <data name="ErrorPage.Title" xml:space="preserve"><value>Error</value></data>
+  <data name="ErrorPage.Message" xml:space="preserve"><value>The request could not be processed.</value></data>
+  <data name="ErrorPage.RequestId" xml:space="preserve"><value>Request ID:</value></data>
+  <data name="ErrorPage.Home" xml:space="preserve"><value>Back to home</value></data>
   <data name="Common.RetryTitle" xml:space="preserve"><value>Retry job</value></data>
   <data name="Common.RetryConfirm" xml:space="preserve"><value>Retry job {0}? A new pipeline run is created; the current job is kept as history.</value></data>
   <data name="Common.RetryStarted" xml:space="preserve"><value>Retry started (new job {0}).</value></data>

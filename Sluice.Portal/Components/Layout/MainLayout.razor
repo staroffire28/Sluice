@@ -101,10 +101,12 @@
 @* Diálogos, toasts, tooltips y message bars (en la v4 eran cinco providers separados). *@
 <FluentProviders />
 
-<div id="blazor-error-ui">
-    An unhandled error has occurred.
-    <a href="" class="reload">Reload</a>
-    <a class="dismiss">🗙</a>
+@* blazor.web.js la muestra y engancha los clics de .reload y .dismiss. role="alert" la anuncia al
+   aparecer; botones (no enlaces sin href) para que se alcancen con el teclado. *@
+<div id="blazor-error-ui" role="alert">
+    @L["ErrorUi.Message"]
+    <button type="button" class="reload">@L["ErrorUi.Reload"]</button>
+    <button type="button" class="dismiss" aria-label="@L["Common.Close"]">🗙</button>
 </div>
 
 @code {
