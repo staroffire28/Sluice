@@ -305,16 +305,19 @@ public static class ManagementEndpoints
 
         // Exportaciones CSV de Logs y Jobs: todos los registros que cumplen los filtros de la página,
         // no solo la página visible.
-        api.MapGet("/logs/export", (string? source, string? level, string? search, DateOnly? from, DateOnly? to, IActivityLog log, IStringLocalizer<SharedResource> l) =>
+        // tz: la zona del navegador que usa la tabla de Logs (sin ella o si no se reconoce, la del
+        // servidor), para que el CSV filtre los días y escriba las horas igual que la tabla.
+        api.MapGet("/logs/export", (string? source, string? level, string? search, DateOnly? from, DateOnly? to, string? tz, IActivityLog log, IStringLocalizer<SharedResource> l) =>
         {
-            var entries = log.Query(new ActivityLogFilter(NullIfBlank(source), NullIfBlank(level), NullIfBlank(search), new DateRange(from, to)));
+            var zone = !string.IsNullOrWhiteSpace(tz) && TimeZoneInfo.TryFindSystemTimeZoneById(tz, out var found) ? found : null;
+            var entries = log.Query(new ActivityLogFilter(NullIfBlank(source), NullIfBlank(level), NullIfBlank(search), new DateRange(from, to), zone));
             return Csv("logs", writer =>
             {
                 CsvWriter.WriteRow(writer, [l["Page.Logs.Col.Date"].Value, l["Page.Logs.Col.Source"].Value, l["Page.Logs.Col.Actor"].Value, l["Page.Logs.Col.Level"].Value, l["Page.Logs.Col.Action"].Value, l["Page.Logs.Col.Message"].Value, l["Page.Logs.Col.Pipeline"].Value, l["Page.Logs.Col.Job"].Value, l["Page.Logs.Col.Host"].Value]);
                 foreach (var e in entries)
                 {
                     var sourceLabel = e.Source == "user" ? l["Page.Logs.Source.User"].Value : l["Page.Logs.Source.System"].Value;
-                    CsvWriter.WriteRow(writer, [CsvDate(e.Timestamp), sourceLabel, e.ActorLabel, e.Level.ToLowerInvariant(), e.Action, e.Message, e.PipelineId, e.JobId, e.HostName]);
+                    CsvWriter.WriteRow(writer, [CsvDate(e.Timestamp, zone), sourceLabel, e.ActorLabel, e.Level.ToLowerInvariant(), e.Action, e.Message, e.PipelineId, e.JobId, e.HostName]);
                 }
             });
         });
@@ -379,9 +382,9 @@ public static class ManagementEndpoints
 
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
-    // Hora local del servidor: el export no conoce la zona del navegador que usa la UI.
-    private static string CsvDate(DateTimeOffset value) =>
-        value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+    // En la zona indicada (la del navegador, en Logs) o, si no hay, en la del servidor.
+    private static string CsvDate(DateTimeOffset value, TimeZoneInfo? zone = null) =>
+        TimeZoneInfo.ConvertTime(value, zone ?? TimeZoneInfo.Local).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
     // Se arma en memoria y se devuelve entero: Kestrel no admite escrituras síncronas en la respuesta.
     private static IResult Csv(string name, Action<TextWriter> write)
