@@ -274,6 +274,7 @@
   <data name="Page.Tables.NoTables" xml:space="preserve"><value>No tables loaded yet for this pipeline. Run an incremental job first.</value></data>
   <data name="Page.Tables.Watermark" xml:space="preserve"><value>Watermark</value></data>
   <data name="Page.Tables.Sync" xml:space="preserve"><value>Sync</value></data>
+  <data name="Page.Tables.SyncAria" xml:space="preserve"><value>Sync {0}</value></data>
   <data name="Page.Tables.Paused" xml:space="preserve"><value>Paused</value></data>
   <data name="Page.Tables.Analytics" xml:space="preserve"><value>View growth</value></data>
   <data name="Page.TableGrowth.Tab" xml:space="preserve"><value>Growth —</value></data>
@@ -337,6 +338,7 @@
   <data name="Page.Catalog.Loaded" xml:space="preserve"><value>Loaded · {0} rows</value></data>
   <data name="Page.Catalog.NotLoaded" xml:space="preserve"><value>Not loaded yet</value></data>
   <data name="Page.Catalog.Load" xml:space="preserve"><value>Load</value></data>
+  <data name="Page.Catalog.LoadAria" xml:space="preserve"><value>Load {0}</value></data>
   <data name="Page.Catalog.Columns" xml:space="preserve"><value>Columns</value></data>
   <data name="Page.Catalog.ColumnsExcluded" xml:space="preserve"><value>{0} excluded</value></data>
   <data name="Page.Catalog.AllColumns" xml:space="preserve"><value>All</value></data>
