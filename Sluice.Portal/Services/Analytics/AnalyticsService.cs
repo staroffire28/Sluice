@@ -28,7 +28,7 @@ public sealed record LabeledValue(string Label, double Value);
 public sealed record DailyJobCount(DateOnly Date, int Success, int Error, int Total);
 
 // Punto de la serie temporal de divergencia máxima.
-public sealed record DivergencePoint(DateTimeOffset At, double MaxDivergencePct, string Label);
+public sealed record DivergencePoint(DateTimeOffset At, double MaxDivergencePct);
 
 // Profundidad de cola por etapa (pending/claimed/done/error).
 public sealed record StageQueueDepth(string Stage, int Pending, int Claimed, int Done, int Error);
@@ -343,8 +343,7 @@ public sealed class AnalyticsService : IAnalyticsService
             .OrderBy(x => x.Job.StartedAt)
             .Select(x => new DivergencePoint(
                 x.Job.StartedAt,
-                Math.Round(x.Value!.Value, 2),
-                x.Job.StartedAt.UtcDateTime.ToString("dd/MM HH:mm")))
+                Math.Round(x.Value!.Value, 2)))
             .ToList();
 
         return points;

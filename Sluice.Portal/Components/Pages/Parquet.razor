@@ -13,6 +13,7 @@
 @inject INotificationService NotificationService
 @inject NavigationManager Nav
 @inject Sluice.Portal.Services.Stores.SettingsStore Settings
+@inject BrowserTime Time
 @implements IDisposable
 
 @inject IStringLocalizer<SharedResource> L
@@ -57,7 +58,7 @@
                 <FluentDataGrid Class="data-panel" MultiLine="true" Items="@_rows.AsQueryable()" TGridItem="ArtifactRow">
                     <TemplateColumn Title="@L["Page.Parquet.File"]"><PathText Value="@context.Path" /></TemplateColumn>
                     <PropertyColumn Property="@(r => r.Size)" Title="@L["Page.Parquet.Size"]" Class="cell-nowrap" />
-                    <PropertyColumn Property="@(r => r.Modified)" Title="@L["Page.Parquet.Modified"]" Class="cell-nowrap" />
+                    <PropertyColumn Property="@(r => r.ModifiedAt.HasValue ? Time.Format(r.ModifiedAt.Value) : r.Modified)" Title="@L["Page.Parquet.Modified"]" Class="cell-nowrap" />
                     <TemplateColumn Title="@L["Common.Actions"]" Align="DataGridCellAlignment.End">
                         @* ForceLoad: sin él el router de Blazor busca /api/... como página y muestra "Not found". *@
                         @if (!context.Missing)
@@ -119,7 +120,7 @@
                     <TemplateColumn Title="@L["Page.Parquet.Snapshot"]">
                         <span data-testid="@($"parquet-point-{context.Point.Snapshot}")">@context.Point.Snapshot</span>
                     </TemplateColumn>
-                    <TemplateColumn Title="@L["Page.Parquet.LeftAt"]">@context.Point.LeftAt.ToString("u")</TemplateColumn>
+                    <TemplateColumn Title="@L["Page.Parquet.LeftAt"]">@Time.Format(context.Point.LeftAt)</TemplateColumn>
                     <TemplateColumn Title="@L["Page.Parquet.TablesBack"]">
                         <span data-testid="@($"parquet-point-tables-{context.Point.Snapshot}")">@context.Plan.Restore.Count</span>
                     </TemplateColumn>
@@ -229,6 +230,15 @@
         await Reload();
     }
 
+    // Las fechas van en la zona del navegador, que solo se conoce con el circuito conectado.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && await Time.InitAsync())
+        {
+            StateHasChanged();
+        }
+    }
+
     private async Task Reload()
     {
         _error = null;
@@ -282,7 +292,7 @@
             {
                 Path = a.Path,
                 Size = FormatSize(a.SizeBytes),
-                Modified = a.LastModified?.ToString("u") ?? "-",
+                ModifiedAt = a.LastModified,
             })
             .ToList();
         var paths = rows.Select(r => r.Path).ToHashSet(StringComparer.Ordinal);
@@ -428,7 +438,8 @@
     {
         public string Path { get; init; } = "";
         public string Size { get; init; } = "";
-        public string Modified { get; init; } = "";
+        public string Modified { get; init; } = "-";
+        public DateTimeOffset? ModifiedAt { get; init; }
         public bool Missing { get; init; }
     }
 

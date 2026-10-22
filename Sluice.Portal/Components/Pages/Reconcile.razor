@@ -12,6 +12,7 @@
 @inject INotificationService NotificationService
 @inject ReconcileAckService Acks
 @inject CircuitAuditActor Audit
+@inject BrowserTime Time
 
 @inject IStringLocalizer<SharedResource> L
 
@@ -44,7 +45,7 @@
                 @if (_report is not null)
                 {
                     <FluentMessageBar Intent="@(_report.IsPartial ? MessageBarIntent.Warning : MessageBarIntent.Success)" Style="margin-bottom:0.75rem;">
-                        @L["Page.Reconcile.LastReconcile"]: @_report.CreatedAt.ToLocalTime().ToString("u") — @_report.MaxDivergencePct.ToString("F2")%
+                        @L["Page.Reconcile.LastReconcile"]: @Time.Format(_report.CreatedAt) — @_report.MaxDivergencePct.ToString("F2")%
                     </FluentMessageBar>
 
                     <PanelState IsEmpty="@(_allRows.Count == 0)" EmptyText="@L["Page.Reconcile.NoDivergence"]">
@@ -113,7 +114,7 @@
                 @if (_values is not null)
                 {
                     <FluentMessageBar data-testid="values-summary" Intent="@(_values.HasDifferences ? MessageBarIntent.Warning : MessageBarIntent.Success)" Style="margin-bottom:0.75rem;">
-                        @L["Page.Reconcile.Values.Last"]: @_values.CreatedAt.ToLocalTime().ToString("u") — @string.Format(L["Page.Reconcile.Values.Summary"].Value, _values.Entities.Count, _values.Entities.Count(e => e.HasDifferences))
+                        @L["Page.Reconcile.Values.Last"]: @Time.Format(_values.CreatedAt) — @string.Format(L["Page.Reconcile.Values.Summary"].Value, _values.Entities.Count, _values.Entities.Count(e => e.HasDifferences))
                     </FluentMessageBar>
 
                     @if (_valueRows.Count > 0)
@@ -182,7 +183,7 @@
                     }
                 </TemplateColumn>
                 <PropertyColumn Property="@(r => r.DivergenceBefore)" Title="@L["Page.Reconcile.Divergence"]" Format="F2" />
-                <PropertyColumn Property="@(r => r.TriggeredAt)" Title="@L["Page.Reconcile.LastReconcile"]" Format="u" />
+                <PropertyColumn Property="@(r => Time.ToLocal(r.TriggeredAt))" Title="@L["Page.Reconcile.LastReconcile"]" Format="g" />
             </FluentDataGrid>
         </PageSection>
     }
@@ -214,7 +215,17 @@
         }
     }
 
+    // Las fechas van en la zona del navegador, que solo se conoce con el circuito conectado.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && await Time.InitAsync())
+        {
+            StateHasChanged();
+        }
+    }
+
     private void Load()
+
     {
         _autoRemediate = Settings.Get().AutoRemediate;
         if (string.IsNullOrWhiteSpace(_pipelineId))

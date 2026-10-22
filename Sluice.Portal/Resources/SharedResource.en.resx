@@ -314,7 +314,7 @@
   <data name="Page.Parquet.RestorePointsHint" xml:space="preserve"><value>A point for each processed snapshot that a later run left behind by changing a table already loaded. Restoring one takes the whole pipeline back to that moment: every table that changed afterwards gets back the Parquet it had, tables that did not exist yet are archived, and the pipeline is rewound to that snapshot. SQL is reloaded only for the tables that go back, and the next run brings back the later rows if their snapshots are still in the lake. Points are kept for the days set in Settings, and the most recent one is always kept; it also undoes a restore.</value></data>
   <data name="Page.Parquet.NoRestorePoints" xml:space="preserve"><value>This pipeline has no restore points yet: they are created when a run changes a table that was already loaded.</value></data>
   <data name="Page.Parquet.Snapshot" xml:space="preserve"><value>Snapshot</value></data>
-  <data name="Page.Parquet.LeftAt" xml:space="preserve"><value>Left behind (UTC)</value></data>
+  <data name="Page.Parquet.LeftAt" xml:space="preserve"><value>Left behind</value></data>
   <data name="Page.Parquet.TablesBack" xml:space="preserve"><value>Tables that go back</value></data>
   <data name="Page.Parquet.RestoreBlocked" xml:space="preserve"><value>A job is running on this pipeline: wait for it to finish before restoring.</value></data>
   <data name="Page.Parquet.RestoreHalfDone" xml:space="preserve"><value>The restore to point {0} was left half done: finish it before restoring another point or starting any job on this pipeline.</value></data>

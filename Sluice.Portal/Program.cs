@@ -101,6 +101,7 @@ builder.Services.AddFluentUIComponents(config =>
     config.Localizer = new SharedFluentLocalizer();
 });
 builder.Services.AddScoped<ThemeState>();
+builder.Services.AddScoped<BrowserTime>();
 builder.Services.AddApexCharts();
 
 // i18n: inglés por defecto, español opcional. La cultura se persiste por cookie

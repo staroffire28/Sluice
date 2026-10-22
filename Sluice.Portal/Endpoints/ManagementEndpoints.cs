@@ -379,7 +379,7 @@ public static class ManagementEndpoints
 
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
-    // Hora local del servidor, como la muestran las tablas de la UI.
+    // Hora local del servidor: el export no conoce la zona del navegador que usa la UI.
     private static string CsvDate(DateTimeOffset value) =>
         value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 

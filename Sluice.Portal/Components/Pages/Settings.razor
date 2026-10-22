@@ -11,6 +11,7 @@
 @inject AlertDeliveryStatusStore DeliveryStatusStore
 @inject DeadmanService Deadman
 @inject IStringLocalizer<SharedResource> L
+@inject BrowserTime Time
 
 <PageTitle>@L["Nav.Settings"]</PageTitle>
 
@@ -184,7 +185,15 @@
     private AlertDeliveryResult? _testResult;
     private AlertDeliveryStatus? _delivery;
 
-    private static string FormatTime(DateTimeOffset at) => at.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+    private string FormatTime(DateTimeOffset at) => Time.Format(at, "G");
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && await Time.InitAsync())
+        {
+            StateHasChanged();
+        }
+    }
 
     protected override void OnInitialized()
     {

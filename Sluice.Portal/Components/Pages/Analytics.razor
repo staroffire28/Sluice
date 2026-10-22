@@ -7,6 +7,7 @@
 @inject IPipelineService PipelineService
 @inject IStringLocalizer<SharedResource> L
 @inject ThemeState ThemeState
+@inject BrowserTime Time
 @implements IDisposable
 
 <PageTitle>@L["Page.Analytics.Title"]</PageTitle>
@@ -128,12 +129,13 @@
                     }
                     else
                     {
-                        <ApexChart TItem="DivergencePoint" Title="@L["Page.Analytics.Chart.DivergenceOverTime"]" Options="_lineDivergenceOptions" Height="280" @key="_themeMode">
+                        @* La zona en la @key: las etiquetas cambian cuando se conoce la del navegador. *@
+                        <ApexChart TItem="DivergencePoint" Title="@L["Page.Analytics.Chart.DivergenceOverTime"]" Options="_lineDivergenceOptions" Height="280" @key="(_themeMode, Time.Zone)">
                             <ApexPointSeries TItem="DivergencePoint"
                                              Items="_snapshot.DivergenceOverTime"
                                              Name="@L["Page.Analytics.Series.Divergence"]"
                                              SeriesType="SeriesType.Line"
-                                             XValue="@(e => e.Label)"
+                                             XValue="@(e => Time.Format(e.At, "dd MMM HH:mm"))"
                                              YValue="@(e => (decimal)e.MaxDivergencePct)" />
                         </ApexChart>
                     }
@@ -169,13 +171,13 @@
                                          Items="_snapshot.JobsPerDay"
                                          Name="@L["Page.Analytics.Series.Success"]"
                                          SeriesType="SeriesType.Line"
-                                         XValue="@(e => e.Date.ToString("dd/MM"))"
+                                         XValue="@(e => e.Date.ToString("dd MMM"))"
                                          YValue="@(e => (decimal)e.Success)" />
                         <ApexPointSeries TItem="DailyJobCount"
                                          Items="_snapshot.JobsPerDay"
                                          Name="@L["Page.Analytics.Series.Error"]"
                                          SeriesType="SeriesType.Line"
-                                         XValue="@(e => e.Date.ToString("dd/MM"))"
+                                         XValue="@(e => e.Date.ToString("dd MMM"))"
                                          YValue="@(e => (decimal)e.Error)" />
                     </ApexChart>
                 </FluentCard>
@@ -226,7 +228,17 @@
         ThemeState.Changed += OnThemeChanged;
     }
 
+    // Las fechas van en la zona del navegador, que solo se conoce con el circuito conectado.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && await Time.InitAsync())
+        {
+            StateHasChanged();
+        }
+    }
+
     public void Dispose() => ThemeState.Changed -= OnThemeChanged;
+
 
     private void Reload() => Load();
 

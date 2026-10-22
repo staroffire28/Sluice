@@ -313,7 +313,7 @@
   <data name="Page.Parquet.RestorePointsHint" xml:space="preserve"><value>Un punto por cada snapshot procesado que una ejecución posterior dejó atrás al cambiar alguna tabla ya cargada. Restaurar uno devuelve todo el pipeline a ese momento: cada tabla que cambió después recupera el parquet que tenía, las que aún no existían se archivan y el pipeline se rebobina a ese snapshot. SQL se recarga solo para las tablas que vuelven atrás y la siguiente ejecución recupera las filas posteriores si sus snapshots siguen en el lago. Se guardan los días configurados en Ajustes y siempre al menos el punto más reciente, que también deshace una restauración.</value></data>
   <data name="Page.Parquet.NoRestorePoints" xml:space="preserve"><value>Este pipeline aún no tiene puntos de restauración: se crean cuando una ejecución cambia alguna tabla ya cargada.</value></data>
   <data name="Page.Parquet.Snapshot" xml:space="preserve"><value>Snapshot</value></data>
-  <data name="Page.Parquet.LeftAt" xml:space="preserve"><value>Dejado atrás (UTC)</value></data>
+  <data name="Page.Parquet.LeftAt" xml:space="preserve"><value>Dejado atrás</value></data>
   <data name="Page.Parquet.TablesBack" xml:space="preserve"><value>Tablas que vuelven</value></data>
   <data name="Page.Parquet.RestoreBlocked" xml:space="preserve"><value>Hay un job en ejecución en este pipeline: espera a que termine para restaurar.</value></data>
   <data name="Page.Parquet.RestoreHalfDone" xml:space="preserve"><value>La restauración al punto {0} quedó a medias: termínala antes de restaurar otro punto o de lanzar cualquier job en este pipeline.</value></data>
