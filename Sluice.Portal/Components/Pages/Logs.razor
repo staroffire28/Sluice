@@ -70,7 +70,7 @@
                 <span class="cell-ellipsis" title="@context.Action">@context.Action</span>
             </TemplateColumn>
             <TemplateColumn Title="@L["Page.Logs.Col.Message"]">
-                <span class="cell-ellipsis" title="@context.Message">@context.Message</span>
+                <span class="cell-ellipsis" title="@EventText.Render(L, context)">@EventText.Render(L, context)</span>
             </TemplateColumn>
             <TemplateColumn Title="@L["Page.Logs.Col.Pipeline"]">
                 <span class="cell-ellipsis" title="@(context.PipelineId ?? "")">@(context.PipelineId ?? "—")</span>
@@ -111,7 +111,7 @@
 
     private void Load()
     {
-        var result = ActivityLog.QueryPage(new ActivityLogFilter(NullIfBlank(_sourceFilter), NullIfBlank(_levelFilter), NullIfBlank(_search), _range, Time.Zone), _page, PageSize);
+        var result = ActivityLog.QueryPage(new ActivityLogFilter(NullIfBlank(_sourceFilter), NullIfBlank(_levelFilter), NullIfBlank(_search), _range, Time.Zone, e => EventText.Render(L, e)), _page, PageSize);
         _page = result.Page;
         _totalCount = result.Total;
         _totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));

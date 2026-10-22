@@ -11,6 +11,11 @@ public interface IActivityLog
     // Eventos del sistema que no son la acción de nadie (retención, avisos, huérfanos). Lo que
     // alguien (o el scheduler, la cola...) decide hacer va por IAuditLog.Record.
     void LogSystem(string action, string message, string? pipelineId = null, string? jobId = null, string level = "info");
+
+    // Con la clave del texto localizable (ActivityLogEntry.MessageKey). Por defecto guarda solo el
+    // mensaje, para los dobles de test.
+    void LogSystem(string action, string message, string? pipelineId, string? jobId, string level, string messageKey, params object?[] messageArgs) =>
+        LogSystem(action, message, pipelineId, jobId, level);
     // Devuelve la página y el total filtrado en UNA sola lectura/deserialización
     // (evita releer y deserializar todos los archivos dos veces por render).
     ActivityLogPage QueryPage(ActivityLogFilter filter, int page, int pageSize);
@@ -25,18 +30,25 @@ public interface IActivityLog
 public interface IAuditLog
 {
     void Record(AuditActor actor, string action, AuditOutcome outcome, string? pipelineId, string? jobId, string? target, string message, string? level = null);
+
+    // Con la clave del texto localizable (ActivityLogEntry.MessageKey). Por defecto guarda solo el
+    // mensaje, para los dobles de test.
+    void Record(AuditActor actor, string action, AuditOutcome outcome, string? pipelineId, string? jobId, string? target, string message, string? level, string messageKey, params object?[] messageArgs) =>
+        Record(actor, action, outcome, pipelineId, jobId, target, message, level);
 }
 
 public sealed record ActivityLogPage(IReadOnlyList<ActivityLogEntry> Items, int Total, int Page);
 
 // Filtros de la página Logs. Zone: en qué zona se toma el día del rango (la del navegador, que es
-// la que muestra la tabla; por defecto, la del servidor).
+// la que muestra la tabla; por defecto, la del servidor). Text: el mensaje tal como se pinta
+// (EventText, en el idioma de quien busca), para que la búsqueda encuentre también por él.
 public sealed record ActivityLogFilter(
     string? Source = null,
     string? Level = null,
     string? Search = null,
     DateRange? Range = null,
-    TimeZoneInfo? Zone = null);
+    TimeZoneInfo? Zone = null,
+    Func<ActivityLogEntry, string>? Text = null);
 
 // Registro de actividad con persistencia en archivo (JSONL), robusto bajo réplicas.
 // Cada proceso (api + N workers) escribe SU PROPIO archivo activity-{Máquina}.jsonl
@@ -65,7 +77,20 @@ public sealed class ActivityLogStore : IActivityLog, IAuditLog
     public void LogSystem(string action, string message, string? pipelineId = null, string? jobId = null, string level = "info") =>
         Append(NewEntry("system", level, action, message, pipelineId, jobId));
 
-    public void Record(AuditActor actor, string action, AuditOutcome outcome, string? pipelineId, string? jobId, string? target, string message, string? level = null)
+    public void LogSystem(string action, string message, string? pipelineId, string? jobId, string level, string messageKey, params object?[] messageArgs) =>
+        Append(NewEntry("system", level, action, message, pipelineId, jobId) with
+        {
+            MessageKey = messageKey,
+            MessageArgs = messageArgs.Length > 0 ? messageArgs : null,
+        });
+
+    public void Record(AuditActor actor, string action, AuditOutcome outcome, string? pipelineId, string? jobId, string? target, string message, string? level = null) =>
+        RecordEntry(actor, action, outcome, pipelineId, jobId, target, message, level, null, null);
+
+    public void Record(AuditActor actor, string action, AuditOutcome outcome, string? pipelineId, string? jobId, string? target, string message, string? level, string messageKey, params object?[] messageArgs) =>
+        RecordEntry(actor, action, outcome, pipelineId, jobId, target, message, level, messageKey, messageArgs);
+
+    private void RecordEntry(AuditActor actor, string action, AuditOutcome outcome, string? pipelineId, string? jobId, string? target, string message, string? level, string? messageKey, object?[]? messageArgs)
     {
         level ??= outcome switch
         {
@@ -80,6 +105,8 @@ public sealed class ActivityLogStore : IActivityLog, IAuditLog
             Client = NullIfBlank(actor.Client),
             Outcome = outcome,
             Target = NullIfBlank(target),
+            MessageKey = messageKey,
+            MessageArgs = messageArgs is { Length: > 0 } ? messageArgs : null,
         });
     }
 
@@ -204,6 +231,7 @@ public sealed class ActivityLogStore : IActivityLog, IAuditLog
             var search = filter.Search;
             query = query.Where(e =>
                 Contains(e.Message, search) ||
+                (filter.Text is not null && Contains(filter.Text(e), search)) ||
                 Contains(e.Action, search) ||
                 Contains(e.PipelineId, search) ||
                 Contains(e.JobId, search) ||

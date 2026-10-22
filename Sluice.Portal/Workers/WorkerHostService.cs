@@ -291,7 +291,8 @@ public sealed class WorkerHostService : BackgroundService
             StageStatus = stageStatus,
         });
         _jobs.AppendEvent(jobId, EventLevel.Error, message, code);
-        _activity.LogSystem("job.failed", $"Job {jobId} falló en la etapa {stage}: {message}", job.PipelineId, jobId, level: "error");
+        _activity.LogSystem("job.failed", $"Job {jobId} falló en la etapa {stage}: {message}", job.PipelineId, jobId, "error",
+            "Activity.Job.Failed", jobId, stage.ToString(), message);
 
         var pipeline = _pipelines.GetById(job.PipelineId);
         await _alerts.SendPipelineFailureAsync(new PipelineFailureAlert

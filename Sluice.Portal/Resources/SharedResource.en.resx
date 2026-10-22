@@ -901,4 +901,32 @@
   <data name="Event.Reconcile.NothingNew" xml:space="preserve"><value>Nothing new to reconcile: the pipeline's last reconciliation is kept.</value></data>
   <data name="Event.Restore.Done" xml:space="preserve"><value>Restored the point of snapshot {0}: {1:N0} table(s) go back to their version from then{2}; {3:N0} table(s) are reloaded in SQL ({4}).</value></data>
   <data name="Event.Restore.ArchivedPart" xml:space="preserve"><value> and {0:N0} that did not exist yet are archived ({1})</value></data>
+  <data name="Activity.Login.Ok" xml:space="preserve"><value>Signed in.</value></data>
+  <data name="Activity.Login.Blocked" xml:space="preserve"><value>Sign-in blocked: too many recent failed attempts from this client.</value></data>
+  <data name="Activity.Login.NoAntiforgery" xml:space="preserve"><value>Sign-in rejected: the form has no valid antiforgery token.</value></data>
+  <data name="Activity.Login.NoKey" xml:space="preserve"><value>Sign-in rejected: no key was given.</value></data>
+  <data name="Activity.Login.WrongKey" xml:space="preserve"><value>Sign-in rejected: wrong key.</value></data>
+  <data name="Activity.Logout.Ok" xml:space="preserve"><value>Signed out.</value></data>
+  <data name="Activity.Logout.NoAntiforgery" xml:space="preserve"><value>Sign-out rejected: the form has no valid antiforgery token.</value></data>
+  <data name="Activity.Job.Orphaned" xml:space="preserve"><value>{0:N0} job(s) without live tasks marked as Error.</value></data>
+  <data name="Activity.Job.Failed" xml:space="preserve"><value>Job {0} failed in the {1} stage: {2}</value></data>
+  <data name="Activity.Queue.Stalled" xml:space="preserve"><value>Queue stalled: {0:N0} task(s) of the {1} stage pending for more than {2:0} min with no live worker for that stage. Check the {1} worker container.</value></data>
+  <data name="Activity.Queue.Discarded" xml:space="preserve"><value>{0} discarded from the queue of pipeline {1}: {2}.</value></data>
+  <data name="Activity.Restore.Pending" xml:space="preserve"><value>Pipeline {0} on hold: {1}</value></data>
+  <data name="Activity.Scheduler.Error" xml:space="preserve"><value>The scheduler failed on pipeline {0}: {1}</value></data>
+  <data name="Activity.Pipeline.Lag" xml:space="preserve"><value>Pipeline {0} is behind: {1:N0} closed snapshot(s) not processed; the oldest ({2}) has been waiting for {3:0} h (threshold {4} h).</value></data>
+  <data name="Activity.Snapshot.Incomplete" xml:space="preserve"><value>Pipeline {0} on hold: snapshot {1} has been closed but incomplete for {2} ({3}). Nothing else is processed until the Synapse Link export completes; check the export.</value></data>
+  <data name="Activity.Retention.Sweep" xml:space="preserve"><value>Retention: {0:N0} jobs, {1:N0} reports, {2:N0} tasks, {3:N0} runs, {4:N0} staging, {5:N0} activity logs deleted (age {6}d, floor {7}/pipeline).</value></data>
+  <data name="Activity.Retention.Error" xml:space="preserve"><value>The retention sweep failed: {0}</value></data>
+  <data name="Activity.SnapshotRetention.Error" xml:space="preserve"><value>The snapshot retention sweep failed: {0}</value></data>
+  <data name="Activity.SnapshotRetention.Skip" xml:space="preserve"><value>Pipeline {0}: purge skipped — consolidated Parquet files are missing: {1}.</value></data>
+  <data name="Activity.SnapshotRetention.DeleteFailed" xml:space="preserve"><value>Pipeline {0}: could not delete snapshot {1}: {2}</value></data>
+  <data name="Activity.SnapshotRetention.DryRun" xml:space="preserve"><value>Pipeline {0}: {1:N0} eligible snapshot(s) (dry run, nothing deleted).</value></data>
+  <data name="Activity.SnapshotRetention.Sweep" xml:space="preserve"><value>Pipeline {0}: {1:N0} source snapshot(s) deleted (age {2}d, floor {3}).</value></data>
+  <data name="Activity.SnapshotRetention.PipelineFailed" xml:space="preserve"><value>Snapshot sweep failed on pipeline {0}: {1}</value></data>
+  <data name="Activity.SnapshotRetention.DryRunTotal" xml:space="preserve"><value>Global dry run: {0:N0} snapshot(s) eligible for purge (age {1}d).</value></data>
+  <data name="Activity.SnapshotRetention.SweepTotal" xml:space="preserve"><value>Source snapshot retention: {0:N0} folder(s) deleted (age {1}d, floor {2}).</value></data>
+  <data name="Activity.Alert.DeliveryFailed" xml:space="preserve"><value>Could not deliver the {0} alert to the webhook ({1}): {2}. Alerts will not arrive until it is reported as recovered.</value></data>
+  <data name="Activity.Alert.DeliveryRecovered" xml:space="preserve"><value>The alert webhook ({0}) responds again ({1} alert).</value></data>
+  <data name="Activity.Demo.Failed" xml:space="preserve"><value>Could not prepare the demo: {0}</value></data>
 </root>

@@ -122,7 +122,9 @@ public sealed class RetentionService
                 "retention.sweep",
                 $"Retención: {result.Jobs} jobs, {result.Reports} reportes, {result.Tasks} tareas, " +
                 $"{result.Runs} runs, {result.Staging} staging, {result.ActivityLogs} logs de actividad eliminados " +
-                $"(antigüedad {settings.RetentionDays}d, piso {KeepLastPerPipeline}/pipeline).");
+                $"(antigüedad {settings.RetentionDays}d, piso {KeepLastPerPipeline}/pipeline).",
+                null, null, "info", "Activity.Retention.Sweep",
+                result.Jobs, result.Reports, result.Tasks, result.Runs, result.Staging, result.ActivityLogs, settings.RetentionDays, KeepLastPerPipeline);
         }
 
         return result;

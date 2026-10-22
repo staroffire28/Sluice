@@ -50,7 +50,8 @@ public sealed class RunQueueService
         if (queued is not null)
         {
             _audit.Record(actor, "pipeline.queue.discarded", AuditOutcome.Ok, pipelineId, null, null,
-                $"{queued.Type} descartado de la cola del pipeline {pipelineId}: {reason}.");
+                $"{queued.Type} descartado de la cola del pipeline {pipelineId}: {reason}.", null,
+                "Activity.Queue.Discarded", queued.Type.ToString(), pipelineId, reason);
         }
 
         return queued;

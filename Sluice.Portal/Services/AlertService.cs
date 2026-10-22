@@ -233,12 +233,13 @@ public sealed class AlertService
             {
                 _activity?.LogSystem("alert.delivery.failed",
                     $"No se pudo entregar la alerta {eventType} al webhook ({host}): {result.Detail}. Las alertas no llegan hasta que se avise de que se ha recuperado.",
-                    level: "error");
+                    null, null, "error", "Activity.Alert.DeliveryFailed", eventType, host, result.Detail);
             }
             else if (result.Success && previous is { LastSucceeded: false })
             {
                 _activity?.LogSystem("alert.delivery.recovered",
-                    $"El webhook de alertas ({host}) vuelve a responder (alerta {eventType}).");
+                    $"El webhook de alertas ({host}) vuelve a responder (alerta {eventType}).",
+                    null, null, "info", "Activity.Alert.DeliveryRecovered", host, eventType);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

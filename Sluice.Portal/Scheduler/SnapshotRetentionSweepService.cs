@@ -73,7 +73,7 @@ public sealed class SnapshotRetentionSweepService : BackgroundService
             _activity.LogSystem(
                 "snapshot-retention.error",
                 $"El barrido de retención de snapshots falló: {ex.Message}",
-                level: "error");
+                null, null, "error", "Activity.SnapshotRetention.Error", ex.Message);
             await _alerts.SendAsync($"Snapshot retention sweep failed: {ex.Message}", cancellationToken);
         }
     }

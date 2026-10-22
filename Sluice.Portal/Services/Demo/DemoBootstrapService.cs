@@ -70,7 +70,7 @@ public sealed class DemoBootstrapService : BackgroundService
         {
             // Sin esto el portal arrancaría vacío y sin explicación: se deja en /logs.
             _logger.LogCritical(ex, "Demo: no se pudo preparar la demo.");
-            _activity.LogSystem("demo.failed", $"No se pudo preparar la demo: {ex.Message}", level: "error");
+            _activity.LogSystem("demo.failed", $"No se pudo preparar la demo: {ex.Message}", null, null, "error", "Activity.Demo.Failed", ex.Message);
             return;
         }
 

@@ -195,8 +195,8 @@ public sealed class SnapshotRetentionService
                             "snapshot-retention.skip",
                             $"Pipeline {pipeline.Id}: purga omitida — faltan parquet consolidados: " +
                             $"{string.Join(", ", cert.MissingEntities)}.",
-                            pipeline.Id,
-                            level: "warning");
+                            pipeline.Id, null, "warning",
+                            "Activity.SnapshotRetention.Skip", pipeline.Id, string.Join(", ", cert.MissingEntities));
                         continue;
                     }
                 }
@@ -244,8 +244,8 @@ public sealed class SnapshotRetentionService
                         _activity.LogSystem(
                             "snapshot-retention.error",
                             $"Pipeline {pipeline.Id}: no se pudo borrar snapshot {folder}: {ex.Message}",
-                            pipeline.Id,
-                            level: "warning");
+                            pipeline.Id, null, "warning",
+                            "Activity.SnapshotRetention.DeleteFailed", pipeline.Id, folder, ex.Message);
                     }
                 }
 
@@ -255,7 +255,8 @@ public sealed class SnapshotRetentionService
                         "snapshot-retention.dry-run",
                         $"Pipeline {pipeline.Id}: {analysis.EligibleForPurge.Count} snapshot(s) elegibles " +
                         $"(simulación, sin borrar).",
-                        pipeline.Id);
+                        pipeline.Id, null, "info",
+                        "Activity.SnapshotRetention.DryRun", pipeline.Id, analysis.EligibleForPurge.Count);
                 }
                 else if (deleted > 0)
                 {
@@ -263,7 +264,8 @@ public sealed class SnapshotRetentionService
                         "snapshot-retention.sweep",
                         $"Pipeline {pipeline.Id}: {deleted} snapshot(s) origen eliminados " +
                         $"(antigüedad {settings.SourceSnapshotRetentionDays}d, piso {KeepLastProcessedSnapshots}).",
-                        pipeline.Id);
+                        pipeline.Id, null, "info",
+                        "Activity.SnapshotRetention.Sweep", pipeline.Id, deleted, settings.SourceSnapshotRetentionDays, KeepLastProcessedSnapshots);
                     totalDeleted += deleted;
                 }
             }
@@ -273,8 +275,8 @@ public sealed class SnapshotRetentionService
                 _activity.LogSystem(
                     "snapshot-retention.error",
                     $"Barrido de snapshots falló en pipeline {pipeline.Id}: {ex.Message}",
-                    pipeline.Id,
-                    level: "error");
+                    pipeline.Id, null, "error",
+                    "Activity.SnapshotRetention.PipelineFailed", pipeline.Id, ex.Message);
             }
         }
 
@@ -283,14 +285,17 @@ public sealed class SnapshotRetentionService
             _activity.LogSystem(
                 "snapshot-retention.dry-run",
                 $"Simulación global: {totalWouldDelete} snapshot(s) elegibles para purga " +
-                $"(antigüedad {settings.SourceSnapshotRetentionDays}d).");
+                $"(antigüedad {settings.SourceSnapshotRetentionDays}d).",
+                null, null, "info", "Activity.SnapshotRetention.DryRunTotal", totalWouldDelete, settings.SourceSnapshotRetentionDays);
         }
         else if (totalDeleted > 0)
         {
             _activity.LogSystem(
                 "snapshot-retention.sweep",
                 $"Retención snapshots origen: {totalDeleted} carpeta(s) eliminadas " +
-                $"(antigüedad {settings.SourceSnapshotRetentionDays}d, piso {KeepLastProcessedSnapshots}).");
+                $"(antigüedad {settings.SourceSnapshotRetentionDays}d, piso {KeepLastProcessedSnapshots}).",
+                null, null, "info",
+                "Activity.SnapshotRetention.SweepTotal", totalDeleted, settings.SourceSnapshotRetentionDays, KeepLastProcessedSnapshots);
         }
 
         return new SnapshotRetentionSweepResult
