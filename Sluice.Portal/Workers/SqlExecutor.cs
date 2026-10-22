@@ -404,14 +404,17 @@ public sealed class SqlExecutor : ISqlExecutor
     // ¿Completó SQL el último job terminado del pipeline que carga todas sus tablas? Se ignoran los
     // que no tienen etapa SQL (Reconcile, Diff) y los ResyncTable: cargan una sola tabla, así que
     // terminar bien no repara lo que un Incremental anterior dejó sin cargar en las demás. Sin
-    // jobs previos no hay nada que reparar.
+    // jobs previos no hay nada que reparar. Se recorre el índice del más reciente al más antiguo y
+    // solo se lee el job.json de los candidatos hasta dar con uno que pasó por SQL (casi siempre el
+    // primero): antes se leían hasta 500 job.json enteros en cada etapa SQL.
     private bool PreviousSqlCompleted(PipelineTask task)
     {
-        var previous = _jobs.List(pageSize: 500, pipelineId: task.PipelineId)
-            .Where(j => j.Id != task.JobId && j.FinishedAt is not null
-                && j.Type is JobType.Incremental or JobType.Force or JobType.ReloadFromParquet
-                && j.StageStatus.GetValueOrDefault("sql") is not ("skipped" or null))
-            .MaxBy(j => j.StartedAt);
+        var previous = _jobs.ListIndex(task.PipelineId)
+            .Where(e => e.Id != task.JobId && e.FinishedAt is not null
+                && e.Type is JobType.Incremental or JobType.Force or JobType.ReloadFromParquet)
+            .Select(e => _jobs.Get(e.Id))
+            .FirstOrDefault(j => j is not null && j.FinishedAt is not null
+                && j.StageStatus.GetValueOrDefault("sql") is not ("skipped" or null));
         if (previous is null || previous.StageStatus["sql"] == "done")
         {
             return true;
