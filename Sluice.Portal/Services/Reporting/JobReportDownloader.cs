@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Localization;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.JSInterop;
@@ -15,7 +16,8 @@ public sealed class JobReportDownloader(
     IJSRuntime js,
     INotificationService notifications,
     IAuditLog audit,
-    IStringLocalizer<SharedResource> l)
+    IStringLocalizer<SharedResource> l,
+    BrowserTime time)
 {
     public async Task DownloadAsync(AuditActor actor, Job job)
     {
@@ -36,9 +38,13 @@ public sealed class JobReportDownloader(
                 job.PipelineId,
                 async () =>
                 {
-                    var bytes = await Task.Run(() => pdf.GenerateEquityReport(job, reconcile, diff));
+                    // El PDF sale en el idioma y la zona horaria de quien lo pide (desde Jobs la
+                    // zona aún no se ha leído: InitAsync solo llama al navegador la primera vez).
+                    await time.InitAsync();
+                    var culture = CultureInfo.CurrentUICulture;
+                    var bytes = await Task.Run(() => pdf.GenerateEquityReport(job, reconcile, diff, culture, time.Zone));
                     var base64 = Convert.ToBase64String(bytes);
-                    await js.InvokeVoidAsync("sluiceUi.downloadFileBase64", $"reporte-{job.Id}.pdf", base64, "application/pdf");
+                    await js.InvokeVoidAsync("sluiceUi.downloadFileBase64", l["Report.FileName", job.Id].Value, base64, "application/pdf");
                     return true;
                 },
                 _ => new AuditResult($"Generó el reporte PDF del job {job.Id}."),
