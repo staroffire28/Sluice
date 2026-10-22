@@ -10,6 +10,14 @@ public interface IJobService
     IReadOnlyList<Job> List(int page = 1, int pageSize = 20, string? pipelineId = null, JobStatus? status = null, DateRange? range = null);
     int Count(string? pipelineId = null, JobStatus? status = null, DateRange? range = null);
     IReadOnlyList<Job> ListRunning();
+
+    // Entradas del índice del pipeline, de la más reciente a la más antigua, sin leer los job.json.
+    // Por defecto se derivan de List, para los dobles de test.
+    IReadOnlyList<JobIndexEntry> ListIndex(string pipelineId) =>
+        List(pageSize: int.MaxValue, pipelineId: pipelineId)
+            .Select(j => new JobIndexEntry(j.Id, j.PipelineId, j.Type, j.Status, j.StartedAt, j.FinishedAt))
+            .ToList();
+
     Job? Get(string id);
     Job Create(Job job);
     Job? Update(string id, Job job);
@@ -70,6 +78,8 @@ public sealed class JobService : IJobService
         Load(_store.ListIndex().Where(e => JobProgressHelper.IsActive(e.Status, e.FinishedAt)))
             .Where(JobProgressHelper.IsActive)
             .ToList();
+
+    public IReadOnlyList<JobIndexEntry> ListIndex(string pipelineId) => Filter(pipelineId, null, null).ToList();
 
     public Job? Get(string id) => _store.GetById(id);
 
