@@ -107,7 +107,6 @@
         }
     }
 
-
     private void Load()
     {
         var result = ActivityLog.QueryPage(new ActivityLogFilter(NullIfBlank(_sourceFilter), NullIfBlank(_levelFilter), NullIfBlank(_search), _range), _page, PageSize);

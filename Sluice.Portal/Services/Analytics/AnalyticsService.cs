@@ -344,7 +344,6 @@ public sealed class AnalyticsService : IAnalyticsService
             .Select(x => new DivergencePoint(
                 x.Job.StartedAt,
                 Math.Round(x.Value!.Value, 2)))
-
             .ToList();
 
         return points;
