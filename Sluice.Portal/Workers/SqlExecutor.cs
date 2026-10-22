@@ -173,13 +173,15 @@ public sealed class SqlExecutor : ISqlExecutor
                     if (stale.Count > 0)
                     {
                         _jobs.AppendEvent(task.JobId, EventLevel.Info,
-                            $"{entry.Entity}: {stale.Count} columna(s) excluida(s) siguen en la tabla SQL y ya no se actualizan ({string.Join(", ", stale)}): conservan su último valor y quedan vacías en las filas nuevas.");
+                            $"{entry.Entity}: {stale.Count} columna(s) excluida(s) siguen en la tabla SQL y ya no se actualizan ({string.Join(", ", stale)}): conservan su último valor y quedan vacías en las filas nuevas.",
+                            null, "Event.Sql.ExcludedColumnsRemain", entry.Entity, stale.Count, string.Join(", ", stale));
                     }
                 }
                 if (!await _mergeExecutor.EnsureUniqueIdIndexAsync(connection, schema, entry.Entity, cancellationToken))
                 {
                     _jobs.AppendEvent(task.JobId, EventLevel.Warning,
-                        $"{entry.Entity}: la tabla destino tiene Ids duplicados; no se crea el índice único sobre [Id] (el MERGE sigue sin él).");
+                        $"{entry.Entity}: la tabla destino tiene Ids duplicados; no se crea el índice único sobre [Id] (el MERGE sigue sin él).",
+                        null, "Event.Sql.DuplicateIds", entry.Entity);
                 }
 
                 // Origen y modo: el delta (solo lo nuevo, sin reescribir lo igual) si la tabla ya
@@ -244,7 +246,8 @@ public sealed class SqlExecutor : ISqlExecutor
                 if (reloadKeys is { Count: 0 })
                 {
                     _jobs.AppendEvent(task.JobId, EventLevel.Warning,
-                        $"{entry.Entity}: el parquet no trae claves; no se eliminan huérfanas para no vaciar la tabla.");
+                        $"{entry.Entity}: el parquet no trae claves; no se eliminan huérfanas para no vaciar la tabla.",
+                        null, "Event.Sql.NoReloadKeys", entry.Entity);
                 }
                 else if (reloadKeys is not null)
                 {
@@ -253,7 +256,8 @@ public sealed class SqlExecutor : ISqlExecutor
                     var removed = await reloadKeys.DeleteOrphansAsync(cancellationToken);
                     if (removed > 0)
                     {
-                        _jobs.AppendEvent(task.JobId, EventLevel.Info, $"{entry.Entity}: {removed} fila(s) huérfana(s) eliminada(s) (recarga).");
+                        _jobs.AppendEvent(task.JobId, EventLevel.Info, $"{entry.Entity}: {removed} fila(s) huérfana(s) eliminada(s) (recarga).",
+                            null, "Event.Sql.OrphansDeleted", entry.Entity, removed);
                     }
                 }
 
@@ -265,7 +269,8 @@ public sealed class SqlExecutor : ISqlExecutor
                     var deleted = await _mergeExecutor.DeleteKeysAsync(connection, schema, entry.Entity, cdmSchema, deleteKeys, sqlVersion, cancellationToken);
                     if (deleted > 0)
                     {
-                        _jobs.AppendEvent(task.JobId, EventLevel.Info, $"{entry.Entity}: {deleted} fila(s) borrada(s) en F&O eliminada(s) del destino.");
+                        _jobs.AppendEvent(task.JobId, EventLevel.Info, $"{entry.Entity}: {deleted} fila(s) borrada(s) en F&O eliminada(s) del destino.",
+                            null, "Event.Sql.SourceDeletesApplied", entry.Entity, deleted);
                     }
                 }
 
@@ -285,7 +290,8 @@ public sealed class SqlExecutor : ISqlExecutor
                     Message = $"Merged {merged} row(s).",
                 });
 
-                _jobs.AppendEvent(task.JobId, EventLevel.Info, $"{entry.Entity}: merged {merged}{(fromDelta ? " (delta)" : "")}, table count {sqlRows}.");
+                _jobs.AppendEvent(task.JobId, EventLevel.Info, $"{entry.Entity}: merged {merged}{(fromDelta ? " (delta)" : "")}, table count {sqlRows}.",
+                    null, fromDelta ? "Event.Sql.EntityMergedDelta" : "Event.Sql.EntityMerged", entry.Entity, merged, sqlRows);
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
@@ -307,7 +313,8 @@ public sealed class SqlExecutor : ISqlExecutor
                 // Stack completo al log del container para poder diagnosticar el origen real
                 // (p. ej. un "Access to the path is denied" transitorio de Windows).
                 _logger.LogError(ex, "SQL stage failed for entity {Entity}", entry.Entity);
-                _jobs.AppendEvent(task.JobId, EventLevel.Error, $"{entry.Entity}: SQL stage failed — {ex.GetType().Name}: {ex.Message}", code);
+                _jobs.AppendEvent(task.JobId, EventLevel.Error, $"{entry.Entity}: SQL stage failed — {ex.GetType().Name}: {ex.Message}", code,
+                    "Event.Sql.EntityFailed", entry.Entity, ex.GetType().Name, ex.Message);
             }
         }
 
@@ -428,7 +435,8 @@ public sealed class SqlExecutor : ISqlExecutor
         }
 
         _jobs.AppendEvent(task.JobId, EventLevel.Info,
-            $"El último job ({previous.Id}) no completó la etapa SQL: este Incremental mergea el consolidado completo para reponer lo que faltara.");
+            $"El último job ({previous.Id}) no completó la etapa SQL: este Incremental mergea el consolidado completo para reponer lo que faltara.",
+            null, "Event.Sql.FullMergeAfterIncomplete", previous.Id);
         return false;
     }
 
@@ -458,7 +466,7 @@ public sealed class SqlExecutor : ISqlExecutor
     {
         var message = $"{step}: lleva {elapsed:h\\:mm\\:ss} sin avanzar en SQL (posible bloqueo). La sentencia sigue en curso; " +
             "revisa los bloqueos en el destino (sys.dm_exec_requests, columna blocking_session_id).";
-        _jobs.AppendEvent(jobId, EventLevel.Warning, message);
+        _jobs.AppendEvent(jobId, EventLevel.Warning, message, null, "Event.Sql.PossibleBlock", step, elapsed.ToString(@"h\:mm\:ss"));
         _ = SendStallAlertAsync($"Pipeline {pipeline.Name} (job {jobId}): {message}");
     }
 
@@ -544,7 +552,8 @@ public sealed class SqlExecutor : ISqlExecutor
         {
             _jobs.AppendEvent(jobId, EventLevel.Warning,
                 "Traducción de enums activa pero no se pudo resolver snapshot " +
-                "(manifest vacío, sin last-processed ni settled). Se continúa sin columnas _$label.");
+                "(manifest vacío, sin last-processed ni settled). Se continúa sin columnas _$label.",
+                null, "Event.Enums.NoSnapshot");
             return null;
         }
 
@@ -555,7 +564,8 @@ public sealed class SqlExecutor : ISqlExecutor
             if (string.IsNullOrWhiteSpace(csv))
             {
                 _jobs.AppendEvent(jobId, EventLevel.Info,
-                    $"Traducción de enums activa pero no se halló GlobalOptionsetMetadata.csv en el snapshot {snapshot}.");
+                    $"Traducción de enums activa pero no se halló GlobalOptionsetMetadata.csv en el snapshot {snapshot}.",
+                    null, "Event.Enums.NoMetadataFile", snapshot);
                 return null;
             }
 
@@ -567,19 +577,22 @@ public sealed class SqlExecutor : ISqlExecutor
                 // job reportaría "0 entidades" como Info y la pérdida de etiquetas pasaría inadvertida.
                 _jobs.AppendEvent(jobId, EventLevel.Warning,
                     $"Traducción de enums: GlobalOptionsetMetadata.csv del snapshot {snapshot} no produjo optionsets " +
-                    "(¿formato cambiado, truncado o idioma != 1033?). Se continúa sin columnas _$label.");
+                    "(¿formato cambiado, truncado o idioma != 1033?). Se continúa sin columnas _$label.",
+                    null, "Event.Enums.EmptyMetadata", snapshot);
                 return null;
             }
 
             _jobs.AppendEvent(jobId, EventLevel.Info,
-                $"Traducción de enums: {metadata.Count} entidad(es) con optionsets cargadas del snapshot {snapshot}.");
+                $"Traducción de enums: {metadata.Count} entidad(es) con optionsets cargadas del snapshot {snapshot}.",
+                null, "Event.Enums.Loaded", metadata.Count, snapshot);
             return metadata;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "No se pudo cargar el optionset metadata para traducción de enums.");
             _jobs.AppendEvent(jobId, EventLevel.Warning,
-                $"No se pudo cargar la traducción de enums: {ex.Message}. Se continúa sin columnas _$label.");
+                $"No se pudo cargar la traducción de enums: {ex.Message}. Se continúa sin columnas _$label.",
+                null, "Event.Enums.LoadFailed", ex.Message);
             return null;
         }
     }

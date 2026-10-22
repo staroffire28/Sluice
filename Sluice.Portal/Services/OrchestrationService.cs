@@ -548,7 +548,10 @@ public sealed class OrchestrationService : IOrchestrationService
         _jobs.AppendEvent(job.Id, EventLevel.Info,
             $"Restaurado el punto del snapshot {snapshot}: {plan.Restore.Count} tabla(s) vuelven a su versión de entonces"
             + (plan.Archive.Count > 0 ? $" y {plan.Archive.Count} que aún no existían se archivan ({string.Join(", ", plan.Archive)})" : "")
-            + $"; se recargan en SQL {toReload.Count} tabla(s) ({string.Join(", ", toReload)}).");
+            + $"; se recargan en SQL {toReload.Count} tabla(s) ({string.Join(", ", toReload)}).",
+            null, "Event.Restore.Done", snapshot, plan.Restore.Count,
+            plan.Archive.Count > 0 ? new EventPart("Event.Restore.ArchivedPart", plan.Archive.Count, string.Join(", ", plan.Archive)) : "",
+            toReload.Count, string.Join(", ", toReload));
         return job;
     }
 

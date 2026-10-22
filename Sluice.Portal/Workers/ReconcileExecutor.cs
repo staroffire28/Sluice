@@ -311,7 +311,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
 
         foreach (var error in failed)
         {
-            _jobs.AppendEvent(task.JobId, EventLevel.Warning, $"{error.Entity}: no se pudo comparar ({error.Error}).");
+            _jobs.AppendEvent(task.JobId, EventLevel.Warning, $"{error.Entity}: no se pudo comparar ({error.Error}).", null, "Event.Compare.EntityFailed", error.Entity, error.Error);
         }
 
         if (results.Count == 0)
@@ -407,12 +407,14 @@ public sealed class ReconcileExecutor : IReconcileExecutor
         if (type == JobType.Reconcile)
         {
             _jobs.AppendEvent(task.JobId, EventLevel.Warning,
-                "No hay ningún Parquet consolidado que conciliar: se conserva la última conciliación del pipeline. Ejecuta el pipeline antes de conciliar.");
+                "No hay ningún Parquet consolidado que conciliar: se conserva la última conciliación del pipeline. Ejecuta el pipeline antes de conciliar.",
+                null, "Event.Reconcile.NoParquet");
         }
         else
         {
             _jobs.AppendEvent(task.JobId, EventLevel.Info,
-                "Nada nuevo que conciliar: se conserva la última conciliación del pipeline.");
+                "Nada nuevo que conciliar: se conserva la última conciliación del pipeline.",
+                null, "Event.Reconcile.NothingNew");
         }
     }
 
