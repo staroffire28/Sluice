@@ -591,7 +591,7 @@ public sealed class IngestExecutor : IIngestExecutor
         {
             try
             {
-                await ParquetVersions.PruneAsync(parquetStore, task.PipelineId, settings?.ParquetVersionDays ?? 0, DateTimeOffset.UtcNow, cancellationToken);
+                await ParquetVersions.PruneAsync(parquetStore, task.PipelineId, settings?.ParquetVersionDays ?? 0, DateTimeOffset.UtcNow, pipelineState.RetiredSnapshots, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

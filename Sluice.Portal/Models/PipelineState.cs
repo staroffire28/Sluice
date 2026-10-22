@@ -27,6 +27,11 @@ public sealed record PipelineState
     // restaurar ese mismo punto: con otro, las tablas ya movidas se archivarían con esa etiqueta y su
     // contenido del punto dejaría de poder elegirse.
     public RestoreInProgress? RestoreInProgress { get; init; }
+
+    // Snapshots cuyas versiones retiró un restore (volvieron a ser el consolidado): siguen contando
+    // en el escalonado de los puntos (ParquetVersions.KeptPoints), sin ofrecerse, para que el punto
+    // anterior de su día, que la poda ya pudo dejar sin versiones, no pase a ser el último.
+    public List<string> RetiredSnapshots { get; init; } = [];
 }
 
 public sealed record RestoreInProgress

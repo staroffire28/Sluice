@@ -300,9 +300,13 @@ public static class ParquetVersions
     // worker, sin zona del usuario). El último del día se busca entre todos los puntos de ese día:
     // uno que no lo es cae en cuanto pasan las 24 h. Cuenta la fecha del snapshot y no cuándo
     // se archivaron sus versiones, que cambia al podar: así un punto que se deja caer no vuelve a la
-    // lista con versiones de menos. Con keepDays <= 0 (versiones desactivadas), ninguno.
+    // lista con versiones de menos. Por lo mismo, los snapshots cuyas versiones retiró un restore
+    // (PipelineState.RetiredSnapshots) siguen contando como puntos aunque no se ofrezcan: si no, el
+    // punto anterior de su día, ya podado, pasaría a ser el último. Con keepDays <= 0 (versiones
+    // desactivadas), ninguno.
     public static IReadOnlyList<RestorePoint> KeptPoints(
-        IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>> versions, int keepDays, DateTimeOffset now)
+        IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>> versions, int keepDays, DateTimeOffset now,
+        IEnumerable<string>? retired = null)
     {
         if (keepDays <= 0)
         {
@@ -312,14 +316,33 @@ public static class ParquetVersions
         var cutoff = now.AddDays(-keepDays);
         var recent = now.AddDays(-1);
         var points = RestorePoints(versions);
-        var times = points.Select(p => SnapshotFolderTime.TryParse(p.Snapshot, out var at) ? at : (DateTimeOffset?)null).ToList();
+        var snapshots = points.Select(p => p.Snapshot).Union(retired ?? [], StringComparer.Ordinal)
+            .OrderByDescending(s => s, StringComparer.Ordinal)
+            .ToList();
+        var times = snapshots.Select(s => SnapshotFolderTime.TryParse(s, out var at) ? at : (DateTimeOffset?)null).ToList();
 
         // Del más reciente al más antiguo: un punto es el último de su día si el anterior de la
         // lista (el siguiente en el tiempo) es de otro día.
-        return points
-            .Where((point, index) => index == 0
+        var kept = snapshots
+            .Where((snapshot, index) => index == 0
                 || times[index] >= recent
                 || (times[index] >= cutoff && times[index - 1]?.UtcDateTime.Date != times[index]!.Value.UtcDateTime.Date))
+            .ToHashSet(StringComparer.Ordinal);
+        return points.Where(p => kept.Contains(p.Snapshot)).ToList();
+    }
+
+    // Los snapshots que retira un restore: los de las versiones que vuelven a ser el consolidado,
+    // no solo el del punto (una tabla que no cambió justo después usa la versión de un punto
+    // posterior). Se olvidan los anteriores a todas las versiones: ya no hay puntos que puedan
+    // dejar de ser el último de su día y los nuevos siempre son posteriores.
+    public static List<string> Retire(
+        IEnumerable<string> retired, IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>> versions, RestorePlan plan)
+    {
+        var oldest = versions.Values.SelectMany(v => v).Select(v => v.PipelineSnapshot).OfType<string>().Min(StringComparer.Ordinal);
+        return retired
+            .Union(plan.Restore.Select(r => r.Version.PipelineSnapshot).OfType<string>(), StringComparer.Ordinal)
+            .Where(s => oldest is not null && string.CompareOrdinal(s, oldest) >= 0)
+            .Order(StringComparer.Ordinal)
             .ToList();
     }
 
@@ -329,8 +352,10 @@ public static class ParquetVersions
     // (versiones desactivadas) se borran todas. No hay atajo por la fecha de archivado (el id): qué
     // sobra depende del snapshot de cada versión, no de su edad. Sin nada que podar cuesta el
     // listado y el índice; solo se leen los sidecars de las versiones que aún no están en él.
+    // retired: PipelineState.RetiredSnapshots, como en KeptPoints.
     public static async Task<int> PruneAsync(
-        IParquetStore store, string pipelineId, int keepDays, DateTimeOffset now, CancellationToken cancellationToken = default)
+        IParquetStore store, string pipelineId, int keepDays, DateTimeOffset now, IEnumerable<string>? retired = null,
+        CancellationToken cancellationToken = default)
     {
         if (keepDays <= 0)
         {
@@ -344,7 +369,7 @@ public static class ParquetVersions
         }
 
         var versions = await ListAllAsync(store, pipelineId, artifacts, cancellationToken);
-        var kept = KeptPoints(versions, keepDays, now);
+        var kept = KeptPoints(versions, keepDays, now, retired);
         var expired = versions
             .SelectMany(e =>
             {
