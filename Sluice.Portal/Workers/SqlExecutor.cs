@@ -193,14 +193,16 @@ public sealed class SqlExecutor : ISqlExecutor
                     : MergeMode.Upsert;
 
                 // MERGE en streaming: se lee por lotes (un row group a la vez) y se mergea por
-                // lote, sin cargar la tabla entera en memoria. En modo Reload se recolectan las
-                // claves (solo los Id, no las filas) para borrar huérfanas al final; el conjunto
-                // de claves queda acotado a una sola tabla.
+                // lote, sin cargar la tabla entera en memoria. En modo Reload las claves de cada
+                // lote (solo los Id, no las filas) se vuelcan a SQL tras su MERGE para borrar
+                // huérfanas al final; tampoco se juntan en memoria.
                 stallWatch.Touch($"{entry.Entity} · merge");
                 progress.Report(JobStepCatalog.Merge, entityResults.Count, item: entry.Entity, phase: "merge", failed: failedEntities);
                 var mergeBatch = SqlMergeExecutor.BatchSize;
                 var merged = 0;
-                var reloadKeys = reload ? new List<object?>() : null;
+                await using var reloadKeys = reload
+                    ? _mergeExecutor.CreateSourceKeySink(connection, schema, entry.Entity, cdmSchema, sqlVersion)
+                    : null;
                 // DeleteMode.Delete: las filas de borrado no se cargan; sus Id se borran al final.
                 var deleteKeys = pipeline.DeleteMode == DeleteMode.Delete ? new List<object?>() : null;
                 await using (var parquetStream = fromDelta
@@ -220,15 +222,11 @@ public sealed class SqlExecutor : ISqlExecutor
                             continue;
                         }
 
-                        if (reloadKeys is not null && row.TryGetValue("Id", out var idValue))
-                        {
-                            reloadKeys.Add(idValue);
-                        }
-
                         batch.Add(row);
                         if (batch.Count >= mergeBatch)
                         {
                             merged += await _mergeExecutor.MergeEntityAsync(connection, schema, entry.Entity, cdmSchema, batch, sqlVersion, mode, cancellationToken);
+                            await AddKeysAsync(reloadKeys, batch, cancellationToken);
                             batch = new List<Dictionary<string, object?>>(mergeBatch);
                             stallWatch.Touch($"{entry.Entity} · merge");
                             // Filas en vivo durante una tabla grande (con throttle: misma entidad y fase).
@@ -239,6 +237,7 @@ public sealed class SqlExecutor : ISqlExecutor
                     if (batch.Count > 0)
                     {
                         merged += await _mergeExecutor.MergeEntityAsync(connection, schema, entry.Entity, cdmSchema, batch, sqlVersion, mode, cancellationToken);
+                        await AddKeysAsync(reloadKeys, batch, cancellationToken);
                     }
                 }
 
@@ -251,7 +250,7 @@ public sealed class SqlExecutor : ISqlExecutor
                 {
                     stallWatch.Touch($"{entry.Entity} · orphans");
                     progress.Report(JobStepCatalog.Merge, entityResults.Count, item: entry.Entity, phase: "orphans", failed: failedEntities);
-                    var removed = await _mergeExecutor.DeleteOrphansAsync(connection, schema, entry.Entity, cdmSchema, reloadKeys, sqlVersion, cancellationToken);
+                    var removed = await reloadKeys.DeleteOrphansAsync(cancellationToken);
                     if (removed > 0)
                     {
                         _jobs.AppendEvent(task.JobId, EventLevel.Info, $"{entry.Entity}: {removed} fila(s) huérfana(s) eliminada(s) (recarga).");
@@ -400,6 +399,12 @@ public sealed class SqlExecutor : ISqlExecutor
                 pipeline, job, task.JobId, entityResults, totalMerged, jobStatusAfterSql.Value, cancellationToken);
         }
     }
+
+    // Claves (Id) de un lote ya mergeado, para el borrado de huérfanas del Reload.
+    private static Task AddKeysAsync(ISourceKeySink? keys, List<Dictionary<string, object?>> batch, CancellationToken cancellationToken) =>
+        keys is null
+            ? Task.CompletedTask
+            : keys.AddAsync(batch.Where(r => r.ContainsKey("Id")).Select(r => r["Id"]).ToList(), cancellationToken);
 
     // ¿Completó SQL el último job terminado del pipeline que carga todas sus tablas? Se ignoran los
     // que no tienen etapa SQL (Reconcile, Diff) y los ResyncTable: cargan una sola tabla, así que

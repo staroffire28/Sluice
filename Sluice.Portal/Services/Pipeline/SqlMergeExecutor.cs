@@ -49,7 +49,8 @@ public interface ISqlMergeExecutor
         CancellationToken cancellationToken = default);
 
     // Borra del destino las filas cuyo Id no está en el conjunto de claves del origen (huérfanas).
-    // Usado por el re-sync en modo Reload tras el upsert; devuelve el número de filas eliminadas.
+    // Lo usa el ISourceKeySink en memoria por defecto (el Reload real va por SqlSourceKeySink);
+    // devuelve el número de filas eliminadas.
     Task<int> DeleteOrphansAsync(
         SqlConnection connection,
         string schema,
@@ -58,6 +59,17 @@ public interface ISqlMergeExecutor
         IReadOnlyCollection<object?> sourceKeys,
         SqlServerVersion sqlVersion,
         CancellationToken cancellationToken = default);
+
+    // Claves del origen de un Reload para borrar las huérfanas al final (ver ISourceKeySink). Por
+    // defecto se juntan en memoria y van enteras a DeleteOrphansAsync, para los dobles de test que
+    // no ejercitan SQL.
+    ISourceKeySink CreateSourceKeySink(
+        SqlConnection connection,
+        string schema,
+        string entity,
+        CdmEntitySchema cdmSchema,
+        SqlServerVersion sqlVersion) =>
+        new InMemorySourceKeySink((keys, ct) => DeleteOrphansAsync(connection, schema, entity, cdmSchema, keys, sqlVersion, ct));
 
     // Borra del destino las filas cuyo Id está en el conjunto (filas borradas en F&O, con
     // DeleteMode.Delete); devuelve el número de filas eliminadas. Por defecto no hace nada, para
@@ -115,6 +127,34 @@ public interface ISqlMergeExecutor
         IReadOnlyList<string> columns,
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
+}
+
+// Claves del origen de un Reload: se añaden lote a lote mientras se lee el parquet y, al final,
+// DeleteOrphansAsync borra del destino las filas cuyo Id no llegó. Count son las claves añadidas.
+public interface ISourceKeySink : IAsyncDisposable
+{
+    long Count { get; }
+
+    Task AddAsync(IReadOnlyCollection<object?> keys, CancellationToken cancellationToken = default);
+
+    Task<int> DeleteOrphansAsync(CancellationToken cancellationToken = default);
+}
+
+internal sealed class InMemorySourceKeySink(Func<IReadOnlyCollection<object?>, CancellationToken, Task<int>> deleteOrphans) : ISourceKeySink
+{
+    private readonly List<object?> _keys = [];
+
+    public long Count => _keys.Count;
+
+    public Task AddAsync(IReadOnlyCollection<object?> keys, CancellationToken cancellationToken = default)
+    {
+        _keys.AddRange(keys);
+        return Task.CompletedTask;
+    }
+
+    public Task<int> DeleteOrphansAsync(CancellationToken cancellationToken = default) => deleteOrphans(_keys, cancellationToken);
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
 public sealed class SqlMergeExecutor : ISqlMergeExecutor
@@ -290,6 +330,17 @@ public sealed class SqlMergeExecutor : ISqlMergeExecutor
             keyTable => SqlMergeBuilder.BuildDeleteOrphans(schema, entity, keyTable, sqlVersion), cancellationToken);
     }
 
+    public ISourceKeySink CreateSourceKeySink(
+        SqlConnection connection,
+        string schema,
+        string entity,
+        CdmEntitySchema cdmSchema,
+        SqlServerVersion sqlVersion)
+    {
+        var idAttr = cdmSchema.Attributes.FirstOrDefault(a => string.Equals(a.Name, "Id", StringComparison.OrdinalIgnoreCase));
+        return new SqlSourceKeySink(connection, schema, entity, idAttr?.SqlType, sqlVersion);
+    }
+
     public async Task<int> DeleteKeysAsync(
         SqlConnection connection,
         string schema,
@@ -321,21 +372,7 @@ public sealed class SqlMergeExecutor : ISqlMergeExecutor
         // Sin el nombre de la entidad: va sin corchetes y no debe depender de datos externos.
         var keyTable = $"#keys_{Guid.NewGuid():N}";
         await ExecuteNonQueryAsync(connection, SqlMergeBuilder.BuildKeyTable(keyTable, idSqlType, sqlVersion), cancellationToken);
-
-        var table = new DataTable();
-        table.Columns.Add("Id", MapClrType(idSqlType));
-        foreach (var key in keys)
-        {
-            var row = table.NewRow();
-            row["Id"] = CoerceForSql(key, idSqlType) ?? DBNull.Value;
-            table.Rows.Add(row);
-        }
-
-        using (var bulk = new SqlBulkCopy(connection) { DestinationTableName = keyTable, BulkCopyTimeout = 0 })
-        {
-            bulk.ColumnMappings.Add("Id", "Id");
-            await bulk.WriteToServerAsync(table, cancellationToken);
-        }
+        await BulkInsertKeysAsync(connection, keyTable, idSqlType, keys, cancellationToken);
 
         int deleted;
         await using (var cmd = connection.CreateCommand())
@@ -346,6 +383,92 @@ public sealed class SqlMergeExecutor : ISqlMergeExecutor
 
         await ExecuteNonQueryAsync(connection, SqlMergeBuilder.BuildDropStaging(keyTable), cancellationToken);
         return deleted;
+    }
+
+    private static async Task BulkInsertKeysAsync(
+        SqlConnection connection,
+        string keyTable,
+        string idSqlType,
+        IReadOnlyCollection<object?> keys,
+        CancellationToken cancellationToken)
+    {
+        var table = new DataTable();
+        table.Columns.Add("Id", MapClrType(idSqlType));
+        foreach (var key in keys)
+        {
+            var row = table.NewRow();
+            row["Id"] = CoerceForSql(key, idSqlType) ?? DBNull.Value;
+            table.Rows.Add(row);
+        }
+
+        using var bulk = new SqlBulkCopy(connection) { DestinationTableName = keyTable, BulkCopyTimeout = 0 };
+        bulk.ColumnMappings.Add("Id", "Id");
+        await bulk.WriteToServerAsync(table, cancellationToken);
+    }
+
+    // #keys de la conexión: cada lote se sube con SqlBulkCopy en cuanto llega, así en memoria solo
+    // está el lote en curso y no todas las claves de la tabla (con 11 M de filas eran GB). Se crea
+    // con el primer lote: sin claves no se toca SQL, y el DELETE contra una #keys vacía vaciaría
+    // la tabla entera. Vive en la sesión, así que sobrevive a los #stg_ de cada lote del MERGE.
+    private sealed class SqlSourceKeySink(
+        SqlConnection connection,
+        string schema,
+        string entity,
+        string? idSqlType,
+        SqlServerVersion sqlVersion) : ISourceKeySink
+    {
+        // Sin el nombre de la entidad: va sin corchetes y no debe depender de datos externos.
+        private readonly string _keyTable = $"#keys_{Guid.NewGuid():N}";
+        private bool _created;
+
+        public long Count { get; private set; }
+
+        public async Task AddAsync(IReadOnlyCollection<object?> keys, CancellationToken cancellationToken = default)
+        {
+            // Sin columna Id no hay clave de identidad: no se puede determinar huérfanas con seguridad.
+            if (idSqlType is null || keys.Count == 0)
+            {
+                return;
+            }
+
+            if (!_created)
+            {
+                await ExecuteNonQueryAsync(connection, SqlMergeBuilder.BuildKeyTable(_keyTable, idSqlType, sqlVersion), cancellationToken);
+                _created = true;
+            }
+
+            await BulkInsertKeysAsync(connection, _keyTable, idSqlType, keys, cancellationToken);
+            Count += keys.Count;
+        }
+
+        public async Task<int> DeleteOrphansAsync(CancellationToken cancellationToken = default)
+        {
+            if (!_created)
+            {
+                return 0;
+            }
+
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = SqlMergeBuilder.BuildDeleteOrphans(schema, entity, _keyTable, sqlVersion);
+            return await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // Si la entidad falló con la conexión ya rota, la #keys muere con la sesión.
+        public async ValueTask DisposeAsync()
+        {
+            if (_created && connection.State == ConnectionState.Open)
+            {
+                _created = false;
+                try
+                {
+                    await ExecuteNonQueryAsync(connection, SqlMergeBuilder.BuildDropStaging(_keyTable), CancellationToken.None);
+                }
+                catch (Exception ex) when (ex is SqlException or InvalidOperationException)
+                {
+                    // Sesión rota: la #keys muere con ella; no tapar la excepción original.
+                }
+            }
+        }
     }
 
     private static async Task<int> MergeBatchAsync(
