@@ -81,6 +81,7 @@
                 <TemplateColumn Title="@L["Page.Tables.Sync"]">
                     <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
                         <FluentSwitch TValue="bool" data-testid="@($"sync-{context.Entity}")" Value="@(!context.Paused)"
+                                      AriaLabel="@L["Page.Tables.SyncAria", context.Entity]"
                                       ValueChanged="@(active => TogglePaused(context.Entity, !active))" />
                         @if (context.Paused)
                         {
