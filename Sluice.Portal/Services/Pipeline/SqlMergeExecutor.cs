@@ -631,20 +631,32 @@ public sealed class SqlMergeExecutor : ISqlMergeExecutor
         CdmEntitySchema cdmSchema,
         CancellationToken cancellationToken)
     {
-        foreach (var attr in cdmSchema.Attributes.Where(a => a.SqlType.StartsWith("NVARCHAR", StringComparison.OrdinalIgnoreCase)))
+        // Una sola consulta con la longitud de todas las columnas de la tabla (antes, una por columna
+        // NVARCHAR en cada tabla y cada job). NULL en las que no son de texto.
+        var lengths = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        await using (var cmd = connection.CreateCommand())
         {
-            await using var cmd = connection.CreateCommand();
             cmd.CommandText = """
-                SELECT CHARACTER_MAXIMUM_LENGTH
+                SELECT COLUMN_NAME, CHARACTER_MAXIMUM_LENGTH
                 FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table AND COLUMN_NAME = @column
+                WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
                 """;
             cmd.Parameters.AddWithValue("@schema", schema);
             cmd.Parameters.AddWithValue("@table", entity);
-            cmd.Parameters.AddWithValue("@column", attr.Name);
 
-            var maxLen = await cmd.ExecuteScalarAsync(cancellationToken);
-            if (maxLen is int len && len != -1)
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                if (!await reader.IsDBNullAsync(1, cancellationToken))
+                {
+                    lengths[reader.GetString(0)] = reader.GetInt32(1);
+                }
+            }
+        }
+
+        foreach (var attr in cdmSchema.Attributes.Where(a => a.SqlType.StartsWith("NVARCHAR", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (lengths.TryGetValue(attr.Name, out var len) && len != -1)
             {
                 await ExecuteNonQueryAsync(connection, SqlMergeBuilder.BuildAlterStringToMax(schema, entity, attr.Name), cancellationToken);
             }
