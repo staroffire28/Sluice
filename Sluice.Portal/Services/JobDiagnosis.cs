@@ -7,7 +7,8 @@ namespace Sluice.Portal.Services;
 // errors"); ahora se prefiere el error conocido (KnownErrors) más concreto.
 public static class JobDiagnosis
 {
-    public sealed record Diagnosis(string? Code, string Message);
+    // Event: el evento del que sale, para pintarlo en el idioma de quien lo ve (EventText).
+    public sealed record Diagnosis(string? Code, string Message, JobEvent? Event = null);
 
     public static Diagnosis? Pick(Job job)
     {
@@ -15,7 +16,7 @@ public static class JobDiagnosis
 
         if (errors.FirstOrDefault(e => KnownErrors.IsKnown(e.Code)) is { } coded)
         {
-            return new Diagnosis(coded.Code, coded.Message);
+            return new Diagnosis(coded.Code, coded.Message, coded);
         }
 
         if (job.Entities.FirstOrDefault(e => KnownErrors.IsKnown(e.Code)) is { } entity)
@@ -28,17 +29,17 @@ public static class JobDiagnosis
         {
             if (KnownErrors.CodeFromText(error.Message) is { } code)
             {
-                return new Diagnosis(code, error.Message);
+                return new Diagnosis(code, error.Message, error);
             }
         }
 
         if (errors.FirstOrDefault() is { } lastError)
         {
-            return new Diagnosis(null, lastError.Message);
+            return new Diagnosis(null, lastError.Message, lastError);
         }
 
         return job.Events.LastOrDefault(e => e.Level == EventLevel.Warning) is { } warning
-            ? new Diagnosis(null, warning.Message)
+            ? new Diagnosis(null, warning.Message, warning)
             : null;
     }
 }

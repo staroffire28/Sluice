@@ -48,7 +48,8 @@ public sealed class OrphanedJobWatchdog
             _jobs.Update(current.Id, orphaned);
             _jobs.AppendEvent(current.Id, EventLevel.Error,
                 $"Sin ninguna tarea pendiente ni en curso desde hace más de {Grace.TotalMinutes:0} min " +
-                "(probable caída de un worker entre etapas). Se marca como Error: usa Reintentar para relanzarlo.");
+                "(probable caída de un worker entre etapas). Se marca como Error: usa Reintentar para relanzarlo.",
+                null, "Event.Job.Orphaned", Grace.TotalMinutes);
             marked.Add(orphaned);
         }
 

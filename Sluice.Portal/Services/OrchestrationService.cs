@@ -168,7 +168,7 @@ public sealed class OrchestrationService : IOrchestrationService
             FinishedAt = DateTimeOffset.UtcNow,
             StageStatus = stageStatus,
         });
-        _jobs.AppendEvent(jobId, EventLevel.Warning, "Job cancelado por el usuario.");
+        _jobs.AppendEvent(jobId, EventLevel.Warning, "Job cancelado por el usuario.", null, "Event.Job.CancelledByUser");
         return true;
     }
 

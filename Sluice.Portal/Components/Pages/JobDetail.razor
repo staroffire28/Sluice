@@ -86,7 +86,7 @@
                     }
                     else if (diagnosis is not null)
                     {
-                        <span class="jd-alert__line"><ErrorDiagnosis Code="@diagnosis.Code" Message="@diagnosis.Message" ShowLinks="true" /></span>
+                        <span class="jd-alert__line"><ErrorDiagnosis Code="@diagnosis.Code" Message="@(diagnosis.Event is { } diagnosisEvent ? EventText.Render(L, diagnosisEvent) : diagnosis.Message)" ShowLinks="true" /></span>
                     }
                     @if (affected.Count > 0)
                     {
@@ -268,7 +268,7 @@
                                                         <FluentIcon Value="@(ev.Level == EventLevel.Error ? ErrorIcon : WarningIcon)" Color="Color.Custom" CustomColor="var(--jd-icon)" />@EventLevelLabels.Get(L, ev.Level)
                                                     </span>
                                                 }
-                                                <span class="jd-event__msg">@ev.Message</span>
+                                                <span class="jd-event__msg">@EventText.Render(L, ev)</span>
                                             </li>
                                         }
                                     </ol>
@@ -378,7 +378,7 @@
                 }
 
                 _lastProgress = progress;
-                _flow = JobFlowBuilder.Build(_job, progress, DateTimeOffset.UtcNow);
+                _flow = JobFlowBuilder.Build(_job, progress, DateTimeOffset.UtcNow, e => EventText.Render(L, e));
                 _comparison = LoadComparison(_job);
                 InitExpandedOnce();
             }

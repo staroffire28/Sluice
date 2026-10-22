@@ -843,4 +843,25 @@
   <data name="Report.Note.Job" xml:space="preserve"><value>Divergence = |source − SQL| ÷ source rows, from the job's own counts. “—”: no data.</value></data>
   <data name="Report.Footer.Page" xml:space="preserve"><value>Page</value></data>
   <data name="Report.FileName" xml:space="preserve"><value>report-{0}.pdf</value></data>
+  <data name="Event.Ingest.Started" xml:space="preserve"><value>Ingest stage started.</value></data>
+  <data name="Event.Ingest.NoNewSnapshots" xml:space="preserve"><value>No new snapshots to process.</value></data>
+  <data name="Event.Ingest.AlreadyIngested" xml:space="preserve"><value>This job's ingest was already recorded ({0:N0} table(s)): its manifest is kept for the SQL stage.</value></data>
+  <data name="Event.Ingest.Completed" xml:space="preserve"><value>Ingest completed: {0:N0} snapshot(s), {1:N0} entity(ies).</value></data>
+  <data name="Event.Ingest.StoppedEarly" xml:space="preserve"><value>Ingest stopped early after {0:N0}/{1:N0} snapshot(s): {2}</value></data>
+  <data name="Event.Sql.Started" xml:space="preserve"><value>SQL MERGE stage started.</value></data>
+  <data name="Event.Sql.NoManifest" xml:space="preserve"><value>No ingest manifest: the SQL stage is skipped.</value></data>
+  <data name="Event.Sql.Completed" xml:space="preserve"><value>SQL MERGE completed ({0:N0} row(s)).</value></data>
+  <data name="Event.Sql.CompletedPartial" xml:space="preserve"><value>SQL MERGE completed with partial entity failures ({0:N0} row(s) merged).</value></data>
+  <data name="Event.Sql.CompletedWithErrors" xml:space="preserve"><value>SQL MERGE completed with entity errors ({0:N0} row(s) merged): the job is marked Error.</value></data>
+  <data name="Event.Reconcile.Started" xml:space="preserve"><value>Reconcile stage started.</value></data>
+  <data name="Event.Reconcile.Completed" xml:space="preserve"><value>Reconcile completed. Max divergence: {0:N2}%.</value></data>
+  <data name="Event.Diff.Completed" xml:space="preserve"><value>Diff completed: {0:N0} entity(ies) with differences, {1:N0} row(s) of total delta.</value></data>
+  <data name="Event.Compare.NoParquet" xml:space="preserve"><value>There is no consolidated Parquet to compare. Run the pipeline before comparing values.</value></data>
+  <data name="Event.Compare.Summary" xml:space="preserve"><value>Value comparison: {0:N0} table(s), {1:N0} with differences.</value></data>
+  <data name="Event.Job.CancelledByUser" xml:space="preserve"><value>Job cancelled by the user.</value></data>
+  <data name="Event.Job.StageStoppedByCancel" xml:space="preserve"><value>Stage {0} stopped because the job was cancelled.</value></data>
+  <data name="Event.Job.LaunchedFromQueue" xml:space="preserve"><value>Launched from the queue (requested on {0} UTC).</value></data>
+  <data name="Event.Job.Orphaned" xml:space="preserve"><value>No pending or running task for more than {0:0} min (probably a worker went down between stages). Marked as Error: use Retry to run it again.</value></data>
+  <data name="Event.AutoFix.Launched" xml:space="preserve"><value>Automatic fix: job {0} re-syncs {1}.</value></data>
+  <data name="Event.AutoFix.NotLaunched" xml:space="preserve"><value>Automatic fix not launched: {0}</value></data>
 </root>

@@ -192,7 +192,7 @@ public sealed class WorkerHostService : BackgroundService
             // pipeline admita otro job.
             await StopHeartbeatAsync();
             await _tasks.CompleteAsync(task.Id, stage, workerId, ct);
-            _jobs.AppendEvent(task.JobId, EventLevel.Warning, $"Etapa {stage} detenida por la cancelación del job.");
+            _jobs.AppendEvent(task.JobId, EventLevel.Warning, $"Etapa {stage} detenida por la cancelación del job.", null, "Event.Job.StageStoppedByCancel", stage);
             _logger.LogInformation("Stage {Stage} de la tarea {TaskId} detenido: job cancelado.", stage, task.Id);
         }
         catch (OperationCanceledException) when (stageCts.IsCancellationRequested && !ct.IsCancellationRequested)

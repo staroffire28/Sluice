@@ -295,7 +295,7 @@ public sealed class PipelineSchedulerService : BackgroundService
                 var job = await _orchestration.StartQueuedAsync(pipeline.Id, queued, ct);
                 _runQueue.Complete(pipeline.Id);
                 var requestedAt = queued.RequestedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
-                _jobs.AppendEvent(job.Id, EventLevel.Info, $"Lanzado desde la cola (pedido el {requestedAt} UTC).");
+                _jobs.AppendEvent(job.Id, EventLevel.Info, $"Lanzado desde la cola (pedido el {requestedAt} UTC).", null, "Event.Job.LaunchedFromQueue", requestedAt);
             }
             catch (PipelineBusyException ex)
             {

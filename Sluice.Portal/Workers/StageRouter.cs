@@ -138,12 +138,13 @@ public sealed class StageRouter : IStageRouter
         {
             // El registro de actividad lo deja el re-sync, con el actor AutoFix.
             var fix = await _orchestration.ResyncTablesAsync(AuditActor.AutoFix, job.PipelineId, entities, ResyncMode.Reload, cancellationToken);
-            _jobs.AppendEvent(job.Id, EventLevel.Info, $"Corrección automática: el job {fix.Id} re-sincroniza {string.Join(", ", entities)}.");
+            _jobs.AppendEvent(job.Id, EventLevel.Info, $"Corrección automática: el job {fix.Id} re-sincroniza {string.Join(", ", entities)}.",
+                null, "Event.AutoFix.Launched", fix.Id, string.Join(", ", entities));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // P. ej. "Ya hay un job en ejecución" si el scheduler arrancó otro entretanto.
-            _jobs.AppendEvent(job.Id, EventLevel.Warning, $"Corrección automática no lanzada: {ex.Message}");
+            _jobs.AppendEvent(job.Id, EventLevel.Warning, $"Corrección automática no lanzada: {ex.Message}", null, "Event.AutoFix.NotLaunched", ex.Message);
         }
     }
 
