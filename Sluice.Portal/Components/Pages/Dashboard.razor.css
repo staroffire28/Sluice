@@ -23,7 +23,7 @@
 }
 
 .dash-bad {
-    color: var(--colorStatusDangerForeground1);
+    color: var(--colorStatusDangerForeground3);
     font-weight: 600;
 }
 

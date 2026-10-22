@@ -323,7 +323,7 @@
 }
 
 .jd-lvl--error {
-    color: var(--colorStatusDangerForeground1);
+    color: var(--colorStatusDangerForeground3);
 }
 
 @media (max-width: 600px) {
