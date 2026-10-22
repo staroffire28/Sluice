@@ -105,7 +105,7 @@ public sealed class IngestExecutor : IIngestExecutor
         // `job` queda obsoleto tras este Update (no se relee): las salidas tempranas de abajo
         // guardan esa misma copia, así que repiten el inicio junto al fin para no perderlo.
         var stageStart = DateTimeOffset.UtcNow;
-        _jobs.AppendEvent(task.JobId, EventLevel.Info, JobEventMarkers.IngestStarted);
+        _jobs.AppendEvent(task.JobId, EventLevel.Info, JobEventMarkers.IngestStarted, null, "Event.Ingest.Started");
         _jobs.Update(job.Id, job with
         {
             StageStatus = new Dictionary<string, string>(job.StageStatus) { ["ingest"] = "running" },
@@ -156,9 +156,17 @@ public sealed class IngestExecutor : IIngestExecutor
             // Sin nada nuevo, o el ingest de este job ya estaba registrado (ver arriba). Si cayó
             // antes de escribir su Summary (p. ej. durante la poda), Summary y Entities se rehacen
             // desde ese manifest.
-            _jobs.AppendEvent(task.JobId, EventLevel.Info, alreadyIngested
-                ? $"El ingest de este job ya estaba registrado ({previous!.Entities.Count} tabla(s)): se conserva su manifest para la etapa SQL."
-                : JobEventMarkers.NoNewSnapshots);
+            if (alreadyIngested)
+            {
+                _jobs.AppendEvent(task.JobId, EventLevel.Info,
+                    $"El ingest de este job ya estaba registrado ({previous!.Entities.Count} tabla(s)): se conserva su manifest para la etapa SQL.",
+                    null, "Event.Ingest.AlreadyIngested", previous.Entities.Count);
+            }
+            else
+            {
+                _jobs.AppendEvent(task.JobId, EventLevel.Info, JobEventMarkers.NoNewSnapshots, null, "Event.Ingest.NoNewSnapshots");
+            }
+
             var summaryWritten = job.Summary.ContainsKey("snapshotsSelected");
             _jobs.Update(job.Id, job with
             {
@@ -732,7 +740,21 @@ public sealed class IngestExecutor : IIngestExecutor
             : jobStatusAfterIngest == JobStatus.Partial || incomplete is not null
                 ? EventLevel.Warning
                 : EventLevel.Info;
-        _jobs.AppendEvent(task.JobId, completionLevel, completionNote);
+        if (fullyFailedEntities.Count > 0 || partiallyFailedEntities.Count > 0 || entitiesWithUnreadableValues.Count > 0)
+        {
+            // Con las partes de entidades fallidas o con NULLs el texto todavía no tiene clave: se
+            // pinta tal cual.
+            _jobs.AppendEvent(task.JobId, completionLevel, completionNote);
+        }
+        else if (incomplete is null)
+        {
+            _jobs.AppendEvent(task.JobId, completionLevel, completionNote, null, "Event.Ingest.Completed", snapshotsProcessed, manifestEntities.Count);
+        }
+        else
+        {
+            _jobs.AppendEvent(task.JobId, completionLevel, completionNote, null, "Event.Ingest.StoppedEarly",
+                snapshotsProcessed, selection.ToProcess.Count, incomplete.Reason);
+        }
 
         // Como la etapa SQL: un ingest que termina en Partial o Error avisa por el webhook, no solo
         // en el detalle del job.

@@ -356,7 +356,7 @@
             var now = DateTimeOffset.UtcNow;
             _active = JobService.ListRunning()
                 .OrderByDescending(j => j.StartedAt)
-                .Select(j => new ActiveJob(j, JobFlowBuilder.Build(j, ProgressStore.Load(j.PipelineId, j.Id), now), ParquetOnPortal(j.PipelineId)))
+                .Select(j => new ActiveJob(j, JobFlowBuilder.Build(j, ProgressStore.Load(j.PipelineId, j.Id), now, e => EventText.Render(L, e)), ParquetOnPortal(j.PipelineId)))
                 .ToList();
             _primary = PickPrimary(_active);
 

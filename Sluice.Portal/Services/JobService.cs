@@ -25,6 +25,11 @@ public interface IJobService
 
     // Con el código de error conocido (KnownErrors). Por defecto lo descarta, para los dobles de test.
     void AppendEvent(string jobId, EventLevel level, string message, string? code) => AppendEvent(jobId, level, message);
+
+    // Con la clave del texto localizable (JobEvent.MessageKey). Por defecto guarda solo el mensaje,
+    // para los dobles de test.
+    void AppendEvent(string jobId, EventLevel level, string message, string? code, string messageKey, params object?[] messageArgs) =>
+        AppendEvent(jobId, level, message, code);
 }
 
 public sealed class JobService : IJobService
@@ -122,16 +127,28 @@ public sealed class JobService : IJobService
 
     public void AppendEvent(string jobId, EventLevel level, string message) => AppendEvent(jobId, level, message, null);
 
-    public void AppendEvent(string jobId, EventLevel level, string message, string? code)
-    {
-        var newEvent = new JobEvent
+    public void AppendEvent(string jobId, EventLevel level, string message, string? code) =>
+        Append(jobId, new JobEvent
         {
             At = DateTimeOffset.UtcNow,
             Level = level,
             Message = message,
             Code = code,
-        };
+        });
 
+    public void AppendEvent(string jobId, EventLevel level, string message, string? code, string messageKey, params object?[] messageArgs) =>
+        Append(jobId, new JobEvent
+        {
+            At = DateTimeOffset.UtcNow,
+            Level = level,
+            Message = message,
+            Code = code,
+            MessageKey = messageKey,
+            MessageArgs = messageArgs.Length > 0 ? messageArgs : null,
+        });
+
+    private void Append(string jobId, JobEvent newEvent)
+    {
         // Leer + agregar + guardar bajo un único lock (JobStore.MutateAtomic): ninguna otra
         // llamada a AppendEvent/Update del mismo proceso puede intercalarse a mitad del ciclo,
         // así que no hace falta reintento para la concurrencia dentro del propio proceso.

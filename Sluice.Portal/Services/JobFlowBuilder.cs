@@ -38,7 +38,9 @@ public static class JobFlowBuilder
         FlowStatus.Warning, FlowStatus.Error, FlowStatus.Blocked, FlowStatus.Cancelled, FlowStatus.Interrupted,
     ];
 
-    public static JobFlowView Build(Job job, JobProgress? progress, DateTimeOffset now)
+    // text: cómo se pinta el aviso de un evento (EventText, en el idioma de quien lo ve); sin él,
+    // su texto guardado.
+    public static JobFlowView Build(Job job, JobProgress? progress, DateTimeOffset now, Func<JobEvent, string>? text = null)
     {
         var active = JobProgressHelper.IsActive(job);
         var noNewData = IsNoNewData(job);
@@ -58,7 +60,7 @@ public static class JobFlowBuilder
             var issue = started is null ? null : job.Events
                 .Where(e => e.Level is EventLevel.Warning or EventLevel.Error
                     && e.At >= started && (windowEnd is null || e.At < windowEnd))
-                .Select(e => e.Message)
+                .Select(e => text?.Invoke(e) ?? e.Message)
                 .LastOrDefault();
 
             stages.Add(new FlowStageView(

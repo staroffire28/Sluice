@@ -62,7 +62,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
         var excludeDeleteRows = pipeline.DeleteMode == DeleteMode.Delete;
 
         var stageStart = DateTimeOffset.UtcNow;
-        _jobs.AppendEvent(task.JobId, EventLevel.Info, JobEventMarkers.ReconcileStarted);
+        _jobs.AppendEvent(task.JobId, EventLevel.Info, JobEventMarkers.ReconcileStarted, null, "Event.Reconcile.Started");
         _jobs.Update(job.Id, job with
         {
             StageStatus = new Dictionary<string, string>(job.StageStatus) { ["reconcile"] = "running" },
@@ -239,7 +239,8 @@ public sealed class ReconcileExecutor : IReconcileExecutor
         });
 
         _jobs.AppendEvent(task.JobId, EventLevel.Info,
-            $"Reconcile completed. Max divergence: {report.MaxDivergencePct:F2}%.");
+            $"Reconcile completed. Max divergence: {report.MaxDivergencePct:F2}%.",
+            null, "Event.Reconcile.Completed", report.MaxDivergencePct);
     }
 
     // Comparación de valores (bajo demanda): hash por fila del parquet consolidado frente a SQL, una
@@ -313,9 +314,19 @@ public sealed class ReconcileExecutor : IReconcileExecutor
             _jobs.AppendEvent(task.JobId, EventLevel.Warning, $"{error.Entity}: no se pudo comparar ({error.Error}).");
         }
 
-        _jobs.AppendEvent(task.JobId, results.Count == 0 ? EventLevel.Warning : EventLevel.Info, results.Count == 0
-            ? "No hay ningún Parquet consolidado que comparar. Ejecuta el pipeline antes de comparar valores."
-            : $"Comparación de valores: {results.Count} tabla(s), {results.Count(r => r.HasDifferences)} con diferencias.");
+        if (results.Count == 0)
+        {
+            _jobs.AppendEvent(task.JobId, EventLevel.Warning,
+                "No hay ningún Parquet consolidado que comparar. Ejecuta el pipeline antes de comparar valores.",
+                null, "Event.Compare.NoParquet");
+        }
+        else
+        {
+            var withDifferences = results.Count(r => r.HasDifferences);
+            _jobs.AppendEvent(task.JobId, EventLevel.Info,
+                $"Comparación de valores: {results.Count} tabla(s), {withDifferences} con diferencias.",
+                null, "Event.Compare.Summary", results.Count, withDifferences);
+        }
     }
 
     private async Task<ValueCompareEntityResult> CompareEntityValuesAsync(
@@ -439,6 +450,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
         });
 
         _jobs.AppendEvent(task.JobId, EventLevel.Info,
-            $"Diff completed: {withDifferences} entity(ies) with differences, {totalDelta} row(s) of total delta.");
+            $"Diff completed: {withDifferences} entity(ies) with differences, {totalDelta} row(s) of total delta.",
+            null, "Event.Diff.Completed", withDifferences, totalDelta);
     }
 }

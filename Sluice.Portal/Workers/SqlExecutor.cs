@@ -72,7 +72,7 @@ public sealed class SqlExecutor : ISqlExecutor
         // `job` queda obsoleto tras este Update: la salida temprana lo reutiliza, así que repite
         // el inicio junto al fin para no perderlo.
         var stageStart = DateTimeOffset.UtcNow;
-        _jobs.AppendEvent(task.JobId, EventLevel.Info, JobEventMarkers.SqlStarted);
+        _jobs.AppendEvent(task.JobId, EventLevel.Info, JobEventMarkers.SqlStarted, null, "Event.Sql.Started");
         _jobs.Update(job.Id, job with
         {
             StageStatus = new Dictionary<string, string>(job.StageStatus) { ["sql"] = "running" },
@@ -84,7 +84,7 @@ public sealed class SqlExecutor : ISqlExecutor
         var manifest = _manifestStore.Load(task.PipelineId, task.JobId);
         if (manifest is null || manifest.Entities.Count == 0)
         {
-            _jobs.AppendEvent(task.JobId, EventLevel.Info, JobEventMarkers.SqlNoManifest);
+            _jobs.AppendEvent(task.JobId, EventLevel.Info, JobEventMarkers.SqlNoManifest, null, "Event.Sql.NoManifest");
             _jobs.Update(job.Id, job with
             {
                 StageStatus = new Dictionary<string, string>(job.StageStatus) { ["sql"] = "done" },
@@ -381,16 +381,18 @@ public sealed class SqlExecutor : ISqlExecutor
         if (jobStatusAfterSql == JobStatus.Error)
         {
             _jobs.AppendEvent(task.JobId, EventLevel.Error,
-                $"SQL MERGE completed with entity errors ({totalMerged} row(s) merged) — job marked Error.");
+                $"SQL MERGE completed with entity errors ({totalMerged} row(s) merged) — job marked Error.",
+                null, "Event.Sql.CompletedWithErrors", totalMerged);
         }
         else if (jobStatusAfterSql == JobStatus.Partial)
         {
             _jobs.AppendEvent(task.JobId, EventLevel.Warning,
-                $"SQL MERGE completed with partial entity failures ({totalMerged} row(s) merged).");
+                $"SQL MERGE completed with partial entity failures ({totalMerged} row(s) merged).",
+                null, "Event.Sql.CompletedPartial", totalMerged);
         }
         else
         {
-            _jobs.AppendEvent(task.JobId, EventLevel.Info, $"SQL MERGE completed ({totalMerged} row(s)).");
+            _jobs.AppendEvent(task.JobId, EventLevel.Info, $"SQL MERGE completed ({totalMerged} row(s)).", null, "Event.Sql.Completed", totalMerged);
         }
 
         if (jobStatusAfterSql is JobStatus.Partial or JobStatus.Error)
