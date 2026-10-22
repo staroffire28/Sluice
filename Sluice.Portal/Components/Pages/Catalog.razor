@@ -51,7 +51,6 @@
                     <TemplateColumn Title="@L["Page.Catalog.Load"]">
                         <FluentSwitch TValue="bool" data-testid="@($"catalog-include-{context.Name}")" Value="@context.Included"
                                       AriaLabel="@L["Page.Catalog.LoadAria", context.Name]"
-
                                       ValueChanged="@(included => SetIncluded(context.Name, included))" />
                     </TemplateColumn>
                     <TemplateColumn Title="@L["Page.Catalog.Columns"]">
