@@ -49,7 +49,8 @@ public interface ISqlMergeExecutor
         CancellationToken cancellationToken = default);
 
     // Borra del destino las filas cuyo Id no está en el conjunto de claves del origen (huérfanas).
-    // Usado por el re-sync en modo Reload tras el upsert; devuelve el número de filas eliminadas.
+    // Lo usa el ISourceKeySink en memoria por defecto (el Reload real va por SqlSourceKeySink);
+    // devuelve el número de filas eliminadas.
     Task<int> DeleteOrphansAsync(
         SqlConnection connection,
         string schema,
