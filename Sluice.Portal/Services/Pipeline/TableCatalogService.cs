@@ -108,8 +108,11 @@ public sealed class TableCatalogService
                 _pauses.SetPaused(Get(pipelineId).Id, entity, paused: !included);
                 return true;
             },
-            _ => new AuditResult($"Sincronización de la tabla '{entity}' {(included ? "reanudada" : "pausada")} en el pipeline {pipelineId}."),
+            _ => new AuditResult($"Sincronización de la tabla '{entity}' {(included ? "reanudada" : "pausada")} en el pipeline {pipelineId}.",
+                MessageKey: "Activity.Table.SyncChanged",
+                MessageArgs: [entity, new EventPart(included ? "Activity.Table.Resumed" : "Activity.Table.Paused"), pipelineId]),
             $"No se pudo {(included ? "reanudar" : "pausar")} la tabla '{entity}'",
+            failureKey: "Activity.Failed.TableSync", failureArgs: [new EventPart(included ? "Activity.Table.ResumeVerb" : "Activity.Table.PauseVerb"), entity],
             target: entity);
 
     // Devuelve las columnas que vuelven a cargarse: SQL solo las rellena al re-sincronizar la tabla.
@@ -123,8 +126,11 @@ public sealed class TableCatalogService
             () => _columns.SetExcluded(Get(pipelineId).Id, entity, excluded),
             _ => new AuditResult(excluded.Count == 0
                 ? $"Todas las columnas de '{entity}' se cargan en SQL."
-                : $"Columnas excluidas de '{entity}': {string.Join(", ", excluded)}."),
+                : $"Columnas excluidas de '{entity}': {string.Join(", ", excluded)}.",
+                MessageKey: excluded.Count == 0 ? "Activity.Table.AllColumns" : "Activity.Table.ExcludedColumns",
+                MessageArgs: [entity, string.Join(", ", excluded)]),
             $"No se pudieron cambiar las columnas de '{entity}'",
+            failureKey: "Activity.Failed.TableColumns", failureArgs: [entity],
             target: entity);
     }
 

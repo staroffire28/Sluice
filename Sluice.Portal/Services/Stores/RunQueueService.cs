@@ -32,11 +32,15 @@ public sealed class RunQueueService
             () => _queue.Get(pipelineId) is { } run ? (run, _queue.Remove(pipelineId)) : ((QueuedRun?)null, false),
             result => result switch
             {
-                ({ } run, true) => new AuditResult($"{run.Type} quitado de la cola del pipeline {pipelineId}."),
-                ({ } run, false) => new AuditResult($"{run.Type} del pipeline {pipelineId} ya está arrancando; no se puede quitar de la cola.", Outcome: AuditOutcome.Rejected),
-                _ => new AuditResult($"No había nada que quitar de la cola del pipeline {pipelineId}.", Outcome: AuditOutcome.Rejected),
+                ({ } run, true) => new AuditResult($"{run.Type} quitado de la cola del pipeline {pipelineId}.",
+                    MessageKey: "Activity.Queue.Removed", MessageArgs: [run.Type.ToString(), pipelineId]),
+                ({ } run, false) => new AuditResult($"{run.Type} del pipeline {pipelineId} ya está arrancando; no se puede quitar de la cola.", Outcome: AuditOutcome.Rejected,
+                    MessageKey: "Activity.Queue.AlreadyStarting", MessageArgs: [run.Type.ToString(), pipelineId]),
+                _ => new AuditResult($"No había nada que quitar de la cola del pipeline {pipelineId}.", Outcome: AuditOutcome.Rejected,
+                    MessageKey: "Activity.Queue.NothingToRemove", MessageArgs: [pipelineId]),
             },
-            $"No se pudo quitar de la cola del pipeline {pipelineId}");
+            $"No se pudo quitar de la cola del pipeline {pipelineId}",
+            failureKey: "Activity.Failed.QueueRemove", failureArgs: [pipelineId]);
         return removed ? queued : null;
     }
 

@@ -3,7 +3,11 @@ using Sluice.Portal.Models;
 namespace Sluice.Portal.Services.Logging;
 
 // Lo que se registra cuando la acción termina sin excepción. Level: solo si no basta el del outcome.
-public readonly record struct AuditResult(string Message, string? JobId = null, AuditOutcome Outcome = AuditOutcome.Ok, string? Level = null);
+// MessageKey y MessageArgs: el texto localizable (ActivityLogEntry.MessageKey); Message sigue siendo
+// el texto guardado.
+public readonly record struct AuditResult(
+    string Message, string? JobId = null, AuditOutcome Outcome = AuditOutcome.Ok, string? Level = null,
+    string? MessageKey = null, object?[]? MessageArgs = null);
 
 public static class AuditLogExtensions
 {
@@ -21,7 +25,9 @@ public static class AuditLogExtensions
         Func<T, AuditResult> describe,
         string failure,
         string? jobId = null,
-        string? target = null)
+        string? target = null,
+        string? failureKey = null,
+        object?[]? failureArgs = null)
     {
         T value;
         try
@@ -30,12 +36,11 @@ public static class AuditLogExtensions
         }
         catch (Exception ex) when (ShouldRecord(actor, ex))
         {
-            audit.Record(actor, action, OutcomeOf(ex), pipelineId, jobId, target, $"{failure}: {ex.Message}");
+            RecordFailure(audit, actor, action, pipelineId, jobId, target, failure, failureKey, failureArgs, ex);
             throw;
         }
 
-        var result = describe(value);
-        audit.Record(actor, action, result.Outcome, pipelineId, result.JobId ?? jobId, target, result.Message, result.Level);
+        RecordResult(audit, actor, action, pipelineId, jobId, target, describe(value));
         return value;
     }
 
@@ -48,7 +53,9 @@ public static class AuditLogExtensions
         Func<T, AuditResult> describe,
         string failure,
         string? jobId = null,
-        string? target = null)
+        string? target = null,
+        string? failureKey = null,
+        object?[]? failureArgs = null)
     {
         T value;
         try
@@ -57,13 +64,42 @@ public static class AuditLogExtensions
         }
         catch (Exception ex) when (ShouldRecord(actor, ex))
         {
-            audit.Record(actor, action, OutcomeOf(ex), pipelineId, jobId, target, $"{failure}: {ex.Message}");
+            RecordFailure(audit, actor, action, pipelineId, jobId, target, failure, failureKey, failureArgs, ex);
             throw;
         }
 
-        var result = describe(value);
-        audit.Record(actor, action, result.Outcome, pipelineId, result.JobId ?? jobId, target, result.Message, result.Level);
+        RecordResult(audit, actor, action, pipelineId, jobId, target, describe(value));
         return value;
+    }
+
+    // Con clave, "{failure}: {mensaje de la excepción}" se guarda como Activity.Failure con el fallo
+    // como parte (EventPart); la excepción queda en su idioma.
+    private static void RecordFailure(IAuditLog audit, AuditActor actor, string action, string? pipelineId, string? jobId, string? target,
+        string failure, string? failureKey, object?[]? failureArgs, Exception ex)
+    {
+        var message = $"{failure}: {ex.Message}";
+        if (failureKey is null)
+        {
+            audit.Record(actor, action, OutcomeOf(ex), pipelineId, jobId, target, message);
+        }
+        else
+        {
+            audit.Record(actor, action, OutcomeOf(ex), pipelineId, jobId, target, message, null,
+                "Activity.Failure", new EventPart(failureKey, failureArgs ?? []), ex.Message);
+        }
+    }
+
+    private static void RecordResult(IAuditLog audit, AuditActor actor, string action, string? pipelineId, string? jobId, string? target, AuditResult result)
+    {
+        if (result.MessageKey is null)
+        {
+            audit.Record(actor, action, result.Outcome, pipelineId, result.JobId ?? jobId, target, result.Message, result.Level);
+        }
+        else
+        {
+            audit.Record(actor, action, result.Outcome, pipelineId, result.JobId ?? jobId, target, result.Message, result.Level,
+                result.MessageKey, result.MessageArgs ?? []);
+        }
     }
 
     // InvalidOperationException incluye PipelineBusyException y el timeout del lock de ejecución.

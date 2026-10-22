@@ -79,9 +79,12 @@ public sealed class ParquetArtifactService : IParquetArtifactService
             pipelineId,
             () => DeleteUnauditedAsync(pipelineId, blobPath, cancellationToken),
             deleted => deleted
-                ? new AuditResult($"Parquet {blobPath} borrado del pipeline {pipelineId}.")
-                : new AuditResult($"La ruta {blobPath} no pertenece al pipeline {pipelineId}: no se borró.", Outcome: AuditOutcome.Rejected),
+                ? new AuditResult($"Parquet {blobPath} borrado del pipeline {pipelineId}.",
+                    MessageKey: "Activity.Parquet.Deleted", MessageArgs: [blobPath, pipelineId])
+                : new AuditResult($"La ruta {blobPath} no pertenece al pipeline {pipelineId}: no se borró.", Outcome: AuditOutcome.Rejected,
+                    MessageKey: "Activity.Parquet.NotInPipeline", MessageArgs: [blobPath, pipelineId]),
             $"No se pudo borrar el parquet {blobPath}",
+            failureKey: "Activity.Failed.ParquetDelete", failureArgs: [blobPath],
             target: blobPath);
 
     public async Task<bool> DeleteUnauditedAsync(string pipelineId, string blobPath, CancellationToken cancellationToken = default)
