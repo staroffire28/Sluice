@@ -759,7 +759,7 @@
   <data name="Page.Settings.StaleTableDays" xml:space="preserve"><value>Days without data to flag a table</value></data>
   <data name="Page.Settings.StaleTableDays.Hint" xml:space="preserve"><value>In Tables, "Last data" is highlighted when the last load with rows is older. 0 or negative disables it.</value></data>
   <data name="Page.Settings.ParquetVersionDays" xml:space="preserve"><value>Days of Parquet versions</value></data>
-  <data name="Page.Settings.ParquetVersionDays.Hint" xml:space="preserve"><value>How many days of restore points are kept (by snapshot date), to take the pipeline back from the Parquet page. The most recent point is always kept. 0 or negative disables them.</value></data>
+  <data name="Page.Settings.ParquetVersionDays.Hint" xml:space="preserve"><value>How many days of restore points are kept (by snapshot date), to take the pipeline back from the Parquet page: every point of the last 24 hours, then the last one of each day. The most recent point is always kept. 0 or negative disables them.</value></data>
   <data name="FirstSteps.Title" xml:space="preserve"><value>First steps</value></data>
   <data name="FirstSteps.Hint" xml:space="preserve"><value>Set up Sluice in a few minutes. This list goes away once the first run loads tables.</value></data>
   <data name="FirstSteps.Source" xml:space="preserve"><value>Connect the source</value></data>

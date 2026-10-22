@@ -758,7 +758,7 @@
   <data name="Page.Settings.StaleTableDays" xml:space="preserve"><value>Días sin datos para resaltar una tabla</value></data>
   <data name="Page.Settings.StaleTableDays.Hint" xml:space="preserve"><value>En Tablas, «Último dato» se resalta cuando la última carga con filas es más antigua. 0 o negativo lo desactiva.</value></data>
   <data name="Page.Settings.ParquetVersionDays" xml:space="preserve"><value>Días de versiones del parquet</value></data>
-  <data name="Page.Settings.ParquetVersionDays.Hint" xml:space="preserve"><value>Cuántos días de puntos de restauración se guardan (por la fecha del snapshot), para devolver el pipeline desde la página Parquet. Siempre se conserva al menos el punto más reciente. 0 o negativo los desactiva.</value></data>
+  <data name="Page.Settings.ParquetVersionDays.Hint" xml:space="preserve"><value>Cuántos días de puntos de restauración se guardan (por la fecha del snapshot), para devolver el pipeline desde la página Parquet: todos los de las últimas 24 h y, después, el último de cada día. Siempre se conserva al menos el punto más reciente. 0 o negativo los desactiva.</value></data>
   <data name="FirstSteps.Title" xml:space="preserve"><value>Primeros pasos</value></data>
   <data name="FirstSteps.Hint" xml:space="preserve"><value>Configura Sluice en unos minutos. Esta lista desaparece cuando la primera ejecución carga tablas.</value></data>
   <data name="FirstSteps.Source" xml:space="preserve"><value>Conecta el origen</value></data>

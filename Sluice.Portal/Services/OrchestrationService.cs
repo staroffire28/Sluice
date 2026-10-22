@@ -69,6 +69,7 @@ public sealed class OrchestrationService : IOrchestrationService
     private readonly IAuditLog _audit;
     private readonly PipelineStateStore? _stateStore;
     private readonly RunQueueService? _runQueue;
+    private readonly SettingsStore? _settings;
 
     public OrchestrationService(
         IOptions<AppOptions> options,
@@ -81,11 +82,13 @@ public sealed class OrchestrationService : IOrchestrationService
         IParquetArtifactService parquet,
         IAuditLog audit,
         PipelineStateStore? stateStore = null,
-        RunQueueService? runQueue = null)
+        RunQueueService? runQueue = null,
+        SettingsStore? settings = null)
     {
         _audit = audit;
         _stateStore = stateStore;
         _runQueue = runQueue;
+        _settings = settings;
         _options = options.Value;
         _pipelines = pipelines;
         _jobs = jobs;
@@ -472,7 +475,21 @@ public sealed class OrchestrationService : IOrchestrationService
             state = await FinishPendingRestoreAsync(stateStore, pipelineId, state, from, cancellationToken);
         }
 
-        var plan = ParquetVersions.Plan(await _parquet.ListAllVersionsAsync(pipelineId, cancellationToken), state.Tables, snapshot);
+        // La lista de puntos puede llevar abierta un rato: si la poda ya se llevó las versiones del
+        // punto, el plan archivaría las tablas en vez de devolverlas. El de un restore a medias no se
+        // poda (la ingesta espera a que termine), aunque el tiempo lo saque de los conservados. Con
+        // settings.json ilegible tampoco se poda, así que sus versiones siguen ahí.
+        var versions = await _parquet.ListAllVersionsAsync(pipelineId, cancellationToken);
+        if (state.RestoreInProgress?.Snapshot != snapshot
+            && _settings is not null
+            && _settings.TryGet(out var settings)
+            && !ParquetVersions.KeptPoints(versions, settings.ParquetVersionDays, DateTimeOffset.UtcNow).Any(p => p.Snapshot == snapshot))
+        {
+            throw new InvalidOperationException(
+                $"El punto {snapshot} ya no se conserva (la poda se llevó sus versiones): vuelve a abrir la lista de puntos.");
+        }
+
+        var plan = ParquetVersions.Plan(versions, state.Tables, snapshot);
         if (plan.Restore.Count == 0 && plan.Archive.Count == 0 && state.PendingReload.Count == 0)
         {
             if (state.RestoreInProgress is not null)
