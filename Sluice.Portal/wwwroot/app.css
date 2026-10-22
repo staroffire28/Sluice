@@ -41,11 +41,11 @@ html, body {
 }
 
 #blazor-error-ui {
-    background: var(--colorStatusWarningBackground1);
-    border-top: 1px solid var(--colorStatusWarningBorder1);
+    background: var(--colorStatusWarningBackground1, #fff4ce);
+    border-top: 1px solid var(--colorStatusWarningBorder1, #fde7a0);
     bottom: 0;
     box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.08);
-    color: var(--colorNeutralForeground1);
+    color: var(--colorNeutralForeground1, #242424);
     display: none;
     left: 0;
     padding: 0.6rem 2.5rem 0.7rem 1.25rem;
@@ -57,7 +57,7 @@ html, body {
 #blazor-error-ui button {
     background: none;
     border: 0;
-    color: var(--colorBrandForegroundLink);
+    color: var(--colorBrandForegroundLink, #0f6cbd);
     cursor: pointer;
     font: inherit;
     padding: 0 0.25rem;
