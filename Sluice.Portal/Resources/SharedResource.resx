@@ -863,4 +863,41 @@
   <data name="Event.Job.Orphaned" xml:space="preserve"><value>Sin ninguna tarea pendiente ni en curso desde hace más de {0:0} min (probable caída de un worker entre etapas). Se marca como Error: usa Reintentar para relanzarlo.</value></data>
   <data name="Event.AutoFix.Launched" xml:space="preserve"><value>Corrección automática: el job {0} re-sincroniza {1}.</value></data>
   <data name="Event.AutoFix.NotLaunched" xml:space="preserve"><value>Corrección automática no lanzada: {0}</value></data>
+  <data name="Event.Ingest.StoppingAtSnapshot" xml:space="preserve"><value>Se detiene en el snapshot {0}: {1} Se reintentará en el próximo run.</value></data>
+  <data name="Event.Ingest.ProcessingSnapshot" xml:space="preserve"><value>Procesando el snapshot {0}.</value></data>
+  <data name="Event.Ingest.EntityFailed" xml:space="preserve"><value>{0}: falló la ingesta del snapshot {1} — {2}: {3}</value></data>
+  <data name="Event.Ingest.SkippedPaused" xml:space="preserve"><value>{0:N0} tabla(s) omitida(s) por pausa: {1}.</value></data>
+  <data name="Event.Ingest.RowsWithoutId" xml:space="preserve"><value>{0}: {1:N0} fila(s) sin Id válido descartada(s).</value></data>
+  <data name="Event.Ingest.ConsolidatedShrank" xml:space="preserve"><value>{0}: el consolidado nuevo tiene {1:N0} filas y el anterior {2:N0}. La versión anterior queda guardada en la página Parquet por si hay que restaurarla.</value></data>
+  <data name="Event.Ingest.SnapshotNotMarked" xml:space="preserve"><value>{0:N0} tabla(s) con fallos: el snapshot {1} no se marca como procesado y se reintentará en el próximo run.</value></data>
+  <data name="Event.Ingest.SettingsUnreadable" xml:space="preserve"><value>settings.json no se puede leer: no se podan las versiones del parquet hasta que se corrija.</value></data>
+  <data name="Event.Ingest.PruneFailed" xml:space="preserve"><value>No se pudieron podar las versiones del parquet: {0}</value></data>
+  <data name="Event.Ingest.UnreadableValues" xml:space="preserve"><value>{0}: {1:N0} valor(es) del CSV no se pudieron leer con el tipo de su columna y se cargaron como NULL — {2}.</value></data>
+  <data name="Event.Ingest.CompletionWithParts" xml:space="preserve"><value>{0}{1}{2}{3}</value></data>
+  <data name="Event.Ingest.Part.Failed" xml:space="preserve"><value> {0:N0} entidad(es) fallaron: {1}.</value></data>
+  <data name="Event.Ingest.Part.PartialFailures" xml:space="preserve"><value> {0:N0} entidad(es) con fallos parciales de snapshots (posibles datos incompletos): {1}.</value></data>
+  <data name="Event.Ingest.Part.UnreadableValues" xml:space="preserve"><value> {0:N0} entidad(es) con valores del CSV cargados como NULL: {1}.</value></data>
+  <data name="Event.Schema.ColumnsAdded" xml:space="preserve"><value>{0}: columnas nuevas en el origen: {1} (se añaden en SQL).</value></data>
+  <data name="Event.Schema.ColumnsRemoved" xml:space="preserve"><value>{0}: columnas que ya no llegan del origen: {1} (en SQL conservan su último valor).</value></data>
+  <data name="Event.Schema.TypeChanged" xml:space="preserve"><value>{0}: cambio de tipo en el origen: {1}. SQL mantiene el tipo anterior; revisa la tabla.</value></data>
+  <data name="Event.Sql.ExcludedColumnsRemain" xml:space="preserve"><value>{0}: {1:N0} columna(s) excluida(s) siguen en la tabla SQL y ya no se actualizan ({2}): conservan su último valor y quedan vacías en las filas nuevas.</value></data>
+  <data name="Event.Sql.DuplicateIds" xml:space="preserve"><value>{0}: la tabla destino tiene Ids duplicados; no se crea el índice único sobre [Id] (el MERGE sigue sin él).</value></data>
+  <data name="Event.Sql.NoReloadKeys" xml:space="preserve"><value>{0}: el parquet no trae claves; no se eliminan huérfanas para no vaciar la tabla.</value></data>
+  <data name="Event.Sql.OrphansDeleted" xml:space="preserve"><value>{0}: {1:N0} fila(s) huérfana(s) eliminada(s) (recarga).</value></data>
+  <data name="Event.Sql.SourceDeletesApplied" xml:space="preserve"><value>{0}: {1:N0} fila(s) borrada(s) en F&amp;O eliminada(s) del destino.</value></data>
+  <data name="Event.Sql.EntityMerged" xml:space="preserve"><value>{0}: {1:N0} fila(s) mergeadas; la tabla tiene {2:N0}.</value></data>
+  <data name="Event.Sql.EntityMergedDelta" xml:space="preserve"><value>{0}: {1:N0} fila(s) mergeadas (delta); la tabla tiene {2:N0}.</value></data>
+  <data name="Event.Sql.EntityFailed" xml:space="preserve"><value>{0}: falló la etapa SQL — {1}: {2}</value></data>
+  <data name="Event.Sql.FullMergeAfterIncomplete" xml:space="preserve"><value>El último job ({0}) no completó la etapa SQL: este Incremental mergea el consolidado completo para reponer lo que faltara.</value></data>
+  <data name="Event.Sql.PossibleBlock" xml:space="preserve"><value>{0}: lleva {1} sin avanzar en SQL (posible bloqueo). La sentencia sigue en curso; revisa los bloqueos en el destino (sys.dm_exec_requests, columna blocking_session_id).</value></data>
+  <data name="Event.Enums.NoSnapshot" xml:space="preserve"><value>Traducción de enums activa pero no se pudo resolver snapshot (manifest vacío, sin last-processed ni settled). Se continúa sin columnas _$label.</value></data>
+  <data name="Event.Enums.NoMetadataFile" xml:space="preserve"><value>Traducción de enums activa pero no se halló GlobalOptionsetMetadata.csv en el snapshot {0}.</value></data>
+  <data name="Event.Enums.EmptyMetadata" xml:space="preserve"><value>Traducción de enums: GlobalOptionsetMetadata.csv del snapshot {0} no produjo optionsets (¿formato cambiado, truncado o idioma != 1033?). Se continúa sin columnas _$label.</value></data>
+  <data name="Event.Enums.Loaded" xml:space="preserve"><value>Traducción de enums: {0:N0} entidad(es) con optionsets cargadas del snapshot {1}.</value></data>
+  <data name="Event.Enums.LoadFailed" xml:space="preserve"><value>No se pudo cargar la traducción de enums: {0}. Se continúa sin columnas _$label.</value></data>
+  <data name="Event.Compare.EntityFailed" xml:space="preserve"><value>{0}: no se pudo comparar ({1}).</value></data>
+  <data name="Event.Reconcile.NoParquet" xml:space="preserve"><value>No hay ningún Parquet consolidado que conciliar: se conserva la última conciliación del pipeline. Ejecuta el pipeline antes de conciliar.</value></data>
+  <data name="Event.Reconcile.NothingNew" xml:space="preserve"><value>Nada nuevo que conciliar: se conserva la última conciliación del pipeline.</value></data>
+  <data name="Event.Restore.Done" xml:space="preserve"><value>Restaurado el punto del snapshot {0}: {1:N0} tabla(s) vuelven a su versión de entonces{2}; se recargan en SQL {3:N0} tabla(s) ({4}).</value></data>
+  <data name="Event.Restore.ArchivedPart" xml:space="preserve"><value> y {0:N0} que aún no existían se archivan ({1})</value></data>
 </root>

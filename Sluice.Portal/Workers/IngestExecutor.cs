@@ -254,11 +254,12 @@ public sealed class IngestExecutor : IIngestExecutor
                 incomplete = integrity;
                 incompleteSnapshot = snapshot;
                 _jobs.AppendEvent(task.JobId, EventLevel.Warning,
-                    $"Stopping at snapshot {snapshot}: {integrity.Reason} Will retry on the next run.");
+                    $"Stopping at snapshot {snapshot}: {integrity.Reason} Will retry on the next run.",
+                    null, "Event.Ingest.StoppingAtSnapshot", snapshot, integrity.Reason);
                 break;
             }
 
-            _jobs.AppendEvent(task.JobId, EventLevel.Info, $"Processing snapshot {snapshot}.");
+            _jobs.AppendEvent(task.JobId, EventLevel.Info, $"Processing snapshot {snapshot}.", null, "Event.Ingest.ProcessingSnapshot", snapshot);
             progress.Report(JobStepCatalog.Snapshots, snapshotsProcessed, item: snapshot, failed: entityFailures.Count, rows: totalCsvRows, force: true);
             var entities = await adls.ListEntitiesAsync(snapshot, cancellationToken);
 
@@ -375,7 +376,8 @@ public sealed class IngestExecutor : IIngestExecutor
 
                     _logger.LogError(ex, "Ingest stage failed for entity {Entity} in snapshot {Snapshot}", entity, snapshot);
                     _jobs.AppendEvent(task.JobId, EventLevel.Error,
-                        $"{entity}: ingest failed for snapshot {snapshot} — {ex.GetType().Name}: {ex.Message}", code);
+                        $"{entity}: ingest failed for snapshot {snapshot} — {ex.GetType().Name}: {ex.Message}", code,
+                        "Event.Ingest.EntityFailed", entity, snapshot, ex.GetType().Name, ex.Message);
                 }
             }
 
@@ -388,8 +390,10 @@ public sealed class IngestExecutor : IIngestExecutor
 
         if (skippedPaused.Count > 0)
         {
+            var paused = string.Join(", ", skippedPaused.OrderBy(e => e));
             _jobs.AppendEvent(task.JobId, EventLevel.Info,
-                $"{skippedPaused.Count} tabla(s) omitida(s) por pausa: {string.Join(", ", skippedPaused.OrderBy(e => e))}.");
+                $"{skippedPaused.Count} tabla(s) omitida(s) por pausa: {paused}.",
+                null, "Event.Ingest.SkippedPaused", skippedPaused.Count, paused);
         }
 
         var manifestEntities = new List<IngestEntityManifest>();
@@ -448,7 +452,8 @@ public sealed class IngestExecutor : IIngestExecutor
             if (result.RowsWithoutId > 0)
             {
                 _jobs.AppendEvent(task.JobId, EventLevel.Warning,
-                    $"{entity}: {result.RowsWithoutId} fila(s) sin Id válido descartada(s).");
+                    $"{entity}: {result.RowsWithoutId} fila(s) sin Id válido descartada(s).",
+                    null, "Event.Ingest.RowsWithoutId", entity, result.RowsWithoutId);
             }
 
             // Antes de publicar: el fichero tiene las filas que el consolidador dice haber escrito.
@@ -472,7 +477,7 @@ public sealed class IngestExecutor : IIngestExecutor
                 if (result.Rows < previousRows)
                 {
                     var message = $"{entity}: el consolidado nuevo tiene {result.Rows:N0} filas y el anterior {previousRows:N0}. La versión anterior queda guardada en la página Parquet por si hay que restaurarla.";
-                    _jobs.AppendEvent(task.JobId, EventLevel.Warning, message);
+                    _jobs.AppendEvent(task.JobId, EventLevel.Warning, message, null, "Event.Ingest.ConsolidatedShrank", entity, result.Rows, previousRows);
                     if (_alerts is not null)
                     {
                         await _alerts.SendAsync($"Pipeline {pipeline.Name}: {message}", cancellationToken);
@@ -556,7 +561,8 @@ public sealed class IngestExecutor : IIngestExecutor
         if (entityFailures.Count > 0 && lastSnapshot is not null)
         {
             _jobs.AppendEvent(task.JobId, EventLevel.Warning,
-                $"{entityFailures.Count} tabla(s) con fallos: el snapshot {lastSnapshot} no se marca como procesado y se reintentará en el próximo run.");
+                $"{entityFailures.Count} tabla(s) con fallos: el snapshot {lastSnapshot} no se marca como procesado y se reintentará en el próximo run.",
+                null, "Event.Ingest.SnapshotNotMarked", entityFailures.Count, lastSnapshot);
         }
 
         // El manifest antes que el estado: el estado es el commit. Si el proceso cae entre ambos,
@@ -593,7 +599,8 @@ public sealed class IngestExecutor : IIngestExecutor
         if (_settings is not null && !_settings.TryGet(out settings))
         {
             _jobs.AppendEvent(task.JobId, EventLevel.Warning,
-                "settings.json no se puede leer: no se podan las versiones del parquet hasta que se corrija.");
+                "settings.json no se puede leer: no se podan las versiones del parquet hasta que se corrija.",
+                null, "Event.Ingest.SettingsUnreadable");
         }
         else
         {
@@ -603,7 +610,7 @@ public sealed class IngestExecutor : IIngestExecutor
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _jobs.AppendEvent(task.JobId, EventLevel.Warning, $"No se pudieron podar las versiones del parquet: {ex.Message}");
+                _jobs.AppendEvent(task.JobId, EventLevel.Warning, $"No se pudieron podar las versiones del parquet: {ex.Message}", null, "Event.Ingest.PruneFailed", ex.Message);
             }
         }
 
@@ -636,7 +643,8 @@ public sealed class IngestExecutor : IIngestExecutor
         foreach (var (entity, issues) in entitiesWithUnreadableValues)
         {
             _jobs.AppendEvent(task.JobId, EventLevel.Warning,
-                $"{entity}: {issues.Total} valor(es) del CSV no se pudieron leer con el tipo de su columna y se cargaron como NULL — {issues}.");
+                $"{entity}: {issues.Total} valor(es) del CSV no se pudieron leer con el tipo de su columna y se cargaron como NULL — {issues}.",
+                null, "Event.Ingest.UnreadableValues", entity, issues.Total, issues.ToString());
         }
 
         var consolidatedResults = manifestEntities
@@ -740,21 +748,18 @@ public sealed class IngestExecutor : IIngestExecutor
             : jobStatusAfterIngest == JobStatus.Partial || incomplete is not null
                 ? EventLevel.Warning
                 : EventLevel.Info;
-        if (fullyFailedEntities.Count > 0 || partiallyFailedEntities.Count > 0 || entitiesWithUnreadableValues.Count > 0)
-        {
-            // Con las partes de entidades fallidas o con NULLs el texto todavía no tiene clave: se
-            // pinta tal cual.
-            _jobs.AppendEvent(task.JobId, completionLevel, completionNote);
-        }
-        else if (incomplete is null)
-        {
-            _jobs.AppendEvent(task.JobId, completionLevel, completionNote, null, "Event.Ingest.Completed", snapshotsProcessed, manifestEntities.Count);
-        }
-        else
-        {
-            _jobs.AppendEvent(task.JobId, completionLevel, completionNote, null, "Event.Ingest.StoppedEarly",
-                snapshotsProcessed, selection.ToProcess.Count, incomplete.Reason);
-        }
+        // El cierre y sus partes opcionales (entidades fallidas, con fallos parciales o con NULLs),
+        // cada una con su clave: EventText las pinta juntas.
+        var completionBase = incomplete is null
+            ? new EventPart("Event.Ingest.Completed", snapshotsProcessed, manifestEntities.Count)
+            : new EventPart("Event.Ingest.StoppedEarly", snapshotsProcessed, selection.ToProcess.Count, incomplete.Reason);
+        object PartOrEmpty(string key, IReadOnlyCollection<string> entities) =>
+            entities.Count > 0 ? new EventPart(key, entities.Count, string.Join(", ", entities)) : "";
+        _jobs.AppendEvent(task.JobId, completionLevel, completionNote, null, "Event.Ingest.CompletionWithParts",
+            completionBase,
+            PartOrEmpty("Event.Ingest.Part.Failed", fullyFailedEntities),
+            PartOrEmpty("Event.Ingest.Part.PartialFailures", partiallyFailedEntities),
+            PartOrEmpty("Event.Ingest.Part.UnreadableValues", entitiesWithUnreadableValues.Select(e => e.Key).ToList()));
 
         // Como la etapa SQL: un ingest que termina en Partial o Error avisa por el webhook, no solo
         // en el detalle del job.
@@ -828,20 +833,23 @@ public sealed class IngestExecutor : IIngestExecutor
         if (diff.Added.Count > 0)
         {
             _jobs.AppendEvent(jobId, EventLevel.Info,
-                $"{entity}: columnas nuevas en el origen: {string.Join(", ", diff.Added)} (se añaden en SQL).", SchemaDiff.ColumnsAddedCode);
+                $"{entity}: columnas nuevas en el origen: {string.Join(", ", diff.Added)} (se añaden en SQL).", SchemaDiff.ColumnsAddedCode,
+                "Event.Schema.ColumnsAdded", entity, string.Join(", ", diff.Added));
         }
 
         if (diff.Removed.Count > 0)
         {
             _jobs.AppendEvent(jobId, EventLevel.Warning,
-                $"{entity}: columnas que ya no llegan del origen: {string.Join(", ", diff.Removed)} (en SQL conservan su último valor).", SchemaDiff.ColumnsRemovedCode);
+                $"{entity}: columnas que ya no llegan del origen: {string.Join(", ", diff.Removed)} (en SQL conservan su último valor).", SchemaDiff.ColumnsRemovedCode,
+                "Event.Schema.ColumnsRemoved", entity, string.Join(", ", diff.Removed));
         }
 
         if (diff.TypeChanged.Count > 0)
         {
             var detail = string.Join(", ", diff.TypeChanged.Select(c => $"{c.Column} {c.Before} → {c.After}"));
             _jobs.AppendEvent(jobId, EventLevel.Warning,
-                $"{entity}: cambio de tipo en el origen: {detail}. SQL mantiene el tipo anterior; revisa la tabla.", SchemaDiff.TypeChangedCode);
+                $"{entity}: cambio de tipo en el origen: {detail}. SQL mantiene el tipo anterior; revisa la tabla.", SchemaDiff.TypeChangedCode,
+                "Event.Schema.TypeChanged", entity, detail);
             if (_alerts is not null)
             {
                 await _alerts.SendAsync($"Pipeline {pipelineName}: cambio de tipo en {entity} ({detail}).", cancellationToken);

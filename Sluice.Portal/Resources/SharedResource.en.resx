@@ -864,4 +864,41 @@
   <data name="Event.Job.Orphaned" xml:space="preserve"><value>No pending or running task for more than {0:0} min (probably a worker went down between stages). Marked as Error: use Retry to run it again.</value></data>
   <data name="Event.AutoFix.Launched" xml:space="preserve"><value>Automatic fix: job {0} re-syncs {1}.</value></data>
   <data name="Event.AutoFix.NotLaunched" xml:space="preserve"><value>Automatic fix not launched: {0}</value></data>
+  <data name="Event.Ingest.StoppingAtSnapshot" xml:space="preserve"><value>Stopping at snapshot {0}: {1} Will retry on the next run.</value></data>
+  <data name="Event.Ingest.ProcessingSnapshot" xml:space="preserve"><value>Processing snapshot {0}.</value></data>
+  <data name="Event.Ingest.EntityFailed" xml:space="preserve"><value>{0}: ingest failed for snapshot {1} — {2}: {3}</value></data>
+  <data name="Event.Ingest.SkippedPaused" xml:space="preserve"><value>{0:N0} table(s) skipped because they are paused: {1}.</value></data>
+  <data name="Event.Ingest.RowsWithoutId" xml:space="preserve"><value>{0}: {1:N0} row(s) without a valid Id discarded.</value></data>
+  <data name="Event.Ingest.ConsolidatedShrank" xml:space="preserve"><value>{0}: the new consolidated file has {1:N0} rows and the previous one {2:N0}. The previous version is kept on the Parquet page in case it needs restoring.</value></data>
+  <data name="Event.Ingest.SnapshotNotMarked" xml:space="preserve"><value>{0:N0} table(s) failed: snapshot {1} is not marked as processed and will be retried on the next run.</value></data>
+  <data name="Event.Ingest.SettingsUnreadable" xml:space="preserve"><value>settings.json cannot be read: Parquet versions are not pruned until it is fixed.</value></data>
+  <data name="Event.Ingest.PruneFailed" xml:space="preserve"><value>Could not prune the Parquet versions: {0}</value></data>
+  <data name="Event.Ingest.UnreadableValues" xml:space="preserve"><value>{0}: {1:N0} CSV value(s) could not be read with their column type and were loaded as NULL — {2}.</value></data>
+  <data name="Event.Ingest.CompletionWithParts" xml:space="preserve"><value>{0}{1}{2}{3}</value></data>
+  <data name="Event.Ingest.Part.Failed" xml:space="preserve"><value> {0:N0} entity(ies) failed: {1}.</value></data>
+  <data name="Event.Ingest.Part.PartialFailures" xml:space="preserve"><value> {0:N0} entity(ies) with partial snapshot failures (possible incomplete data): {1}.</value></data>
+  <data name="Event.Ingest.Part.UnreadableValues" xml:space="preserve"><value> {0:N0} entity(ies) with CSV values loaded as NULL: {1}.</value></data>
+  <data name="Event.Schema.ColumnsAdded" xml:space="preserve"><value>{0}: new columns in the source: {1} (they are added in SQL).</value></data>
+  <data name="Event.Schema.ColumnsRemoved" xml:space="preserve"><value>{0}: columns no longer coming from the source: {1} (in SQL they keep their last value).</value></data>
+  <data name="Event.Schema.TypeChanged" xml:space="preserve"><value>{0}: type change in the source: {1}. SQL keeps the previous type; check the table.</value></data>
+  <data name="Event.Sql.ExcludedColumnsRemain" xml:space="preserve"><value>{0}: {1:N0} excluded column(s) are still in the SQL table and no longer updated ({2}): they keep their last value and stay empty in new rows.</value></data>
+  <data name="Event.Sql.DuplicateIds" xml:space="preserve"><value>{0}: the destination table has duplicate Ids; the unique index on [Id] is not created (MERGE goes on without it).</value></data>
+  <data name="Event.Sql.NoReloadKeys" xml:space="preserve"><value>{0}: the Parquet has no keys; orphan rows are not deleted so the table is not emptied.</value></data>
+  <data name="Event.Sql.OrphansDeleted" xml:space="preserve"><value>{0}: {1:N0} orphan row(s) deleted (reload).</value></data>
+  <data name="Event.Sql.SourceDeletesApplied" xml:space="preserve"><value>{0}: {1:N0} row(s) deleted in F&amp;O removed from the destination.</value></data>
+  <data name="Event.Sql.EntityMerged" xml:space="preserve"><value>{0}: merged {1:N0}, table count {2:N0}.</value></data>
+  <data name="Event.Sql.EntityMergedDelta" xml:space="preserve"><value>{0}: merged {1:N0} (delta), table count {2:N0}.</value></data>
+  <data name="Event.Sql.EntityFailed" xml:space="preserve"><value>{0}: SQL stage failed — {1}: {2}</value></data>
+  <data name="Event.Sql.FullMergeAfterIncomplete" xml:space="preserve"><value>The last job ({0}) did not complete the SQL stage: this Incremental merges the full consolidated file to restore anything missing.</value></data>
+  <data name="Event.Sql.PossibleBlock" xml:space="preserve"><value>{0}: no progress in SQL for {1} (possible blocking). The statement is still running; check blocking on the destination (sys.dm_exec_requests, column blocking_session_id).</value></data>
+  <data name="Event.Enums.NoSnapshot" xml:space="preserve"><value>Enum translation is on but no snapshot could be resolved (empty manifest, no last-processed or settled snapshot). Continuing without _$label columns.</value></data>
+  <data name="Event.Enums.NoMetadataFile" xml:space="preserve"><value>Enum translation is on but GlobalOptionsetMetadata.csv was not found in snapshot {0}.</value></data>
+  <data name="Event.Enums.EmptyMetadata" xml:space="preserve"><value>Enum translation: GlobalOptionsetMetadata.csv in snapshot {0} produced no option sets (changed format, truncated, or language != 1033?). Continuing without _$label columns.</value></data>
+  <data name="Event.Enums.Loaded" xml:space="preserve"><value>Enum translation: {0:N0} entity(ies) with option sets loaded from snapshot {1}.</value></data>
+  <data name="Event.Enums.LoadFailed" xml:space="preserve"><value>Could not load the enum translation: {0}. Continuing without _$label columns.</value></data>
+  <data name="Event.Compare.EntityFailed" xml:space="preserve"><value>{0}: could not be compared ({1}).</value></data>
+  <data name="Event.Reconcile.NoParquet" xml:space="preserve"><value>There is no consolidated Parquet to reconcile: the pipeline's last reconciliation is kept. Run the pipeline before reconciling.</value></data>
+  <data name="Event.Reconcile.NothingNew" xml:space="preserve"><value>Nothing new to reconcile: the pipeline's last reconciliation is kept.</value></data>
+  <data name="Event.Restore.Done" xml:space="preserve"><value>Restored the point of snapshot {0}: {1:N0} table(s) go back to their version from then{2}; {3:N0} table(s) are reloaded in SQL ({4}).</value></data>
+  <data name="Event.Restore.ArchivedPart" xml:space="preserve"><value> and {0:N0} that did not exist yet are archived ({1})</value></data>
 </root>
