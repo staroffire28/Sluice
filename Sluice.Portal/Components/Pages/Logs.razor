@@ -98,25 +98,28 @@
 
     protected override void OnInitialized() => Load();
 
-    // Las fechas van en la zona del navegador, que solo se conoce con el circuito conectado.
+    // Las fechas y los días del filtro van en la zona del navegador, que solo se conoce con el
+    // circuito conectado: al conocerla se vuelve a cargar.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender && await Time.InitAsync())
         {
+            Load();
             StateHasChanged();
         }
     }
 
     private void Load()
     {
-        var result = ActivityLog.QueryPage(new ActivityLogFilter(NullIfBlank(_sourceFilter), NullIfBlank(_levelFilter), NullIfBlank(_search), _range), _page, PageSize);
+        var result = ActivityLog.QueryPage(new ActivityLogFilter(NullIfBlank(_sourceFilter), NullIfBlank(_levelFilter), NullIfBlank(_search), _range, Time.Zone), _page, PageSize);
         _page = result.Page;
         _totalCount = result.Total;
         _totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
         _entries = result.Items.ToList();
     }
 
-    // Mismos filtros que la tabla, en la query de /api/logs/export.
+    // Mismos filtros que la tabla, en la query de /api/logs/export, y la misma zona: el CSV filtra
+    // los días y escribe las horas como la tabla.
     private string ExportUrl => QueryHelpers.AddQueryString("/api/logs/export", new Dictionary<string, string?>
     {
         ["source"] = NullIfBlank(_sourceFilter),
@@ -124,6 +127,7 @@
         ["search"] = NullIfBlank(_search),
         ["from"] = _range.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         ["to"] = _range.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        ["tz"] = Time.Zone.Id,
     });
 
     private static string? NullIfBlank(string value) => string.IsNullOrWhiteSpace(value) ? null : value;

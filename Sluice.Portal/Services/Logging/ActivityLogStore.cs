@@ -29,8 +29,8 @@ public interface IAuditLog
 
 public sealed record ActivityLogPage(IReadOnlyList<ActivityLogEntry> Items, int Total, int Page);
 
-// Filtros de la página Logs. Zone: en qué zona se toma el día del rango (por defecto, la del
-// servidor, que es la que muestra la tabla).
+// Filtros de la página Logs. Zone: en qué zona se toma el día del rango (la del navegador, que es
+// la que muestra la tabla; por defecto, la del servidor).
 public sealed record ActivityLogFilter(
     string? Source = null,
     string? Level = null,
