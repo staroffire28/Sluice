@@ -12,6 +12,8 @@ public static class EventText
 {
     public static string Render(IStringLocalizer l, JobEvent e) => Render(l, e.MessageKey, e.MessageArgs, e.Message);
 
+    public static string Render(IStringLocalizer l, ActivityLogEntry e) => Render(l, e.MessageKey, e.MessageArgs, e.Message);
+
     public static string Render(IStringLocalizer l, string? key, object?[]? args, string fallback) =>
         key is null ? fallback : TryRender(l, key, args) ?? fallback;
 

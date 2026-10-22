@@ -131,7 +131,8 @@ public sealed class PipelineSchedulerService : BackgroundService
             var orphaned = await _watchdog.SweepAsync(DateTimeOffset.UtcNow, ct);
             if (orphaned.Count > 0)
             {
-                _activity.LogSystem("job.orphaned", $"{orphaned.Count} job(s) sin tareas vivas marcado(s) como Error.", level: "warning");
+                _activity.LogSystem("job.orphaned", $"{orphaned.Count} job(s) sin tareas vivas marcado(s) como Error.", null, null, "warning",
+                    "Activity.Job.Orphaned", orphaned.Count);
             }
 
             foreach (var job in orphaned)
@@ -164,7 +165,8 @@ public sealed class PipelineSchedulerService : BackgroundService
                     var message = $"Cola parada: {stall.PendingTasks} tarea(s) de la etapa {stall.Stage} pendiente(s) desde hace más de {QueueStallWatch.Threshold.TotalMinutes:0} min sin ningún worker vivo de esa etapa. Comprueba el contenedor del worker {stall.Stage}.";
                     if (stall.FirstNotice)
                     {
-                        _activity.LogSystem("queue.stalled", message, level: "error");
+                        _activity.LogSystem("queue.stalled", message, null, null, "error",
+                            "Activity.Queue.Stalled", stall.PendingTasks, stall.Stage.ToString(), QueueStallWatch.Threshold.TotalMinutes);
                     }
 
                     if (await TrySendPendingAlertAsync(message, ct))
@@ -247,7 +249,7 @@ public sealed class PipelineSchedulerService : BackgroundService
                 var message = $"Pipeline {pipeline.Name} parado: {ex.Message}";
                 if (_restoreHoldNoticed.Add(pipeline.Id))
                 {
-                    _activity.LogSystem("restore.pending", message, pipeline.Id, level: "warning");
+                    _activity.LogSystem("restore.pending", message, pipeline.Id, null, "warning", "Activity.Restore.Pending", pipeline.Name, ex.Message);
                 }
 
                 if (!_restoreHoldAlerted.Contains(pipeline.Id) && await TrySendPendingAlertAsync(message, ct))
@@ -259,7 +261,8 @@ public sealed class PipelineSchedulerService : BackgroundService
             {
                 failed++;
                 _logger.LogWarning(ex, "Scheduler failed for pipeline {PipelineId}", pipeline.Id);
-                _activity.LogSystem("scheduler.error", $"El scheduler falló en el pipeline {pipeline.Id}: {ex.Message}", pipeline.Id, level: "error");
+                _activity.LogSystem("scheduler.error", $"El scheduler falló en el pipeline {pipeline.Id}: {ex.Message}", pipeline.Id, null, "error",
+                    "Activity.Scheduler.Error", pipeline.Id, ex.Message);
                 await _alerts.SendAsync($"Scheduler failed for {pipeline.Id}: {ex.Message}", ct);
             }
         }
@@ -346,11 +349,13 @@ public sealed class PipelineSchedulerService : BackgroundService
 
         // Se registra una vez por episodio; la alerta cuenta como dada solo si llega al webhook,
         // así que con el webhook caído se reintenta en cada poll.
+        var oldestPending = catalog.PendingSnapshots.Min(StringComparer.Ordinal);
         var message = $"Pipeline {pipeline.Name} atrasado: {catalog.PendingSnapshots.Count} snapshot(s) cerrado(s) sin procesar; " +
-            $"el más antiguo ({catalog.PendingSnapshots.Min(StringComparer.Ordinal)}) espera desde hace {(now - since).TotalHours:0} h (umbral {hours} h).";
+            $"el más antiguo ({oldestPending}) espera desde hace {(now - since).TotalHours:0} h (umbral {hours} h).";
         if (_lagAlertsNoticed.Add(pipeline.Id))
         {
-            _activity.LogSystem("pipeline.lag", message, pipeline.Id, level: "warning");
+            _activity.LogSystem("pipeline.lag", message, pipeline.Id, null, "warning",
+                "Activity.Pipeline.Lag", pipeline.Name, catalog.PendingSnapshots.Count, oldestPending, (now - since).TotalHours, hours);
         }
 
         if (await TrySendPendingAlertAsync(message, ct))
@@ -416,13 +421,15 @@ public sealed class PipelineSchedulerService : BackgroundService
             && (current.LastAlertedAt is not { } last || now - last >= IncompleteSnapshotRepeat);
         if (due)
         {
-            var message = $"Pipeline {pipeline.Name} parado: el snapshot {oldest} está cerrado pero incompleto desde hace {FormatWait(waiting)} ({integrity.Reason}). " +
+            var waitText = FormatWait(waiting);
+            var message = $"Pipeline {pipeline.Name} parado: el snapshot {oldest} está cerrado pero incompleto desde hace {waitText} ({integrity.Reason}). " +
                 "No se procesa nada más hasta que el volcado de Synapse Link se complete; revisa la exportación.";
             var round = $"{oldest}|{current.LastAlertedAt:O}";
             if (_incompleteLogged.GetValueOrDefault(pipeline.Id) != round)
             {
                 _incompleteLogged[pipeline.Id] = round;
-                _activity.LogSystem("snapshot.incomplete", message, pipeline.Id, level: "warning");
+                _activity.LogSystem("snapshot.incomplete", message, pipeline.Id, null, "warning",
+                    "Activity.Snapshot.Incomplete", pipeline.Name, oldest, waitText, integrity.Reason);
             }
 
             if (await TrySendPendingAlertAsync(() => _alerts.SendSnapshotIncompleteAsync(pipeline.Id, pipeline.Name, oldest, message, ct)))

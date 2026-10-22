@@ -11,6 +11,12 @@ public sealed record ActivityLogEntry
     public required string Level { get; init; }    // "info" | "warning" | "error"
     public required string Action { get; init; }   // clave corta, p.ej. "pipeline.run", "connection.delete"
     public required string Message { get; init; }
+
+    // Texto localizable, como en JobEvent: clave del resx y argumentos, que se pintan en el idioma
+    // de quien lo ve (EventText). Message sigue guardando el texto de siempre (CSV, API y entradas
+    // anteriores a la clave).
+    public string? MessageKey { get; init; }
+    public object?[]? MessageArgs { get; init; }
     public string? PipelineId { get; init; }
     public string? JobId { get; init; }
 

@@ -900,4 +900,32 @@
   <data name="Event.Reconcile.NothingNew" xml:space="preserve"><value>Nada nuevo que conciliar: se conserva la última conciliación del pipeline.</value></data>
   <data name="Event.Restore.Done" xml:space="preserve"><value>Restaurado el punto del snapshot {0}: {1:N0} tabla(s) vuelven a su versión de entonces{2}; se recargan en SQL {3:N0} tabla(s) ({4}).</value></data>
   <data name="Event.Restore.ArchivedPart" xml:space="preserve"><value> y {0:N0} que aún no existían se archivan ({1})</value></data>
+  <data name="Activity.Login.Ok" xml:space="preserve"><value>Inicio de sesión.</value></data>
+  <data name="Activity.Login.Blocked" xml:space="preserve"><value>Inicio de sesión bloqueado: demasiados intentos fallidos recientes desde este cliente.</value></data>
+  <data name="Activity.Login.NoAntiforgery" xml:space="preserve"><value>Inicio de sesión rechazado: el formulario no trae un token antiforgery válido.</value></data>
+  <data name="Activity.Login.NoKey" xml:space="preserve"><value>Inicio de sesión rechazado: no se indicó la clave.</value></data>
+  <data name="Activity.Login.WrongKey" xml:space="preserve"><value>Inicio de sesión rechazado: clave incorrecta.</value></data>
+  <data name="Activity.Logout.Ok" xml:space="preserve"><value>Cierre de sesión.</value></data>
+  <data name="Activity.Logout.NoAntiforgery" xml:space="preserve"><value>Cierre de sesión rechazado: el formulario no trae un token antiforgery válido.</value></data>
+  <data name="Activity.Job.Orphaned" xml:space="preserve"><value>{0:N0} job(s) sin tareas vivas marcado(s) como Error.</value></data>
+  <data name="Activity.Job.Failed" xml:space="preserve"><value>Job {0} falló en la etapa {1}: {2}</value></data>
+  <data name="Activity.Queue.Stalled" xml:space="preserve"><value>Cola parada: {0:N0} tarea(s) de la etapa {1} pendiente(s) desde hace más de {2:0} min sin ningún worker vivo de esa etapa. Comprueba el contenedor del worker {1}.</value></data>
+  <data name="Activity.Queue.Discarded" xml:space="preserve"><value>{0} descartado de la cola del pipeline {1}: {2}.</value></data>
+  <data name="Activity.Restore.Pending" xml:space="preserve"><value>Pipeline {0} parado: {1}</value></data>
+  <data name="Activity.Scheduler.Error" xml:space="preserve"><value>El scheduler falló en el pipeline {0}: {1}</value></data>
+  <data name="Activity.Pipeline.Lag" xml:space="preserve"><value>Pipeline {0} atrasado: {1:N0} snapshot(s) cerrado(s) sin procesar; el más antiguo ({2}) espera desde hace {3:0} h (umbral {4} h).</value></data>
+  <data name="Activity.Snapshot.Incomplete" xml:space="preserve"><value>Pipeline {0} parado: el snapshot {1} está cerrado pero incompleto desde hace {2} ({3}). No se procesa nada más hasta que el volcado de Synapse Link se complete; revisa la exportación.</value></data>
+  <data name="Activity.Retention.Sweep" xml:space="preserve"><value>Retención: {0:N0} jobs, {1:N0} reportes, {2:N0} tareas, {3:N0} runs, {4:N0} staging, {5:N0} logs de actividad eliminados (antigüedad {6}d, piso {7}/pipeline).</value></data>
+  <data name="Activity.Retention.Error" xml:space="preserve"><value>El barrido de retención falló: {0}</value></data>
+  <data name="Activity.SnapshotRetention.Error" xml:space="preserve"><value>El barrido de retención de snapshots falló: {0}</value></data>
+  <data name="Activity.SnapshotRetention.Skip" xml:space="preserve"><value>Pipeline {0}: purga omitida — faltan parquet consolidados: {1}.</value></data>
+  <data name="Activity.SnapshotRetention.DeleteFailed" xml:space="preserve"><value>Pipeline {0}: no se pudo borrar snapshot {1}: {2}</value></data>
+  <data name="Activity.SnapshotRetention.DryRun" xml:space="preserve"><value>Pipeline {0}: {1:N0} snapshot(s) elegibles (simulación, sin borrar).</value></data>
+  <data name="Activity.SnapshotRetention.Sweep" xml:space="preserve"><value>Pipeline {0}: {1:N0} snapshot(s) origen eliminados (antigüedad {2}d, piso {3}).</value></data>
+  <data name="Activity.SnapshotRetention.PipelineFailed" xml:space="preserve"><value>Barrido de snapshots falló en pipeline {0}: {1}</value></data>
+  <data name="Activity.SnapshotRetention.DryRunTotal" xml:space="preserve"><value>Simulación global: {0:N0} snapshot(s) elegibles para purga (antigüedad {1}d).</value></data>
+  <data name="Activity.SnapshotRetention.SweepTotal" xml:space="preserve"><value>Retención snapshots origen: {0:N0} carpeta(s) eliminadas (antigüedad {1}d, piso {2}).</value></data>
+  <data name="Activity.Alert.DeliveryFailed" xml:space="preserve"><value>No se pudo entregar la alerta {0} al webhook ({1}): {2}. Las alertas no llegan hasta que se avise de que se ha recuperado.</value></data>
+  <data name="Activity.Alert.DeliveryRecovered" xml:space="preserve"><value>El webhook de alertas ({0}) vuelve a responder (alerta {1}).</value></data>
+  <data name="Activity.Demo.Failed" xml:space="preserve"><value>No se pudo preparar la demo: {0}</value></data>
 </root>

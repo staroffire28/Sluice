@@ -20,19 +20,19 @@ public static class AuthEndpoints
             var isJson = context.Request.HasJsonContentType();
             var actor = AuditActor.FromHttp(context, isJson ? "api" : "ui");
             var client = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-            void Record(AuditOutcome outcome, string message) =>
-                audit.Record(actor, "auth.login", outcome, null, null, null, message);
-            void RecordFailure(string message)
+            void Record(AuditOutcome outcome, string message, string key) =>
+                audit.Record(actor, "auth.login", outcome, null, null, null, message, null, key);
+            void RecordFailure(string message, string key)
             {
                 throttle.RecordFailure(client);
-                Record(AuditOutcome.Rejected, message);
+                Record(AuditOutcome.Rejected, message, key);
             }
 
             void RecordBlockOnce()
             {
                 if (throttle.TryMarkBlockReported(client))
                 {
-                    Record(AuditOutcome.Rejected, "Inicio de sesión bloqueado: demasiados intentos fallidos recientes desde este cliente.");
+                    Record(AuditOutcome.Rejected, "Inicio de sesión bloqueado: demasiados intentos fallidos recientes desde este cliente.", "Activity.Login.Blocked");
                 }
             }
 
@@ -40,7 +40,7 @@ public static class AuthEndpoints
             {
                 if (!throttle.IsBlocked(client))
                 {
-                    RecordFailure("Inicio de sesión rechazado: el formulario no trae un token antiforgery válido.");
+                    RecordFailure("Inicio de sesión rechazado: el formulario no trae un token antiforgery válido.", "Activity.Login.NoAntiforgery");
                 }
                 else
                 {
@@ -64,7 +64,7 @@ public static class AuthEndpoints
 
             if (string.IsNullOrWhiteSpace(key))
             {
-                RecordFailure("Inicio de sesión rechazado: no se indicó la clave.");
+                RecordFailure("Inicio de sesión rechazado: no se indicó la clave.", "Activity.Login.NoKey");
                 return isJson
                     ? Results.BadRequest(new { error = "Key is required in request body." })
                     : Results.Redirect("/login?error=required");
@@ -72,14 +72,14 @@ public static class AuthEndpoints
 
             if (!auth.TryLogin(key, context))
             {
-                RecordFailure("Inicio de sesión rechazado: clave incorrecta.");
+                RecordFailure("Inicio de sesión rechazado: clave incorrecta.", "Activity.Login.WrongKey");
                 return isJson
                     ? Results.Unauthorized()
                     : Results.Redirect("/login?error=invalid");
             }
 
             throttle.Reset(client);
-            Record(AuditOutcome.Ok, "Inicio de sesión.");
+            Record(AuditOutcome.Ok, "Inicio de sesión.", "Activity.Login.Ok");
             return Results.Redirect("/");
         })
         .DisableAntiforgery();
@@ -108,7 +108,7 @@ public static class AuthEndpoints
                 if (auth.HasValidUiSession(context))
                 {
                     audit.Record(actor, "auth.logout", AuditOutcome.Rejected, null, null, null,
-                        "Cierre de sesión rechazado: el formulario no trae un token antiforgery válido.");
+                        "Cierre de sesión rechazado: el formulario no trae un token antiforgery válido.", null, "Activity.Logout.NoAntiforgery");
                 }
 
                 return Results.BadRequest();
@@ -119,7 +119,7 @@ public static class AuthEndpoints
             auth.SignOut(context);
             if (hadSession)
             {
-                audit.Record(actor, "auth.logout", AuditOutcome.Ok, null, null, null, "Cierre de sesión.");
+                audit.Record(actor, "auth.logout", AuditOutcome.Ok, null, null, null, "Cierre de sesión.", null, "Activity.Logout.Ok");
             }
 
             return Results.Redirect("/login");

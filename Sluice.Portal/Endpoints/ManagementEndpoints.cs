@@ -310,7 +310,9 @@ public static class ManagementEndpoints
         api.MapGet("/logs/export", (string? source, string? level, string? search, DateOnly? from, DateOnly? to, string? tz, IActivityLog log, IStringLocalizer<SharedResource> l) =>
         {
             var zone = !string.IsNullOrWhiteSpace(tz) && TimeZoneInfo.TryFindSystemTimeZoneById(tz, out var found) ? found : null;
-            var entries = log.Query(new ActivityLogFilter(NullIfBlank(source), NullIfBlank(level), NullIfBlank(search), new DateRange(from, to), zone));
+            // La búsqueda encuentra también por el texto pintado en el idioma de la petición, como
+            // la tabla; la columna del mensaje es el texto guardado.
+            var entries = log.Query(new ActivityLogFilter(NullIfBlank(source), NullIfBlank(level), NullIfBlank(search), new DateRange(from, to), zone, e => EventText.Render(l, e)));
             return Csv("logs", writer =>
             {
                 CsvWriter.WriteRow(writer, [l["Page.Logs.Col.Date"].Value, l["Page.Logs.Col.Source"].Value, l["Page.Logs.Col.Actor"].Value, l["Page.Logs.Col.Level"].Value, l["Page.Logs.Col.Action"].Value, l["Page.Logs.Col.Message"].Value, l["Page.Logs.Col.Pipeline"].Value, l["Page.Logs.Col.Job"].Value, l["Page.Logs.Col.Host"].Value]);

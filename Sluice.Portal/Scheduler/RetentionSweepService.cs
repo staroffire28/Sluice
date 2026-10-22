@@ -82,7 +82,7 @@ public sealed class RetentionSweepService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Retention sweep failed");
-            _activity.LogSystem("retention.error", $"El barrido de retención falló: {ex.Message}", level: "error");
+            _activity.LogSystem("retention.error", $"El barrido de retención falló: {ex.Message}", null, null, "error", "Activity.Retention.Error", ex.Message);
             return _alerts.SendAsync($"Retention sweep failed: {ex.Message}", CancellationToken.None);
         }
 
