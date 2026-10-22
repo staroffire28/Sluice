@@ -483,7 +483,7 @@ public sealed class OrchestrationService : IOrchestrationService
         if (state.RestoreInProgress?.Snapshot != snapshot
             && _settings is not null
             && _settings.TryGet(out var settings)
-            && !ParquetVersions.KeptPoints(versions, settings.ParquetVersionDays, DateTimeOffset.UtcNow).Any(p => p.Snapshot == snapshot))
+            && !ParquetVersions.KeptPoints(versions, settings.ParquetVersionDays, DateTimeOffset.UtcNow, state.RetiredSnapshots).Any(p => p.Snapshot == snapshot))
         {
             throw new InvalidOperationException(
                 $"El punto {snapshot} ya no se conserva (la poda se llevó sus versiones): vuelve a abrir la lista de puntos.");
@@ -503,11 +503,12 @@ public sealed class OrchestrationService : IOrchestrationService
 
         // Cada tabla queda pendiente de recarga y marcada (versión y estado de entonces) antes de
         // moverla: si el restore falla después, su versión de entonces ya se consumió y el reintento
-        // no la vería en su plan.
+        // no la vería en su plan. Los snapshots de las versiones que se retiran se guardan antes por
+        // lo mismo (siguen contando en el escalonado de los puntos).
         var tables = new Dictionary<string, TableState>(state.Tables, StringComparer.OrdinalIgnoreCase);
         var pendingReload = new List<string>(state.PendingReload);
         var pendingRestore = new Dictionary<string, PendingRestoreTable>(StringComparer.OrdinalIgnoreCase);
-        var rewound = state with { LastProcessedSnapshot = snapshot, Tables = tables, PendingReload = pendingReload, PendingRestore = pendingRestore, RestoreInProgress = new() { Snapshot = snapshot, FromSnapshot = from } };
+        var rewound = state with { LastProcessedSnapshot = snapshot, Tables = tables, PendingReload = pendingReload, PendingRestore = pendingRestore, RestoreInProgress = new() { Snapshot = snapshot, FromSnapshot = from }, RetiredSnapshots = ParquetVersions.Retire(state.RetiredSnapshots, versions, plan) };
         stateStore.Save(rewound);
         foreach (var (entity, version) in plan.Restore)
         {

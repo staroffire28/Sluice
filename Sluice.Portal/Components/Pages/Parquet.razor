@@ -365,7 +365,7 @@
             var versions = await ParquetService.ListAllVersionsAsync(_pipelineId);
             var state = PipelineService.GetState(_pipelineId);
             _halfDoneRestore = state.RestoreInProgress?.Snapshot;
-            _points = ParquetVersions.KeptPoints(versions, Settings.Get().ParquetVersionDays, DateTimeOffset.UtcNow)
+            _points = ParquetVersions.KeptPoints(versions, Settings.Get().ParquetVersionDays, DateTimeOffset.UtcNow, state.RetiredSnapshots)
                 .Select(p =>
                 {
                     var plan = ParquetVersions.Plan(versions, state.Tables, p.Snapshot);
