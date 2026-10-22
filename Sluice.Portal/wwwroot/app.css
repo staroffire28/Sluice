@@ -481,14 +481,13 @@ html[data-nav-mode="expanded"] .app-sidebar [data-nav-mode-set="expanded"] {
 
 /* Estilo único para acciones destructivas (cancelar job, borrar). Mantiene
    coherencia visual de botones en toda la app (FluentButton Outline + rojo). */
-.btn-danger::part(control) {
+.btn-danger {
     color: var(--colorStatusDangerForeground1, #b00020);
     border-color: var(--colorStatusDangerForeground1, #b00020);
 }
-.btn-danger::part(control):hover {
+.btn-danger:hover {
     background: var(--colorStatusDangerBackground1, #fdecee);
 }
-
 
 /* Contenedor que InlineDialog pone alrededor de cualquier contenido. */
 .dialog-body {
