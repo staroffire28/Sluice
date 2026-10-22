@@ -294,9 +294,12 @@ public static class ParquetVersions
         plan.Restore.Select(r => r.Entity).Union(pendingReload, StringComparer.OrdinalIgnoreCase)
             .Except(plan.Archive, StringComparer.OrdinalIgnoreCase).ToList();
 
-    // Los puntos que la poda conserva enteros, los únicos que se ofrecen: los de snapshots de los
-    // últimos keepDays días y siempre el más reciente. Cuenta la fecha del snapshot y no cuándo se
-    // archivaron sus versiones, que cambia al podar: así un punto que se deja caer no vuelve a la
+    // Los puntos que la poda conserva enteros, los únicos que se ofrecen, escalonados: siempre el
+    // más reciente, todos los de las últimas 24 h y, más atrás y dentro de los últimos keepDays
+    // días, el último de cada día UTC (los snapshots y los ids ya van en UTC y la poda corre en el
+    // worker, sin zona del usuario). El último del día se busca entre todos los puntos de ese día:
+    // uno que no lo es cae en cuanto pasan las 24 h. Cuenta la fecha del snapshot y no cuándo
+    // se archivaron sus versiones, que cambia al podar: así un punto que se deja caer no vuelve a la
     // lista con versiones de menos. Con keepDays <= 0 (versiones desactivadas), ninguno.
     public static IReadOnlyList<RestorePoint> KeptPoints(
         IReadOnlyDictionary<string, IReadOnlyList<ParquetVersion>> versions, int keepDays, DateTimeOffset now)
@@ -307,15 +310,25 @@ public static class ParquetVersions
         }
 
         var cutoff = now.AddDays(-keepDays);
-        return RestorePoints(versions)
-            .Where((point, index) => index == 0 || (SnapshotFolderTime.TryParse(point.Snapshot, out var at) && at >= cutoff))
+        var recent = now.AddDays(-1);
+        var points = RestorePoints(versions);
+        var times = points.Select(p => SnapshotFolderTime.TryParse(p.Snapshot, out var at) ? at : (DateTimeOffset?)null).ToList();
+
+        // Del más reciente al más antiguo: un punto es el último de su día si el anterior de la
+        // lista (el siguiente en el tiempo) es de otro día.
+        return points
+            .Where((point, index) => index == 0
+                || times[index] >= recent
+                || (times[index] >= cutoff && times[index - 1]?.UtcDateTime.Date != times[index]!.Value.UtcDateTime.Date))
             .ToList();
     }
 
     // Poda por puntos de restauración: se conservan las versiones que necesitan los puntos
-    // conservados (KeptPoints); del resto solo se borran las de más de keepDays días. Con
-    // keepDays <= 0 (versiones desactivadas) se borran todas. El id es la fecha de archivado: si
-    // ninguna versión es anterior al corte no hay nada que podar y no se leen los sidecars.
+    // conservados (KeptPoints) y nada más, también dentro de la ventana (las de los puntos que no
+    // son el último de su día, la copia repetida de un reintento o un Force). Con keepDays <= 0
+    // (versiones desactivadas) se borran todas. No hay atajo por la fecha de archivado (el id): qué
+    // sobra depende del snapshot de cada versión, no de su edad. Sin nada que podar cuesta el
+    // listado y el índice; solo se leen los sidecars de las versiones que aún no están en él.
     public static async Task<int> PruneAsync(
         IParquetStore store, string pipelineId, int keepDays, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
@@ -324,9 +337,8 @@ public static class ParquetVersions
             return await DeleteAllAsync(store, pipelineId, cancellationToken);
         }
 
-        var cutoff = now.AddDays(-keepDays);
         var artifacts = await store.ListParquetAsync(Prefix(pipelineId), cancellationToken);
-        if (artifacts.All(a => DateTimeOffset.TryParseExact(IdOf(a.Path), IdFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at) && at >= cutoff))
+        if (artifacts.Count == 0)
         {
             return 0;
         }
@@ -338,7 +350,7 @@ public static class ParquetVersions
             {
                 var needed = NeededBy(e.Value, kept);
                 return e.Value
-                    .Where(v => v.ArchivedAt < cutoff && !needed.Contains(v.Id))
+                    .Where(v => !needed.Contains(v.Id))
                     .Select(v => ParquetPath(pipelineId, e.Key, v.Id));
             })
             .ToList();
