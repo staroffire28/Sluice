@@ -480,10 +480,11 @@ html[data-nav-mode="expanded"] .app-sidebar [data-nav-mode-set="expanded"] {
 }
 
 /* Estilo único para acciones destructivas (cancelar job, borrar). Mantiene
-   coherencia visual de botones en toda la app (FluentButton Outline + rojo). */
+   coherencia visual de botones en toda la app (FluentButton Outline + rojo).
+   Foreground3: Foreground1 en oscuro se queda en 4,2:1 sobre la tarjeta (AA pide 4,5). */
 .btn-danger {
-    color: var(--colorStatusDangerForeground1, #b00020);
-    border-color: var(--colorStatusDangerForeground1, #b00020);
+    color: var(--colorStatusDangerForeground3, #b00020);
+    border-color: var(--colorStatusDangerForeground3, #b00020);
 }
 .btn-danger:hover {
     background: var(--colorStatusDangerBackground1, #fdecee);
