@@ -86,8 +86,10 @@ public sealed class ConnectionService : IConnectionService
             "connection.create",
             null,
             () => CreateCore(connection),
-            created => new AuditResult($"Conexión {RoleLabel(created.Role)} '{created.Name}' creada."),
+            created => new AuditResult($"Conexión {RoleLabel(created.Role)} '{created.Name}' creada.",
+                MessageKey: "Activity.Connection.Created", MessageArgs: [RolePart(created.Role), created.Name]),
             $"No se pudo crear la conexión {RoleLabel(connection.Role)} '{connection.Name}'",
+            failureKey: "Activity.Failed.ConnectionCreate", failureArgs: [RolePart(connection.Role), connection.Name],
             target: connection.Id);
 
     private Connection CreateCore(Connection connection)
@@ -109,6 +111,7 @@ public sealed class ConnectionService : IConnectionService
             () => UpdateCore(id, connection),
             Updated(id),
             $"No se pudo guardar la conexión {RoleLabel(connection.Role)} '{connection.Name}'",
+            failureKey: "Activity.Failed.ConnectionSave", failureArgs: [RolePart(connection.Role), connection.Name],
             target: id);
 
     private Connection? UpdateCore(string id, Connection connection)
@@ -168,16 +171,23 @@ public sealed class ConnectionService : IConnectionService
             null,
             () => UpdateCoreAsync(id, connection, cancellationToken),
             result => result.CopiedTables > 0 && result.Connection is { } updated
-                ? new AuditResult($"Conexión {RoleLabel(updated.Role)} '{updated.Name}' actualizada; Parquet de {result.CopiedTables} tabla(s) copiado al sitio nuevo.")
+                ? new AuditResult($"Conexión {RoleLabel(updated.Role)} '{updated.Name}' actualizada; Parquet de {result.CopiedTables} tabla(s) copiado al sitio nuevo.",
+                    MessageKey: "Activity.Connection.UpdatedCopied", MessageArgs: [RolePart(updated.Role), updated.Name, result.CopiedTables])
                 : Updated(id)(result.Connection),
             $"No se pudo guardar la conexión {RoleLabel(connection.Role)} '{connection.Name}'",
+            failureKey: "Activity.Failed.ConnectionSave", failureArgs: [RolePart(connection.Role), connection.Name],
             target: id);
 
     private static Func<Connection?, AuditResult> Updated(string id) => updated => updated is null
-        ? new AuditResult($"La conexión {id} no existe.", Outcome: AuditOutcome.Rejected)
-        : new AuditResult($"Conexión {RoleLabel(updated.Role)} '{updated.Name}' actualizada.");
+        ? new AuditResult($"La conexión {id} no existe.", Outcome: AuditOutcome.Rejected, MessageKey: "Activity.Connection.NotFound", MessageArgs: [id])
+        : new AuditResult($"Conexión {RoleLabel(updated.Role)} '{updated.Name}' actualizada.",
+            MessageKey: "Activity.Connection.Updated", MessageArgs: [RolePart(updated.Role), updated.Name]);
 
     private static string RoleLabel(ConnectionRole role) => role == ConnectionRole.Source ? "de origen" : "de destino";
+
+    // El rol en el idioma de quien lee el registro (RoleLabel queda en el texto guardado).
+    private static EventPart RolePart(ConnectionRole role) =>
+        new(role == ConnectionRole.Source ? "Activity.Connection.RoleSource" : "Activity.Connection.RoleDestination");
 
     private async Task<(Connection? Connection, int CopiedTables)> UpdateCoreAsync(string id, Connection connection, CancellationToken cancellationToken)
     {
@@ -305,9 +315,11 @@ public sealed class ConnectionService : IConnectionService
             null,
             () => DeleteCore(id),
             error => error is null
-                ? new AuditResult($"Conexión '{name}' eliminada.")
-                : new AuditResult($"No se borró la conexión '{name}': {error}", Outcome: AuditOutcome.Rejected),
+                ? new AuditResult($"Conexión '{name}' eliminada.", MessageKey: "Activity.Connection.Deleted", MessageArgs: [name])
+                : new AuditResult($"No se borró la conexión '{name}': {error}", Outcome: AuditOutcome.Rejected,
+                    MessageKey: "Activity.Connection.NotDeleted", MessageArgs: [name, error]),
             $"No se pudo borrar la conexión '{name}'",
+            failureKey: "Activity.Failed.ConnectionDelete", failureArgs: [name],
             target: id);
     }
 
@@ -338,8 +350,10 @@ public sealed class ConnectionService : IConnectionService
             "connection.test",
             null,
             test,
-            result => new AuditResult($"Prueba de la conexión {target}: {result.Message}", Outcome: result.Ok ? AuditOutcome.Ok : AuditOutcome.Error),
+            result => new AuditResult($"Prueba de la conexión {target}: {result.Message}", Outcome: result.Ok ? AuditOutcome.Ok : AuditOutcome.Error,
+                MessageKey: "Activity.Connection.Tested", MessageArgs: [target, result.Message]),
             $"No se pudo probar la conexión {target}",
+            failureKey: "Activity.Failed.ConnectionTest", failureArgs: [target],
             target: target);
 
     private Task<ConnectionTestResult> TestCoreAsync(string id, CancellationToken cancellationToken)
@@ -413,8 +427,10 @@ public sealed class ConnectionService : IConnectionService
             () => DetectSqlVersionCoreAsync(draft, existingId, cancellationToken),
             result => new AuditResult(
                 $"Prueba de la conexión {DraftTarget(draft, existingId)}: {result.Message}",
-                Outcome: result.Ok ? AuditOutcome.Ok : AuditOutcome.Error),
+                Outcome: result.Ok ? AuditOutcome.Ok : AuditOutcome.Error,
+                MessageKey: "Activity.Connection.Tested", MessageArgs: [DraftTarget(draft, existingId), result.Message]),
             $"No se pudo probar la conexión {DraftTarget(draft, existingId)}",
+            failureKey: "Activity.Failed.ConnectionTest", failureArgs: [DraftTarget(draft, existingId)],
             target: DraftTarget(draft, existingId));
 
     private Task<SqlVersionDetection> DetectSqlVersionCoreAsync(Connection draft, string? existingId, CancellationToken cancellationToken)

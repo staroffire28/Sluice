@@ -47,8 +47,9 @@ public sealed class JobReportDownloader(
                     await js.InvokeVoidAsync("sluiceUi.downloadFileBase64", l["Report.FileName", job.Id].Value, base64, "application/pdf");
                     return true;
                 },
-                _ => new AuditResult($"Generó el reporte PDF del job {job.Id}."),
+                _ => new AuditResult($"Generó el reporte PDF del job {job.Id}.", MessageKey: "Activity.Report.Generated", MessageArgs: [job.Id]),
                 $"No se pudo generar el reporte PDF del job {job.Id}",
+                failureKey: "Activity.Failed.Report", failureArgs: [job.Id],
                 jobId: job.Id);
             await notifications.ShowSuccessToastAsync(l["Page.Jobs.ReportReady"].Value);
         }

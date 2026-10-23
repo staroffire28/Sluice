@@ -57,8 +57,9 @@ public sealed class PipelineService : IPipelineService
             "pipeline.create",
             pipeline.Id,
             () => CreateCore(pipeline),
-            created => new AuditResult($"Pipeline {created.Name} creado."),
-            $"No se pudo crear el pipeline {pipeline.Name}");
+            created => new AuditResult($"Pipeline {created.Name} creado.", MessageKey: "Activity.Pipeline.Created", MessageArgs: [created.Name]),
+            $"No se pudo crear el pipeline {pipeline.Name}",
+            failureKey: "Activity.Failed.PipelineCreate", failureArgs: [pipeline.Name]);
 
     private PipelineModel CreateCore(PipelineModel pipeline)
     {
@@ -86,9 +87,10 @@ public sealed class PipelineService : IPipelineService
             id,
             () => UpdateCore(id, pipeline),
             updated => updated is null
-                ? new AuditResult($"El pipeline {id} no existe.", Outcome: AuditOutcome.Rejected)
-                : new AuditResult($"Pipeline {updated.Name} actualizado."),
-            $"No se pudo guardar el pipeline {pipeline.Name}");
+                ? new AuditResult($"El pipeline {id} no existe.", Outcome: AuditOutcome.Rejected, MessageKey: "Activity.Pipeline.NotFound", MessageArgs: [id])
+                : new AuditResult($"Pipeline {updated.Name} actualizado.", MessageKey: "Activity.Pipeline.Updated", MessageArgs: [updated.Name]),
+            $"No se pudo guardar el pipeline {pipeline.Name}",
+            failureKey: "Activity.Failed.PipelineSave", failureArgs: [pipeline.Name]);
 
     public PipelineModel? SetScheduler(AuditActor actor, string id, bool enabled) =>
         _audit.Audit(
@@ -97,9 +99,12 @@ public sealed class PipelineService : IPipelineService
             id,
             () => _store.GetById(id) is { } pipeline ? UpdateCore(id, pipeline with { Enabled = enabled }) : null,
             updated => updated is null
-                ? new AuditResult($"El pipeline {id} no existe.", Outcome: AuditOutcome.Rejected)
-                : new AuditResult($"Scheduler {(enabled ? "activado" : "desactivado")} en el pipeline {updated.Name}."),
-            $"No se pudo cambiar el scheduler del pipeline {id}");
+                ? new AuditResult($"El pipeline {id} no existe.", Outcome: AuditOutcome.Rejected, MessageKey: "Activity.Pipeline.NotFound", MessageArgs: [id])
+                : new AuditResult($"Scheduler {(enabled ? "activado" : "desactivado")} en el pipeline {updated.Name}.",
+                    MessageKey: "Activity.Pipeline.SchedulerChanged",
+                    MessageArgs: [new EventPart(enabled ? "Activity.Pipeline.SchedulerOn" : "Activity.Pipeline.SchedulerOff"), updated.Name]),
+            $"No se pudo cambiar el scheduler del pipeline {id}",
+            failureKey: "Activity.Failed.PipelineScheduler", failureArgs: [id]);
 
     private PipelineModel? UpdateCore(string id, PipelineModel pipeline)
     {
@@ -121,9 +126,12 @@ public sealed class PipelineService : IPipelineService
             id,
             () => DeleteCoreAsync(actor, id, wipeState, cancellationToken),
             error => error is null
-                ? new AuditResult($"Pipeline {id} eliminado{(wipeState ? " (con borrado de estado)" : "")}.")
-                : new AuditResult($"No se borró el pipeline {id}: {error}", Outcome: AuditOutcome.Rejected),
-            $"No se pudo borrar el pipeline {id}");
+                ? new AuditResult($"Pipeline {id} eliminado{(wipeState ? " (con borrado de estado)" : "")}.",
+                    MessageKey: "Activity.Pipeline.Deleted", MessageArgs: [id, wipeState ? new EventPart("Activity.Pipeline.WithStateWipe") : ""])
+                : new AuditResult($"No se borró el pipeline {id}: {error}", Outcome: AuditOutcome.Rejected,
+                    MessageKey: "Activity.Pipeline.NotDeleted", MessageArgs: [id, error]),
+            $"No se pudo borrar el pipeline {id}",
+            failureKey: "Activity.Failed.PipelineDelete", failureArgs: [id]);
 
     private async Task<string?> DeleteCoreAsync(AuditActor actor, string id, bool wipeState, CancellationToken cancellationToken)
     {

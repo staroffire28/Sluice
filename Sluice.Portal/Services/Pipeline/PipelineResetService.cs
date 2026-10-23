@@ -82,11 +82,16 @@ public sealed class PipelineResetService : IPipelineResetService
             result => result.Completed
                 ? new AuditResult(
                     $"Pipeline {pipelineId} reseteado{(truncateSql ? " con truncado de SQL" : "")} " +
-                    $"({result.TablesTruncated.Count} tabla(s) truncada(s), {result.ParquetArtifactsDeleted} parquet(s) borrado(s)).")
+                    $"({result.TablesTruncated.Count} tabla(s) truncada(s), {result.ParquetArtifactsDeleted} parquet(s) borrado(s)).",
+                    MessageKey: "Activity.Reset.Done",
+                    MessageArgs: [pipelineId, truncateSql ? new EventPart("Activity.Reset.WithTruncate") : "", result.TablesTruncated.Count, result.ParquetArtifactsDeleted])
                 : new AuditResult(
                     $"Reset de {pipelineId} detenido: fallo al truncar {string.Join(", ", result.TableTruncateFailures.Select(f => f.Entity))}.",
-                    Outcome: AuditOutcome.Error),
-            $"No se pudo resetear {pipelineId}");
+                    Outcome: AuditOutcome.Error,
+                    MessageKey: "Activity.Reset.Stopped",
+                    MessageArgs: [pipelineId, string.Join(", ", result.TableTruncateFailures.Select(f => f.Entity))]),
+            $"No se pudo resetear {pipelineId}",
+            failureKey: "Activity.Failed.Reset", failureArgs: [pipelineId]);
 
     private async Task<PipelineResetResult> ResetCoreAsync(AuditActor actor, string pipelineId, bool truncateSql, CancellationToken cancellationToken)
     {

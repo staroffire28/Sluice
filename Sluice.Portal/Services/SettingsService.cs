@@ -23,8 +23,11 @@ public sealed class SettingsService(SettingsStore store, IAuditLog audit)
             },
             changes => new AuditResult(
                 changes.Count == 0 ? "Ajustes guardados sin cambios." : $"Ajustes guardados: {string.Join("; ", changes)}.",
-                Level: before.SourceSnapshotRetentionDryRun && !settings.SourceSnapshotRetentionDryRun ? "warning" : null),
-            "No se pudieron guardar los ajustes");
+                Level: before.SourceSnapshotRetentionDryRun && !settings.SourceSnapshotRetentionDryRun ? "warning" : null,
+                MessageKey: changes.Count == 0 ? "Activity.Settings.Unchanged" : "Activity.Settings.Saved",
+                MessageArgs: [string.Join("; ", changes)]),
+            "No se pudieron guardar los ajustes",
+            failureKey: "Activity.Failed.Settings");
     }
 
     // "Clave: antes → después" por cada ajuste distinto, en el orden en que se declaran.

@@ -129,9 +129,11 @@ public sealed class OrchestrationService : IOrchestrationService
             _jobs.Get(jobId)?.PipelineId,
             () => CancelCoreAsync(jobId, cancellationToken),
             cancelled => cancelled
-                ? new AuditResult($"Cancelación del job {jobId}.")
-                : new AuditResult($"El job {jobId} no estaba en curso: no se canceló.", Outcome: AuditOutcome.Rejected),
+                ? new AuditResult($"Cancelación del job {jobId}.", MessageKey: "Activity.Job.Cancelled", MessageArgs: [jobId])
+                : new AuditResult($"El job {jobId} no estaba en curso: no se canceló.", Outcome: AuditOutcome.Rejected,
+                    MessageKey: "Activity.Job.NotRunning", MessageArgs: [jobId]),
             $"No se pudo cancelar el job {jobId}",
+            failureKey: "Activity.Failed.JobCancel", failureArgs: [jobId],
             jobId: jobId);
 
     private async Task<bool> CancelCoreAsync(string jobId, CancellationToken cancellationToken)
@@ -178,8 +180,10 @@ public sealed class OrchestrationService : IOrchestrationService
             "pipeline.run",
             pipelineId,
             () => StartAsync(actor, pipelineId, type, entity: null, cancellationToken),
-            job => new AuditResult($"Ejecución {type} del pipeline {pipelineId} (job {job.Id}).", job.Id),
-            $"No se pudo iniciar {type} en {pipelineId}");
+            job => new AuditResult($"Ejecución {type} del pipeline {pipelineId} (job {job.Id}).", job.Id,
+                MessageKey: "Activity.Pipeline.Run", MessageArgs: [type.ToString(), pipelineId, job.Id]),
+            $"No se pudo iniciar {type} en {pipelineId}",
+            failureKey: "Activity.Failed.PipelineRun", failureArgs: [type.ToString(), pipelineId]);
 
     public async Task<bool> IsBusyAsync(string pipelineId, CancellationToken cancellationToken = default)
     {
@@ -202,8 +206,10 @@ public sealed class OrchestrationService : IOrchestrationService
             "pipeline.queue",
             pipelineId,
             () => Enqueue(actor, pipelineId, type),
-            _ => new AuditResult($"{type} en cola en el pipeline {pipelineId}: arranca cuando termine el job en curso."),
-            $"No se pudo dejar {type} en cola en {pipelineId}");
+            _ => new AuditResult($"{type} en cola en el pipeline {pipelineId}: arranca cuando termine el job en curso.",
+                MessageKey: "Activity.Queue.Queued", MessageArgs: [type.ToString(), pipelineId]),
+            $"No se pudo dejar {type} en cola en {pipelineId}",
+            failureKey: "Activity.Failed.Queue", failureArgs: [type.ToString(), pipelineId]);
 
     private QueuedRun Enqueue(AuditActor actor, string pipelineId, JobType type)
     {
@@ -238,8 +244,11 @@ public sealed class OrchestrationService : IOrchestrationService
             () => StartAsync(queued.RequestedBy ?? AuditActor.Queue, pipelineId, queued.Type, entity: null, cancellationToken),
             job => new AuditResult(
                 $"Arranca {queued.Type} en cola del pipeline {pipelineId} (job {job.Id}), pedido por {queued.RequestedBy?.Label ?? "un actor sin registrar"}.",
-                job.Id),
-            $"No se pudo lanzar {queued.Type} en cola del pipeline {pipelineId}");
+                job.Id,
+                MessageKey: "Activity.Queue.Started",
+                MessageArgs: [queued.Type.ToString(), pipelineId, job.Id, (object?)queued.RequestedBy?.Label ?? new EventPart("Activity.Queue.UnknownActor")]),
+            $"No se pudo lanzar {queued.Type} en cola del pipeline {pipelineId}",
+            failureKey: "Activity.Failed.QueueStart", failureArgs: [queued.Type.ToString(), pipelineId]);
 
     // Comparación de valores bajo demanda: de una tabla o, sin entity, de todas las del pipeline.
     public Task<Job> CompareValuesAsync(AuditActor actor, string pipelineId, string? entity, CancellationToken cancellationToken = default)
@@ -250,8 +259,10 @@ public sealed class OrchestrationService : IOrchestrationService
             "reconcile.values",
             pipelineId,
             () => StartAsync(actor, pipelineId, JobType.CompareValues, entity, cancellationToken),
-            job => new AuditResult($"Comparación de valores de {entity ?? "todas las tablas"} (job {job.Id}).", job.Id),
+            job => new AuditResult($"Comparación de valores de {entity ?? "todas las tablas"} (job {job.Id}).", job.Id,
+                MessageKey: "Activity.Compare.Started", MessageArgs: [(object?)entity ?? new EventPart("Activity.Compare.AllTables"), job.Id]),
             "No se pudo iniciar la comparación de valores",
+            failureKey: "Activity.Failed.Compare",
             target: entity);
     }
 
@@ -333,8 +344,10 @@ public sealed class OrchestrationService : IOrchestrationService
             "pipeline.retry",
             _jobs.Get(jobId)?.PipelineId,
             () => RetryCoreAsync(actor, jobId, cancellationToken),
-            job => new AuditResult($"Reintento del job {jobId} (nuevo job {job.Id}).", job.Id),
+            job => new AuditResult($"Reintento del job {jobId} (nuevo job {job.Id}).", job.Id,
+                MessageKey: "Activity.Job.Retried", MessageArgs: [jobId, job.Id]),
             $"No se pudo reintentar el job {jobId}",
+            failureKey: "Activity.Failed.JobRetry", failureArgs: [jobId],
             target: jobId);
 
     private async Task<Job> RetryCoreAsync(AuditActor actor, string jobId, CancellationToken cancellationToken)
@@ -402,8 +415,10 @@ public sealed class OrchestrationService : IOrchestrationService
             "table.resync",
             pipelineId,
             () => ResyncTablesCoreAsync(actor, pipelineId, entities, mode, cancellationToken),
-            job => new AuditResult($"Re-sync {mode} de {string.Join(", ", entities)} en {pipelineId} (job {job.Id}).", job.Id),
+            job => new AuditResult($"Re-sync {mode} de {string.Join(", ", entities)} en {pipelineId} (job {job.Id}).", job.Id,
+                MessageKey: "Activity.Resync.Started", MessageArgs: [mode.ToString(), string.Join(", ", entities), pipelineId, job.Id]),
             $"No se pudo iniciar el re-sync de {string.Join(", ", entities)}",
+            failureKey: "Activity.Failed.Resync", failureArgs: [string.Join(", ", entities)],
             target: string.Join(",", entities));
 
     private async Task<Job> ResyncTablesCoreAsync(AuditActor actor, string pipelineId, IReadOnlyList<string> entities, ResyncMode mode, CancellationToken cancellationToken)
@@ -446,8 +461,11 @@ public sealed class OrchestrationService : IOrchestrationService
                 job is null
                     ? $"Restaurado el punto {snapshot} en {pipelineId}, sin tablas que recargar en SQL."
                     : $"Restaurado el punto {snapshot} en {pipelineId}; recarga en SQL en el job {job.Id}.",
-                job?.Id),
+                job?.Id,
+                MessageKey: job is null ? "Activity.Restore.NoReload" : "Activity.Restore.WithReload",
+                MessageArgs: [snapshot, pipelineId, job?.Id]),
             $"No se pudo restaurar el punto {snapshot} en {pipelineId}",
+            failureKey: "Activity.Failed.Restore", failureArgs: [snapshot, pipelineId],
             target: snapshot);
 
     private async Task<Job?> RestorePointCoreAsync(AuditActor actor, string pipelineId, string snapshot, CancellationToken cancellationToken)
@@ -707,8 +725,10 @@ public sealed class OrchestrationService : IOrchestrationService
             "pipeline.reload-from-parquet",
             pipelineId,
             () => EnqueueParquetReloadAsync(actor, pipelineId, JobType.Force, cancellationToken),
-            job => new AuditResult($"Recarga desde parquet del pipeline {pipelineId} (job {job.Id}).", job.Id),
-            $"No se pudo iniciar la recarga desde parquet de {pipelineId}");
+            job => new AuditResult($"Recarga desde parquet del pipeline {pipelineId} (job {job.Id}).", job.Id,
+                MessageKey: "Activity.Reload.Started", MessageArgs: [pipelineId, job.Id]),
+            $"No se pudo iniciar la recarga desde parquet de {pipelineId}",
+            failureKey: "Activity.Failed.Reload", failureArgs: [pipelineId]);
 
     // Recarga SQL completa desde parquet consolidado (sin re-leer CSV de snapshots).
     // Force y reload-from-parquet comparten este camino: el origen durable es el parquet en ADLS.

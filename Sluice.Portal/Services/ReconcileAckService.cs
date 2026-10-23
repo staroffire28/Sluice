@@ -19,8 +19,10 @@ public sealed class ReconcileAckService(ReportStore reports, IAuditLog audit)
                 reports.SaveAck(pipelineId, entity, new ReconAck { AckPct = divergencePct });
                 return true;
             },
-            _ => new AuditResult($"Divergencia de {entity} aceptada ({divergencePct.ToString("F2", CultureInfo.InvariantCulture)}%)."),
+            _ => new AuditResult($"Divergencia de {entity} aceptada ({divergencePct.ToString("F2", CultureInfo.InvariantCulture)}%).",
+                MessageKey: "Activity.Divergence.Accepted", MessageArgs: [entity, divergencePct]),
             $"No se pudo aceptar la divergencia de {entity}",
+            failureKey: "Activity.Failed.DivergenceAccept", failureArgs: [entity],
             target: entity);
 
     public void Remove(AuditActor actor, string pipelineId, string entity) =>
@@ -33,7 +35,9 @@ public sealed class ReconcileAckService(ReportStore reports, IAuditLog audit)
                 reports.RemoveAck(pipelineId, entity);
                 return true;
             },
-            _ => new AuditResult($"Se quitó la aceptación de la divergencia de {entity}."),
+            _ => new AuditResult($"Se quitó la aceptación de la divergencia de {entity}.",
+                MessageKey: "Activity.Divergence.Unaccepted", MessageArgs: [entity]),
             $"No se pudo quitar la aceptación de {entity}",
+            failureKey: "Activity.Failed.DivergenceUnaccept", failureArgs: [entity],
             target: entity);
 }

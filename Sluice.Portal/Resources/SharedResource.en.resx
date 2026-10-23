@@ -929,4 +929,82 @@
   <data name="Activity.Alert.DeliveryFailed" xml:space="preserve"><value>Could not deliver the {0} alert to the webhook ({1}): {2}. Alerts will not arrive until it is reported as recovered.</value></data>
   <data name="Activity.Alert.DeliveryRecovered" xml:space="preserve"><value>The alert webhook ({0}) responds again ({1} alert).</value></data>
   <data name="Activity.Demo.Failed" xml:space="preserve"><value>Could not prepare the demo: {0}</value></data>
+  <data name="Activity.Failure" xml:space="preserve"><value>{0}: {1}</value></data>
+  <data name="Activity.Connection.RoleSource" xml:space="preserve"><value>source</value></data>
+  <data name="Activity.Connection.RoleDestination" xml:space="preserve"><value>destination</value></data>
+  <data name="Activity.Connection.Created" xml:space="preserve"><value>Connection '{1}' ({0}) created.</value></data>
+  <data name="Activity.Connection.Updated" xml:space="preserve"><value>Connection '{1}' ({0}) updated.</value></data>
+  <data name="Activity.Connection.UpdatedCopied" xml:space="preserve"><value>Connection '{1}' ({0}) updated; Parquet of {2:N0} table(s) copied to the new location.</value></data>
+  <data name="Activity.Connection.NotFound" xml:space="preserve"><value>Connection {0} does not exist.</value></data>
+  <data name="Activity.Connection.Deleted" xml:space="preserve"><value>Connection '{0}' deleted.</value></data>
+  <data name="Activity.Connection.NotDeleted" xml:space="preserve"><value>Connection '{0}' was not deleted: {1}</value></data>
+  <data name="Activity.Connection.Tested" xml:space="preserve"><value>Connection test {0}: {1}</value></data>
+  <data name="Activity.Job.Cancelled" xml:space="preserve"><value>Job {0} cancelled.</value></data>
+  <data name="Activity.Job.NotRunning" xml:space="preserve"><value>Job {0} was not running: it was not cancelled.</value></data>
+  <data name="Activity.Job.Retried" xml:space="preserve"><value>Retry of job {0} (new job {1}).</value></data>
+  <data name="Activity.Pipeline.Run" xml:space="preserve"><value>{0} run of pipeline {1} (job {2}).</value></data>
+  <data name="Activity.Pipeline.Created" xml:space="preserve"><value>Pipeline {0} created.</value></data>
+  <data name="Activity.Pipeline.Updated" xml:space="preserve"><value>Pipeline {0} updated.</value></data>
+  <data name="Activity.Pipeline.NotFound" xml:space="preserve"><value>Pipeline {0} does not exist.</value></data>
+  <data name="Activity.Pipeline.SchedulerChanged" xml:space="preserve"><value>Scheduler {0} in pipeline {1}.</value></data>
+  <data name="Activity.Pipeline.SchedulerOn" xml:space="preserve"><value>enabled</value></data>
+  <data name="Activity.Pipeline.SchedulerOff" xml:space="preserve"><value>disabled</value></data>
+  <data name="Activity.Pipeline.Deleted" xml:space="preserve"><value>Pipeline {0} deleted{1}.</value></data>
+  <data name="Activity.Pipeline.WithStateWipe" xml:space="preserve"><value> (with state wipe)</value></data>
+  <data name="Activity.Pipeline.NotDeleted" xml:space="preserve"><value>Pipeline {0} was not deleted: {1}</value></data>
+  <data name="Activity.Queue.Queued" xml:space="preserve"><value>{0} queued in pipeline {1}: it starts when the running job ends.</value></data>
+  <data name="Activity.Queue.Started" xml:space="preserve"><value>Queued {0} of pipeline {1} starts (job {2}), requested by {3}.</value></data>
+  <data name="Activity.Queue.UnknownActor" xml:space="preserve"><value>an unrecorded actor</value></data>
+  <data name="Activity.Queue.Removed" xml:space="preserve"><value>{0} removed from the queue of pipeline {1}.</value></data>
+  <data name="Activity.Queue.AlreadyStarting" xml:space="preserve"><value>{0} of pipeline {1} is already starting; it cannot be removed from the queue.</value></data>
+  <data name="Activity.Queue.NothingToRemove" xml:space="preserve"><value>There was nothing to remove from the queue of pipeline {0}.</value></data>
+  <data name="Activity.Compare.Started" xml:space="preserve"><value>Value comparison of {0} (job {1}).</value></data>
+  <data name="Activity.Compare.AllTables" xml:space="preserve"><value>all tables</value></data>
+  <data name="Activity.Resync.Started" xml:space="preserve"><value>{0} re-sync of {1} in {2} (job {3}).</value></data>
+  <data name="Activity.Restore.NoReload" xml:space="preserve"><value>Restored point {0} in {1}, with no tables to reload in SQL.</value></data>
+  <data name="Activity.Restore.WithReload" xml:space="preserve"><value>Restored point {0} in {1}; SQL reload in job {2}.</value></data>
+  <data name="Activity.Reload.Started" xml:space="preserve"><value>Reload from Parquet of pipeline {0} (job {1}).</value></data>
+  <data name="Activity.Parquet.Deleted" xml:space="preserve"><value>Parquet {0} deleted from pipeline {1}.</value></data>
+  <data name="Activity.Parquet.NotInPipeline" xml:space="preserve"><value>Path {0} does not belong to pipeline {1}: it was not deleted.</value></data>
+  <data name="Activity.Reset.Done" xml:space="preserve"><value>Pipeline {0} reset{1} ({2:N0} table(s) truncated, {3:N0} Parquet file(s) deleted).</value></data>
+  <data name="Activity.Reset.WithTruncate" xml:space="preserve"><value> with SQL truncation</value></data>
+  <data name="Activity.Reset.Stopped" xml:space="preserve"><value>Reset of {0} stopped: could not truncate {1}.</value></data>
+  <data name="Activity.Table.SyncChanged" xml:space="preserve"><value>Sync of table '{0}' {1} in pipeline {2}.</value></data>
+  <data name="Activity.Table.Resumed" xml:space="preserve"><value>resumed</value></data>
+  <data name="Activity.Table.Paused" xml:space="preserve"><value>paused</value></data>
+  <data name="Activity.Table.ResumeVerb" xml:space="preserve"><value>resume</value></data>
+  <data name="Activity.Table.PauseVerb" xml:space="preserve"><value>pause</value></data>
+  <data name="Activity.Table.AllColumns" xml:space="preserve"><value>All columns of '{0}' are loaded into SQL.</value></data>
+  <data name="Activity.Table.ExcludedColumns" xml:space="preserve"><value>Excluded columns of '{0}': {1}.</value></data>
+  <data name="Activity.Divergence.Accepted" xml:space="preserve"><value>Divergence of {0} accepted ({1:N2}%).</value></data>
+  <data name="Activity.Divergence.Unaccepted" xml:space="preserve"><value>Acceptance of the divergence of {0} removed.</value></data>
+  <data name="Activity.Report.Generated" xml:space="preserve"><value>Generated the PDF report of job {0}.</value></data>
+  <data name="Activity.Settings.Unchanged" xml:space="preserve"><value>Settings saved with no changes.</value></data>
+  <data name="Activity.Settings.Saved" xml:space="preserve"><value>Settings saved: {0}.</value></data>
+  <data name="Activity.Failed.ConnectionCreate" xml:space="preserve"><value>Could not create the {0} connection '{1}'</value></data>
+  <data name="Activity.Failed.ConnectionSave" xml:space="preserve"><value>Could not save the {0} connection '{1}'</value></data>
+  <data name="Activity.Failed.ConnectionDelete" xml:space="preserve"><value>Could not delete connection '{0}'</value></data>
+  <data name="Activity.Failed.ConnectionTest" xml:space="preserve"><value>Could not test connection {0}</value></data>
+  <data name="Activity.Failed.JobCancel" xml:space="preserve"><value>Could not cancel job {0}</value></data>
+  <data name="Activity.Failed.JobRetry" xml:space="preserve"><value>Could not retry job {0}</value></data>
+  <data name="Activity.Failed.PipelineRun" xml:space="preserve"><value>Could not start {0} in {1}</value></data>
+  <data name="Activity.Failed.Queue" xml:space="preserve"><value>Could not queue {0} in {1}</value></data>
+  <data name="Activity.Failed.QueueStart" xml:space="preserve"><value>Could not launch queued {0} of pipeline {1}</value></data>
+  <data name="Activity.Failed.QueueRemove" xml:space="preserve"><value>Could not remove from the queue of pipeline {0}</value></data>
+  <data name="Activity.Failed.Compare" xml:space="preserve"><value>Could not start the value comparison</value></data>
+  <data name="Activity.Failed.Resync" xml:space="preserve"><value>Could not start the re-sync of {0}</value></data>
+  <data name="Activity.Failed.Restore" xml:space="preserve"><value>Could not restore point {0} in {1}</value></data>
+  <data name="Activity.Failed.Reload" xml:space="preserve"><value>Could not start the reload from Parquet of {0}</value></data>
+  <data name="Activity.Failed.ParquetDelete" xml:space="preserve"><value>Could not delete Parquet {0}</value></data>
+  <data name="Activity.Failed.Reset" xml:space="preserve"><value>Could not reset {0}</value></data>
+  <data name="Activity.Failed.TableSync" xml:space="preserve"><value>Could not {0} table '{1}'</value></data>
+  <data name="Activity.Failed.TableColumns" xml:space="preserve"><value>Could not change the columns of '{0}'</value></data>
+  <data name="Activity.Failed.PipelineCreate" xml:space="preserve"><value>Could not create pipeline {0}</value></data>
+  <data name="Activity.Failed.PipelineSave" xml:space="preserve"><value>Could not save pipeline {0}</value></data>
+  <data name="Activity.Failed.PipelineScheduler" xml:space="preserve"><value>Could not change the scheduler of pipeline {0}</value></data>
+  <data name="Activity.Failed.PipelineDelete" xml:space="preserve"><value>Could not delete pipeline {0}</value></data>
+  <data name="Activity.Failed.DivergenceAccept" xml:space="preserve"><value>Could not accept the divergence of {0}</value></data>
+  <data name="Activity.Failed.DivergenceUnaccept" xml:space="preserve"><value>Could not remove the acceptance of {0}</value></data>
+  <data name="Activity.Failed.Report" xml:space="preserve"><value>Could not generate the PDF report of job {0}</value></data>
+  <data name="Activity.Failed.Settings" xml:space="preserve"><value>Could not save the settings</value></data>
 </root>
