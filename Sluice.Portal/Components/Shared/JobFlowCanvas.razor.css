@@ -246,7 +246,7 @@
 }
 
 .jfc-chip--error {
-    color: var(--colorStatusDangerForeground1);
+    color: var(--colorStatusDangerForeground3);
 }
 
 .jfc-chip--warning,
@@ -441,7 +441,7 @@
 }
 
 .jfc-node__failed {
-    color: var(--colorStatusDangerForeground1);
+    color: var(--colorStatusDangerForeground3);
     font-weight: 600;
 }
 
@@ -519,7 +519,7 @@
 }
 
 .jfc-node--error .jfc-node__state {
-    color: var(--colorStatusDangerForeground1);
+    color: var(--colorStatusDangerForeground3);
 }
 
 .jfc-node--error .jfc-node__bar > span {
