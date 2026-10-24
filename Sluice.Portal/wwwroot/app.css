@@ -40,6 +40,29 @@ html, body {
     color: #0b3a33;
 }
 
+/* Cabecera: los botones de idioma, tema y cerrar sesión no se encogen ni salen de la pantalla, y
+   la insignia de estado no parte su texto. En un móvil (<=600px) se ocultan el nombre de la app
+   (queda el logo) y la insignia "Demo" para que quepan el estado y "Acceso abierto", que es un
+   aviso de seguridad. */
+.app-header__start {
+    min-width: 0;
+}
+
+.app-header__end {
+    flex: none;
+}
+
+#health-pill {
+    white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+    .app-header__title,
+    .demo-badge {
+        display: none;
+    }
+}
+
 #blazor-error-ui {
     background: var(--colorStatusWarningBackground1, #fff4ce);
     border-top: 1px solid var(--colorStatusWarningBorder1, #fde7a0);

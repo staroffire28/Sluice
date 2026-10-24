@@ -13,13 +13,13 @@
 <FluentLayout Class="app-shell">
     <FluentLayoutItem Area="LayoutArea.Header">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center" Style="width:100%;">
-            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px" Width="auto">
+            <FluentStack Class="app-header__start" Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px" Width="auto">
                 @* En móvil el menú lateral se pliega en este botón (sustituye a Collapsible de la v4). *@
                 <FluentLayoutHamburger>
                     <NavMenu Id="mobile-menu" />
                 </FluentLayoutHamburger>
                 <img src="logo.svg" alt="" width="24" height="24" style="flex: none;" />
-                <span style="font-weight: 600; white-space: nowrap;">@L["App.Title"]</span>
+                <span class="app-header__title" style="font-weight: 600; white-space: nowrap;">@L["App.Title"]</span>
                 <HealthPill />
                 @* Sin clave (AUTH_MODE=none o Development sin UI_API_KEY): visible en todas las páginas. *@
                 @if (!Auth.IsUiAuthEnabled)
@@ -31,7 +31,7 @@
                     <span class="open-access-badge demo-badge" title="@L["App.DemoTitle"]" data-testid="demo-badge">@L["App.Demo"]</span>
                 }
             </FluentStack>
-            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px" Width="auto">
+            <FluentStack Class="app-header__end" Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px" Width="auto">
                 <LanguageToggle />
                 <ThemeToggle />
                 @* Sin clave no hay sesión que cerrar: el botón solo revocaría sesiones y volvería a la landing. *@
