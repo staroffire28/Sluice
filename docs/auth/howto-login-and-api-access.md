@@ -34,6 +34,10 @@ curl -c /tmp/sluice-cookies.txt -X POST "$BASE/auth/login" \
 
 # Authenticated API call
 curl -b /tmp/sluice-cookies.txt "$BASE/api/status"
+
+# Calls that change something (POST, PUT, PATCH, DELETE) also send X-Sluice-Client (any value);
+# without it the portal answers 403, so another site cannot act with the session cookie.
+curl -b /tmp/sluice-cookies.txt -H "X-Sluice-Client: script" -X POST "$BASE/api/pipelines/<id>/run"
 ```
 
 PowerShell (same pattern as `scripts/docker-smoke.ps1`):
@@ -44,6 +48,8 @@ Invoke-WebRequest -Uri "http://localhost:58472/auth/login" -Method Post `
   -ContentType "application/json" -Body (@{ Key = $env:UI_API_KEY } | ConvertTo-Json) `
   -WebSession $session -MaximumRedirection 0 -ErrorAction SilentlyContinue
 Invoke-RestMethod -Uri "http://localhost:58472/api/orchestration/mode" -WebSession $session
+Invoke-RestMethod -Uri "http://localhost:58472/api/pipelines/<id>/run" -Method Post `
+  -Headers @{ 'X-Sluice-Client' = 'script' } -WebSession $session
 ```
 
 ## Workers (distributed Docker)

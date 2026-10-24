@@ -246,7 +246,9 @@ Sluice.Portal.Services.Connections.ConnectionMigrations.PinTrustServerCertificat
 
 app.UseForwardedHeaders();
 app.UseRequestLocalization();
+app.UseSecurityHeaders();
 app.UseStaticFiles();
+app.UseApiCrossSiteGuard();
 app.UseDualAuth();
 app.UseAntiforgery();
 
