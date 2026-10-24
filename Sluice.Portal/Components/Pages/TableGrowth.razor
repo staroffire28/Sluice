@@ -7,6 +7,7 @@
 @inject IPipelineService PipelineService
 @inject IStringLocalizer<SharedResource> L
 @inject ThemeState ThemeState
+@inject BrowserTime Time
 @implements IDisposable
 
 <PageTitle>@L["Page.TableGrowth.Tab"] @Entity</PageTitle>
@@ -48,7 +49,7 @@
                     }
                     else
                     {
-                        <ApexChart TItem="TableGrowthPoint" Title="@L["Page.TableGrowth.Chart.Growth"]" Options="_growthOptions" Height="300" @key="_themeMode">
+                        <ApexChart TItem="TableGrowthPoint" Title="@L["Page.TableGrowth.Chart.Growth"]" Options="_growthOptions" Height="300" @key="(_themeMode, Time.Zone)">
                             <ApexPointSeries TItem="TableGrowthPoint"
                                              Items="_report.Growth"
                                              Name="@L["Page.TableGrowth.Series.RowCount"]"
@@ -66,7 +67,7 @@
                     }
                     else
                     {
-                        <ApexChart TItem="TableLoadPoint" Title="@L["Page.TableGrowth.Chart.Load"]" Options="_loadOptions" Height="300" @key="_themeMode">
+                        <ApexChart TItem="TableLoadPoint" Title="@L["Page.TableGrowth.Chart.Load"]" Options="_loadOptions" Height="300" @key="(_themeMode, Time.Zone)">
                             <ApexPointSeries TItem="TableLoadPoint"
                                              Items="_report.DailyLoad"
                                              Name="@L["Page.TableGrowth.Series.CsvRows"]"
@@ -119,7 +120,18 @@
 
     protected override void OnParametersSet() => Load();
 
-    private void Load() => _report = AnalyticsSvc.GetTableGrowth(PipelineId, Entity, _days);
+    // Los días van en la zona del navegador, que solo se conoce con el circuito conectado: al
+    // conocerla se vuelve a cargar.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && await Time.InitAsync())
+        {
+            Load();
+            StateHasChanged();
+        }
+    }
+
+    private void Load() => _report = AnalyticsSvc.GetTableGrowth(PipelineId, Entity, _days, Time.Zone);
 
     private void OnDaysChanged()
     {

@@ -10,13 +10,13 @@ namespace Sluice.Portal.Services.Analytics;
 public interface IAnalyticsService
 {
     // pipelineId: solo los jobs de ese pipeline. La cola y los workers son compartidos por todos los
-    // pipelines y no se filtran.
-    AnalyticsSnapshot GetSnapshot(string? pipelineId = null);
+    // pipelines y no se filtran. zone: en qué zona se toman los días (la del navegador; sin ella, UTC).
+    AnalyticsSnapshot GetSnapshot(string? pipelineId = null, TimeZoneInfo? zone = null);
 
     // Reconstruye el crecimiento de una tabla desde el historial de Job.Entities — no hay
     // snapshots diarios dedicados, pero SqlRows (COUNT(*) real post-MERGE, ver SqlExecutor) y
     // CsvRows (filas ingeridas en cada run) ya son series temporales genuinas por job.
-    TableGrowthReport GetTableGrowth(string pipelineId, string entity, int days = 90);
+    TableGrowthReport GetTableGrowth(string pipelineId, string entity, int days = 90, TimeZoneInfo? zone = null);
 }
 
 // ---- DTOs expuestos para los gráficos ----
@@ -97,7 +97,7 @@ public sealed class AnalyticsService : IAnalyticsService
         _pipelines = pipelines;
     }
 
-    public AnalyticsSnapshot GetSnapshot(string? pipelineId = null)
+    public AnalyticsSnapshot GetSnapshot(string? pipelineId = null, TimeZoneInfo? zone = null)
     {
         var jobs = LoadRecentJobs(string.IsNullOrWhiteSpace(pipelineId) ? null : pipelineId);
 
@@ -111,7 +111,7 @@ public sealed class AnalyticsService : IAnalyticsService
             TotalQueueDepth = ComputeTotalQueueDepth(),
 
             StatusDistribution = BuildStatusDistribution(jobs),
-            JobsPerDay = BuildJobsPerDay(jobs),
+            JobsPerDay = BuildJobsPerDay(jobs, zone),
             MergedRowsByPipeline = BuildMergedRowsByPipeline(jobs),
             DivergenceOverTime = BuildDivergenceOverTime(jobs),
             AvgDurationByType = BuildAvgDurationByType(jobs),
@@ -120,7 +120,7 @@ public sealed class AnalyticsService : IAnalyticsService
         };
     }
 
-    public TableGrowthReport GetTableGrowth(string pipelineId, string entity, int days = 90)
+    public TableGrowthReport GetTableGrowth(string pipelineId, string entity, int days = 90, TimeZoneInfo? zone = null)
     {
         var windowDays = Math.Max(1, days);
         var cutoff = DateTimeOffset.UtcNow.AddDays(-windowDays);
@@ -147,7 +147,7 @@ public sealed class AnalyticsService : IAnalyticsService
         {
             if (entry!.SqlRows is { } rows)
             {
-                growthByDay[DateOnly.FromDateTime(job.StartedAt.UtcDateTime)] = rows;
+                growthByDay[Day(job.StartedAt, zone)] = rows;
             }
         }
 
@@ -159,7 +159,7 @@ public sealed class AnalyticsService : IAnalyticsService
         // Carga: suma de CsvRows (filas ingeridas, no acumuladas) agrupada por día — proxy
         // directo de "días con más picos de carga".
         var loadByDay = perJobEntity
-            .GroupBy(x => DateOnly.FromDateTime(x.Job.StartedAt.UtcDateTime))
+            .GroupBy(x => Day(x.Job.StartedAt, zone))
             .ToDictionary(g => g.Key, g => g.Sum(x => (long)x.Entry!.CsvRows));
 
         var dailyLoad = loadByDay
@@ -283,14 +283,14 @@ public sealed class AnalyticsService : IAnalyticsService
             .ToList();
     }
 
-    private static IReadOnlyList<DailyJobCount> BuildJobsPerDay(IEnumerable<Job> jobs)
+    private static IReadOnlyList<DailyJobCount> BuildJobsPerDay(IEnumerable<Job> jobs, TimeZoneInfo? zone)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = Day(DateTimeOffset.UtcNow, zone);
         var startDay = today.AddDays(-(DaysWindow - 1));
 
         var grouped = jobs
-            .Where(j => DateOnly.FromDateTime(j.StartedAt.UtcDateTime) >= startDay)
-            .GroupBy(j => DateOnly.FromDateTime(j.StartedAt.UtcDateTime))
+            .Where(j => Day(j.StartedAt, zone) >= startDay)
+            .GroupBy(j => Day(j.StartedAt, zone))
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var result = new List<DailyJobCount>(DaysWindow);
@@ -417,6 +417,10 @@ public sealed class AnalyticsService : IAnalyticsService
 
     private static bool IsTerminal(Job j) =>
         !JobProgressHelper.IsActive(j);
+
+    // Día de un instante en la zona pedida (UTC si no se indica).
+    private static DateOnly Day(DateTimeOffset at, TimeZoneInfo? zone) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, zone ?? TimeZoneInfo.Utc).DateTime);
 
     // Lee un valor numérico de Summary tolerando long, int, double, string o JsonElement.
     private static double? ReadDouble(IReadOnlyDictionary<string, object?>? summary, string key)
