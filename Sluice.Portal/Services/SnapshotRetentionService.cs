@@ -112,10 +112,10 @@ public sealed class SnapshotRetentionService
                 continue;
             }
 
+            // Sin fecha legible no se puede saber su antigüedad: se conserva.
             if (!SnapshotFolderTime.TryParse(snapshot, out var timestamp))
             {
-                dispositions[snapshot] = DispositionEligible;
-                eligible.Add(snapshot);
+                dispositions[snapshot] = DispositionRetained;
                 continue;
             }
 
