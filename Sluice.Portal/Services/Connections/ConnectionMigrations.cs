@@ -107,9 +107,10 @@ public static class ConnectionMigrations
 
     // Pasa la cadena a host, database, user, password y trust_server_certificate. Devuelve null si se
     // pudo, o las claves que lo impiden. Los campos siempre cifran, así que, para que la conexión siga
-    // funcionando igual: TrustServerCertificate explícito se respeta; si no, una cadena que no activaba
-    // el cifrado (Encrypt ausente, False/No/Optional) no validaba el certificado y queda en "confiar"
-    // (como en PinTrustServerCertificate), y una que lo activaba (True/Mandatory/Strict) lo valida.
+    // funcionando igual: TrustServerCertificate explícito se respeta; si no, se decide por builder.Encrypt
+    // (que ya aplica el default de SqlClient, Mandatory si falta la clave): con Optional (Encrypt=False/
+    // No/Optional escrito) no se validaba el certificado y queda en "confiar" (como en
+    // PinTrustServerCertificate); con Mandatory o Strict, también sin Encrypt, se valida.
     private static string? Convert(string? connectionString, Dictionary<string, string?> config)
     {
         SqlConnectionStringBuilder builder;
@@ -136,7 +137,7 @@ public static class ConnectionMigrations
         config["password"] = builder.Password;
         var trust = builder.ShouldSerialize("TrustServerCertificate")
             ? builder.TrustServerCertificate
-            : !builder.ShouldSerialize("Encrypt") || builder.Encrypt == SqlConnectionEncryptOption.Optional;
+            : builder.Encrypt == SqlConnectionEncryptOption.Optional;
         config["trust_server_certificate"] = trust ? "true" : "false";
         return null;
     }
