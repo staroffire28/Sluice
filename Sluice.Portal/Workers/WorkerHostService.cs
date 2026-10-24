@@ -91,8 +91,9 @@ public sealed class WorkerHostService : BackgroundService
                 {
                     await ProcessStageAsync(stage, workerId, stoppingToken);
                 }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                catch (Exception) when (stoppingToken.IsCancellationRequested)
                 {
+                    // Apagado: también si el stage cortado salió con otra excepción (SqlException).
                     return;
                 }
                 catch (Exception ex)
@@ -195,12 +196,13 @@ public sealed class WorkerHostService : BackgroundService
             _jobs.AppendEvent(task.JobId, EventLevel.Warning, $"Etapa {stage} detenida por la cancelación del job.", null, "Event.Job.StageStoppedByCancel", stage);
             _logger.LogInformation("Stage {Stage} de la tarea {TaskId} detenido: job cancelado.", stage, task.Id);
         }
-        catch (OperationCanceledException) when (stageCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        catch (Exception) when (stageCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
             // Lease perdido: la tarea la continúa quien la reclamó; no se marca el job como fallido.
+            // Cualquier excepción cuenta, no solo una OCE: el driver de SQL la traduce a SqlException.
             _logger.LogWarning("Stage {Stage} de la tarea {TaskId} abandonado por pérdida del lease.", stage, task.Id);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             // Una cancelación por apagado no es un fallo de la tarea: se propaga (el bucle de
             // ExecuteAsync termina) y la tarea, aún en claimed/, se reclama al vencer el lease.
