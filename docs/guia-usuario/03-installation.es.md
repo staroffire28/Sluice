@@ -171,7 +171,7 @@ Se editan en el portal, se guardan en el volumen y aplican sin reiniciar.
 | `AUTH_MODE` | `key` exige `UI_API_KEY`. `none` es acceso abierto a propósito: la landing ofrece **Entrar** sin clave, la API queda abierta, la cabecera muestra **Acceso abierto** y se avisa en el log al arrancar. Úsalo solo en una red interna o detrás de un proxy que ya autentique. Con `none` deja `UI_API_KEY` vacía: las dos juntas no arrancan. | `key` |
 | `EXECUTION_MODE` | `local` o `distributed`. | lo fija compose |
 | `DATA_DIR` | Raíz de persistencia JSON (`/data` Linux, `C:/data` Windows). | lo fija compose |
-| `WORKER_STAGE` | Etapa que procesa un worker (`ingest`, `sql` o `reconcile`; otro valor impide arrancar); ausencia = orquestador. | lo fija compose |
+| `WORKER_STAGE` | Etapa que procesa un worker (`ingest`, `sql` o `reconcile`; otro valor impide arrancar); ausencia = orquestador. Un worker solo responde `/health`: no sirve la UI ni `/api/*`, así que no necesita `UI_API_KEY`. | lo fija compose |
 | `KNOWN_PROXIES` / `KNOWN_NETWORKS` | IPs y redes CIDR (separadas por comas) del proxy inverso de confianza para `X-Forwarded-For`/`Proto`. Sin ellas solo se acepta desde loopback; detrás de un proxy en otro contenedor configúralas, o todos los usuarios comparten la IP del proxy en el límite de intentos de login (se avisa al arrancar). Un valor inválido impide arrancar. Ver *Acceso remoto con TLS*. | vacío |
 | `HEARTBEAT_MAX_FAILURES` | Fallos de heartbeat antes de liberar una tarea. | 3 |
 | `CHANGELOG_STALL_HOURS` | Horas sin actualizar el changelog antes de alertar. | 16 |

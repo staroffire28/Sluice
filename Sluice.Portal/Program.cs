@@ -68,8 +68,9 @@ if (appOptions.DemoMode && (!appOptions.IsLocalSourceEnabled || string.IsNullOrW
 }
 
 // Fail-closed fuera de desarrollo: sin claves, el portal quedaría abierto. Solo un AUTH_MODE=none
-// explícito lo permite (acceso abierto a propósito, se avisa abajo). En desarrollo se permite.
-if (!builder.Environment.IsDevelopment() && !appOptions.IsOpenAccess)
+// explícito lo permite (acceso abierto a propósito, se avisa abajo). En desarrollo se permite. Un
+// worker no sirve la UI ni /api (ver más abajo), así que no necesita la clave.
+if (!builder.Environment.IsDevelopment() && !appOptions.IsOpenAccess && appOptions.IsOrchestrator)
 {
     if (!appOptions.IsUiAuthEnabled)
     {
@@ -196,6 +197,16 @@ builder.Services.AddSingleton<IAuthService, AuthService>();
 DataDirectoryInitializer.EnsureLayout(appOptions);
 
 var app = builder.Build();
+
+// Un worker (WORKER_STAGE en distribuido) solo procesa su cola: sin UI ni /api, que con su propia
+// sesión en memoria no se revocaba al cerrar sesión en el api y multiplicaba el límite de intentos
+// de login. Solo responde el healthcheck.
+if (!appOptions.IsOrchestrator)
+{
+    app.MapLivenessEndpoint();
+    app.Run();
+    return;
+}
 
 if (appOptions.IsOpenAccess)
 {
