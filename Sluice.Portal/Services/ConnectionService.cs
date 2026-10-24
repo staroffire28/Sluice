@@ -193,7 +193,8 @@ public sealed class ConnectionService : IConnectionService
         try
         {
             if (ChangedSecretTarget(existing.Config, merged.Config) is not null
-                || ParquetStorageOf(existing) != ParquetStorageOf(merged))
+                || ParquetStorageOf(existing) != ParquetStorageOf(merged)
+                || !string.Equals(ParquetContainerOf(existing), ParquetContainerOf(merged), StringComparison.OrdinalIgnoreCase))
             {
                 foreach (var pipelineId in _pipelines.ListAll()
                     .Where(p => p.SourceId == id || p.DestinationId == id)
@@ -234,6 +235,9 @@ public sealed class ConnectionService : IConnectionService
         AdlsClientFactory.KeepsParquetOnPortal(connection)
             ? AdlsClientFactory.PortalParquetStorage
             : AdlsClientFactory.AdlsParquetStorage;
+
+    private static string? ParquetContainerOf(Connection connection) =>
+        connection.Config.GetValueOrDefault("parquet_container") ?? connection.Config.GetValueOrDefault("destination_container");
 
     // En ADLS sin container de Parquet no hay nada que copiar.
     private static bool HasParquet(Connection connection) =>

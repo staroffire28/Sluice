@@ -59,7 +59,7 @@ public static class ManagementEndpoints
             }
             catch (PipelineBusyException ex)
             {
-                return Results.Conflict(new { error = ex.Message });
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
             }
             catch (InvalidOperationException ex)
             {
@@ -109,7 +109,7 @@ public static class ManagementEndpoints
             }
             catch (PipelineBusyException ex)
             {
-                return Results.Conflict(new { error = ex.Message });
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
             }
             catch (InvalidOperationException ex)
             {
