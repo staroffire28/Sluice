@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
 using Sluice.Portal.Services.Adls;
 using Sluice.Portal.Services.Logging;
@@ -45,12 +47,20 @@ public sealed class ParquetArtifactService : IParquetArtifactService
     private readonly IPipelineService _pipelines;
     private readonly IAdlsClientFactory _adlsFactory;
     private readonly IAuditLog _audit;
+    private readonly AppOptions _options;
+    private readonly IJobService _jobs;
+    private readonly ITaskStore _tasks;
 
-    public ParquetArtifactService(IPipelineService pipelines, IAdlsClientFactory adlsFactory, IAuditLog audit)
+    public ParquetArtifactService(
+        IPipelineService pipelines, IAdlsClientFactory adlsFactory, IAuditLog audit,
+        IOptions<AppOptions> options, IJobService jobs, ITaskStore tasks)
     {
         _audit = audit;
         _pipelines = pipelines;
         _adlsFactory = adlsFactory;
+        _options = options.Value;
+        _jobs = jobs;
+        _tasks = tasks;
     }
 
     public async Task<IReadOnlyList<ParquetArtifact>> ListAsync(string pipelineId, CancellationToken cancellationToken = default)
@@ -77,7 +87,7 @@ public sealed class ParquetArtifactService : IParquetArtifactService
             actor,
             "parquet.delete",
             pipelineId,
-            () => DeleteUnauditedAsync(pipelineId, blobPath, cancellationToken),
+            () => DeleteGuardedAsync(pipelineId, blobPath, cancellationToken),
             deleted => deleted
                 ? new AuditResult($"Parquet {blobPath} borrado del pipeline {pipelineId}.",
                     MessageKey: "Activity.Parquet.Deleted", MessageArgs: [blobPath, pipelineId])
@@ -86,6 +96,31 @@ public sealed class ParquetArtifactService : IParquetArtifactService
             $"No se pudo borrar el parquet {blobPath}",
             failureKey: "Activity.Failed.ParquetDelete", failureArgs: [blobPath],
             target: blobPath);
+
+    // Borrado a mano: con el lock de ejecución y sin job en curso, que podría consolidar contra el
+    // fichero o volver a publicarlo. El consolidado y el schema de una tabla que sigue en el estado
+    // no se borran: el siguiente ingest la reconstruiría solo con los snapshots nuevos y un Reload
+    // borraría en SQL, como huérfanas, las filas que faltan.
+    private async Task<bool> DeleteGuardedAsync(string pipelineId, string blobPath, CancellationToken cancellationToken)
+    {
+        if (!IsWithinPipeline(pipelineId, blobPath))
+        {
+            return false;
+        }
+
+        using var runLock = await PipelineRunLock.AcquireAsync(_options.DataDir, pipelineId, PipelineRunLock.DefaultTimeout, cancellationToken);
+        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
+        var liveTable = _pipelines.GetState(pipelineId).Tables.Keys.FirstOrDefault(entity =>
+            string.Equals(blobPath, IngestManifestStore.GetConsolidatedBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase)
+            || string.Equals(blobPath, IngestManifestStore.GetConsolidatedSchemaBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase));
+        if (liveTable is not null)
+        {
+            throw new InvalidOperationException(
+                $"{liveTable} sigue en el pipeline: su consolidado no se puede borrar. Para recargarla, restaura un punto o resetea el pipeline.");
+        }
+
+        return await DeleteUnauditedAsync(pipelineId, blobPath, cancellationToken);
+    }
 
     public async Task<bool> DeleteUnauditedAsync(string pipelineId, string blobPath, CancellationToken cancellationToken = default)
     {
