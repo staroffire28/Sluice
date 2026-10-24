@@ -791,6 +791,7 @@
   <data name="Page.Sources.ParquetStorage.Portal" xml:space="preserve"><value>Disco del portal (DATA_DIR)</value></data>
   <data name="Page.Sources.ParquetStorageHint" xml:space="preserve"><value>En el disco del portal no hace falta un contenedor de Parquet ni permiso de escritura en ADLS, pero ocupa espacio en el volumen de DATA_DIR. Al cambiarlo, Sluice copia los Parquet consolidados al sitio nuevo sin borrar los anteriores.</value></data>
   <data name="Page.Pipelines.BusyRetarget" xml:space="preserve"><value>Este pipeline tiene un job en curso: espera a que termine o cancélalo antes de cambiar su origen o su destino.</value></data>
+  <data name="Page.Pipelines.DestinationNeedsFields" xml:space="preserve"><value>El destino '{0}' usaba una cadena de conexión con opciones que ya no se admiten: escribe su host, base de datos, usuario y contraseña en Destinos para volver a ejecutar este pipeline.</value></data>
   <data name="Page.Sources.ParquetCopied" xml:space="preserve"><value>Parquet consolidado copiado al sitio nuevo: {0} tabla(s).</value></data>
   <data name="Report.Generated" xml:space="preserve"><value>Generado {0}</value></data>
   <data name="Report.Overline" xml:space="preserve"><value>INFORME DE CONCILIACIÓN</value></data>
@@ -934,6 +935,8 @@
   <data name="Activity.Connection.RoleSource" xml:space="preserve"><value>de origen</value></data>
   <data name="Activity.Connection.RoleDestination" xml:space="preserve"><value>de destino</value></data>
   <data name="Activity.Connection.Created" xml:space="preserve"><value>Conexión {0} '{1}' creada.</value></data>
+  <data name="Activity.Connection.ConnectionStringConverted" xml:space="preserve"><value>Conexión de destino '{0}': la cadena de conexión pasa a campos.</value></data>
+  <data name="Activity.Connection.ConnectionStringNeedsFields" xml:space="preserve"><value>Conexión de destino '{0}': su cadena de conexión usaba opciones que ya no se admiten ({1}) y se ha quitado; sus pipelines no arrancan hasta que se escriban sus campos.</value></data>
   <data name="Activity.Connection.Updated" xml:space="preserve"><value>Conexión {0} '{1}' actualizada.</value></data>
   <data name="Activity.Connection.UpdatedCopied" xml:space="preserve"><value>Conexión {0} '{1}' actualizada; Parquet de {2:N0} tabla(s) copiado al sitio nuevo.</value></data>
   <data name="Activity.Connection.NotFound" xml:space="preserve"><value>La conexión {0} no existe.</value></data>
