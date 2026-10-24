@@ -305,8 +305,8 @@ public static class ManagementEndpoints
 
         // Exportaciones CSV de Logs y Jobs: todos los registros que cumplen los filtros de la página,
         // no solo la página visible.
-        // tz: la zona del navegador que usa la tabla de Logs (sin ella o si no se reconoce, la del
-        // servidor), para que el CSV filtre los días y escriba las horas igual que la tabla.
+        // tz: la zona del navegador que usa la tabla de Logs o de Jobs (sin ella o si no se reconoce,
+        // la del servidor), para que el CSV filtre los días y escriba las horas igual que la tabla.
         api.MapGet("/logs/export", (string? source, string? level, string? search, DateOnly? from, DateOnly? to, string? tz, IActivityLog log, IStringLocalizer<SharedResource> l) =>
         {
             var zone = !string.IsNullOrWhiteSpace(tz) && TimeZoneInfo.TryFindSystemTimeZoneById(tz, out var found) ? found : null;
@@ -323,15 +323,16 @@ public static class ManagementEndpoints
                 }
             });
         });
-        api.MapGet("/jobs/export", (string? pipelineId, JobStatus? status, DateOnly? from, DateOnly? to, IJobService svc, IStringLocalizer<SharedResource> l) =>
+        api.MapGet("/jobs/export", (string? pipelineId, JobStatus? status, DateOnly? from, DateOnly? to, string? tz, IJobService svc, IStringLocalizer<SharedResource> l) =>
         {
-            var jobs = svc.List(1, int.MaxValue, NullIfBlank(pipelineId), status, new DateRange(from, to));
+            var zone = !string.IsNullOrWhiteSpace(tz) && TimeZoneInfo.TryFindSystemTimeZoneById(tz, out var found) ? found : null;
+            var jobs = svc.List(1, int.MaxValue, NullIfBlank(pipelineId), status, new DateRange(from, to, zone));
             return Csv("jobs", writer =>
             {
                 CsvWriter.WriteRow(writer, [l["Page.Jobs.ColumnJob"].Value, l["Common.Pipeline"].Value, l["Page.Jobs.ColumnType"].Value, l["Common.Status"].Value, l["Page.Jobs.ColumnStarted"].Value, l["Page.Jobs.ColumnFinished"].Value]);
                 foreach (var j in jobs)
                 {
-                    CsvWriter.WriteRow(writer, [j.Id, j.PipelineId, JobTypeLabels.Get(l, j.Type), JobStatusLabels.Get(l, j.Status), CsvDate(j.StartedAt), j.FinishedAt is { } f ? CsvDate(f) : null]);
+                    CsvWriter.WriteRow(writer, [j.Id, j.PipelineId, JobTypeLabels.Get(l, j.Type), JobStatusLabels.Get(l, j.Status), CsvDate(j.StartedAt, zone), j.FinishedAt is { } f ? CsvDate(f, zone) : null]);
                 }
             });
         });
