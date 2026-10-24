@@ -56,4 +56,8 @@ public sealed record AlertDeliveryStatus
     public int? LastStatusCode { get; init; }
     public DateTimeOffset? LastSuccessAt { get; init; }
     public DateTimeOffset? LastFailureAt { get; init; }
+
+    // Alertas que no llegaron desde la última entregada: las de un solo disparo (fallo, Partial,
+    // divergencia...) no se reintentan, y el aviso de recuperación dice cuántas se perdieron.
+    public int FailedSinceLastSuccess { get; init; }
 }

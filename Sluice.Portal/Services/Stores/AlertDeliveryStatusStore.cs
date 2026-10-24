@@ -40,6 +40,7 @@ public sealed class AlertDeliveryStatusStore
                 LastStatusCode = result.StatusCode,
                 LastSuccessAt = result.Success ? at : previous?.LastSuccessAt,
                 LastFailureAt = result.Success ? previous?.LastFailureAt : at,
+                FailedSinceLastSuccess = result.Success ? 0 : (previous?.FailedSinceLastSuccess ?? 0) + 1,
             });
             return previous;
         }
