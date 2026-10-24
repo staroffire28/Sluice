@@ -163,7 +163,7 @@ Se editan en el portal, se guardan en el volumen y aplican sin reiniciar.
 
 ## Variables de entorno
 
-`UI_API_KEY` y `AUTH_MODE` van en `.env`; el resto las fijan los archivos compose.
+`UI_API_KEY`, `AUTH_MODE` y las opcionales `ALERT_WEBHOOK_URL`, `DEADMAN_PING_URL`, `CHANGELOG_STALL_HOURS`, `SESSION_EXPIRY_HOURS` y `TRANSLATE_ENUMS` van en `.env`; el resto las fijan los archivos compose.
 
 | Variable | Propósito | Default |
 |---|---|---|
@@ -175,6 +175,10 @@ Se editan en el portal, se guardan en el volumen y aplican sin reiniciar.
 | `KNOWN_PROXIES` / `KNOWN_NETWORKS` | IPs y redes CIDR (separadas por comas) del proxy inverso de confianza para `X-Forwarded-For`/`Proto`. Sin ellas solo se acepta desde loopback; detrás de un proxy en otro contenedor configúralas, o todos los usuarios comparten la IP del proxy en el límite de intentos de login (se avisa al arrancar). Un valor inválido impide arrancar. Ver *Acceso remoto con TLS*. | vacío |
 | `HEARTBEAT_MAX_FAILURES` | Fallos de heartbeat antes de liberar una tarea. | 3 |
 | `CHANGELOG_STALL_HOURS` | Horas sin actualizar el changelog antes de alertar. | 16 |
+| `ALERT_WEBHOOK_URL` | Webhook de alertas que se usa cuando el de **Ajustes** está apagado o vacío, y cuando `settings.json` no se puede leer. El api y los workers envían alertas, así que los compose se la pasan a todos. | vacío |
+| `DEADMAN_PING_URL` | URL a la que llama el scheduler al final de cada ciclo sano, para un dead-man switch externo ([detalle](04-reference.es.md#observabilidad-y-alertas)). | vacío |
+| `SESSION_EXPIRY_HOURS` | Horas que dura una sesión iniciada. | 12 |
+| `TRANSLATE_ENUMS` | Añade una columna `[<col>_$label]` con la etiqueta de cada valor de enum (idioma 1033), leída del `GlobalOptionsetMetadata.csv` del snapshot. Solo la usa la etapa SQL. | `true` en `docker-compose.yml` y `docker-compose.linux.yml`, `false` en `docker-compose.monolith.yml` |
 | `LOCAL_SOURCE_ROOT` | Solo para la demo y las pruebas: habilita el tipo de origen *Local (UAT)*, que lee carpetas locales en vez de ADLS. **Nunca se usa en producción**; solo lo define `docker-compose.demo.yml`. | — |
 | `DEMO_MODE` | Modo demo (`docker-compose.demo.yml`): genera datos sintéticos de F&O en `LOCAL_SOURCE_ROOT` y crea la base, las conexiones y el pipeline de la demo. Necesita `LOCAL_SOURCE_ROOT` y `DEMO_SQL_PASSWORD`. **Nunca en producción.** | `false` |
 | `DEMO_SQL_PASSWORD` | Contraseña del usuario `sa` del SQL Server de la demo. | — |
