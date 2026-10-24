@@ -134,6 +134,36 @@ public sealed class IngestExecutor : IIngestExecutor
         var previous = _manifestStore.Load(task.PipelineId, task.JobId);
         var alreadyIngested = previous is { Entities.Count: > 0 };
 
+        // Tablas con sincronización pausada por el usuario (default: ninguna). Se omiten en
+        // ingest, así no llegan a la consolidación ni al MERGE de SQL; su estado/watermark
+        // previo se conserva intacto (updatedTables parte de pipelineState.Tables más abajo).
+        var pausedTables = _pauseStore.GetPaused(task.PipelineId);
+
+        // Tablas reanudadas que se saltaron snapshots en pausa (PipelineState.PendingBackfill): se les
+        // leen, solo a ellas, los ya procesados desde el primero que se saltaron, antes que los nuevos.
+        // En Force no hace falta: la selección ya abarca toda la historia.
+        var backfill = isForce
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : pipelineState.PendingBackfill
+                .Where(e => !pausedTables.Contains(e.Key))
+                .ToDictionary(e => e.Key, e => e.Value, StringComparer.OrdinalIgnoreCase);
+        List<string> backfillSnapshots = backfill.Count == 0 || pipelineState.LastProcessedSnapshot is null
+            ? []
+            : snapshots
+                .Where(ExcludedEntities.IsSnapshotFolder)
+                .Where(s => string.CompareOrdinal(s, backfill.Values.Min(StringComparer.Ordinal)) >= 0
+                    && string.CompareOrdinal(s, pipelineState.LastProcessedSnapshot) <= 0)
+                .OrderBy(s => s, StringComparer.Ordinal)
+                .ToList();
+
+        // El primer snapshot que se saltó ya no está en el lago (lo borró la retención u otro): los
+        // cambios de ese tiempo no se pueden recuperar. Se lee lo que quede y el job queda Partial.
+        var backfillMissing = backfill
+            .Where(e => !snapshots.Contains(e.Value, StringComparer.Ordinal))
+            .Select(e => e.Key)
+            .OrderBy(e => e, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         if (selection.Blocked && !alreadyIngested)
         {
             _jobs.Update(job.Id, job with
@@ -151,7 +181,7 @@ public sealed class IngestExecutor : IIngestExecutor
 
         progress.CompleteStep(JobStepCatalog.Discover);
 
-        if (alreadyIngested || selection.ToProcess.Count == 0)
+        if (alreadyIngested || (selection.ToProcess.Count == 0 && backfill.Count == 0))
         {
             // Sin nada nuevo, o el ingest de este job ya estaba registrado (ver arriba). Si cayó
             // antes de escribir su Summary (p. ej. durante la poda), Summary y Entities se rehacen
@@ -235,20 +265,35 @@ public sealed class IngestExecutor : IIngestExecutor
         string? incompleteSnapshot = null;
         string? lastSnapshot = pipelineState.LastProcessedSnapshot;
 
-        // Tablas con sincronización pausada por el usuario (default: ninguna). Se omiten en
-        // ingest, así no llegan a la consolidación ni al MERGE de SQL; su estado/watermark
-        // previo se conserva intacto (updatedTables parte de pipelineState.Tables más abajo).
-        var pausedTables = _pauseStore.GetPaused(task.PipelineId);
         var skippedPaused = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Primer snapshot que se salta cada tabla en pausa; las reanudadas salen al terminar su lectura.
+        var pendingBackfill = new Dictionary<string, string>(pipelineState.PendingBackfill, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (entity, from) in backfill)
+        {
+            _jobs.AppendEvent(task.JobId, EventLevel.Info,
+                $"{entity}: reanudada tras una pausa; se leen los snapshots que se saltó, desde {from}.",
+                null, "Event.Ingest.Backfilling", entity, from);
+        }
+
+        foreach (var entity in backfillMissing)
+        {
+            _jobs.AppendEvent(task.JobId, EventLevel.Warning,
+                $"{entity}: el snapshot {backfill[entity]}, el primero que se saltó en pausa, ya no está en el lago; los cambios de ese tiempo no se recuperan. Un reset del pipeline la recarga con los snapshots que queden.",
+                null, "Event.Ingest.BackfillSnapshotsMissing", entity, backfill[entity]);
+        }
 
         progress.StartStep(JobStepCatalog.Snapshots, total: selection.ToProcess.Count);
-        foreach (var snapshot in selection.ToProcess)
+        // Primero los snapshots ya procesados que leen las tablas reanudadas (los transitorios van de
+        // más viejo a más nuevo), luego los nuevos.
+        foreach (var (snapshot, backfilling) in backfillSnapshots.Select(s => (s, true)).Concat(selection.ToProcess.Select(s => (s, false))))
         {
             // Opción B: la carpeta ya está sellada por el changelog, pero validamos que el
             // volcado de Synapse esté completo. Si no lo está, paramos ANTES de marcarla como
             // procesada: el prefijo sano ya transcodificado sí se consolida y el watermark
             // queda en el último snapshot íntegro, así que el siguiente ciclo reintenta este.
-            var integrity = await adls.ValidateSnapshotAsync(snapshot, cancellationToken);
+            // Uno de backfill ya pasó esta validación cuando se procesó.
+            var integrity = backfilling ? new SnapshotIntegrity(true, null, null) : await adls.ValidateSnapshotAsync(snapshot, cancellationToken);
             if (!integrity.IsComplete)
             {
                 incomplete = integrity;
@@ -267,7 +312,18 @@ public sealed class IngestExecutor : IIngestExecutor
             {
                 if (pausedTables.Contains(entity))
                 {
-                    skippedPaused.Add(entity);
+                    if (!backfilling)
+                    {
+                        skippedPaused.Add(entity);
+                        pendingBackfill.TryAdd(entity, snapshot);
+                    }
+
+                    continue;
+                }
+
+                // En un snapshot de backfill solo se leen las tablas reanudadas que se lo saltaron.
+                if (backfilling && !(backfill.TryGetValue(entity, out var from) && string.CompareOrdinal(snapshot, from) >= 0))
+                {
                     continue;
                 }
 
@@ -381,8 +437,12 @@ public sealed class IngestExecutor : IIngestExecutor
                 }
             }
 
-            lastSnapshot = snapshot;
-            snapshotsProcessed++;
+            if (!backfilling)
+            {
+                lastSnapshot = snapshot;
+                snapshotsProcessed++;
+            }
+
             progress.Report(JobStepCatalog.Snapshots, snapshotsProcessed, failed: entityFailures.Count, rows: totalCsvRows, force: true);
         }
 
@@ -578,11 +638,19 @@ public sealed class IngestExecutor : IIngestExecutor
             Entities = manifestEntities,
         });
 
+        // Las reanudadas que ya leyeron lo que se saltaron (o un Force, que lee toda la historia) dejan
+        // de estar pendientes; con un fallo siguen, y el siguiente job lo reintenta.
+        foreach (var entity in pendingBackfill.Keys.Where(e => !pausedTables.Contains(e) && !entityFailures.ContainsKey(e)).ToList())
+        {
+            pendingBackfill.Remove(entity);
+        }
+
         _stateStore.Save(pipelineState with
         {
             LastProcessedSnapshot = processedUpTo,
             GlobalWatermark = manifestEntities.Select(e => e.Watermark).Where(w => w.HasValue).Max(),
             Tables = updatedTables,
+            PendingBackfill = pendingBackfill,
             // El mismo snapshot sigue incompleto: se conserva desde cuándo (y la última alerta). Otro,
             // o ninguno, rearma el aviso.
             IncompleteSnapshot = incompleteSnapshot is null ? null
@@ -685,7 +753,7 @@ public sealed class IngestExecutor : IIngestExecutor
         var hasEntityOk = manifestEntities.Count > 0;
         JobStatus? jobStatusAfterIngest = hasEntityError
             ? hasEntityOk ? JobStatus.Partial : JobStatus.Error
-            : partiallyFailedEntities.Count > 0 || entitiesWithUnreadableValues.Count > 0
+            : partiallyFailedEntities.Count > 0 || entitiesWithUnreadableValues.Count > 0 || backfillMissing.Count > 0
                 ? JobStatus.Partial
                 : null;
 
@@ -742,6 +810,11 @@ public sealed class IngestExecutor : IIngestExecutor
         if (entitiesWithUnreadableValues.Count > 0)
         {
             completionNote += $" {entitiesWithUnreadableValues.Count} entity(ies) with CSV values loaded as NULL: {string.Join(", ", entitiesWithUnreadableValues.Select(e => e.Key))}.";
+        }
+
+        if (backfillMissing.Count > 0)
+        {
+            completionNote += $" {backfillMissing.Count} resumed table(s) missing snapshots skipped while paused: {string.Join(", ", backfillMissing)}.";
         }
 
         var completionLevel = jobStatusAfterIngest == JobStatus.Error

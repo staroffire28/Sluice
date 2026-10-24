@@ -11,6 +11,10 @@ public sealed record PipelineState
     // un restore que falla a medias (el reintento las recarga) y la vacía la recarga de SQL.
     public List<string> PendingReload { get; init; } = [];
 
+    // Tablas que el ingest se saltó por estar en pausa: el primer snapshot que se saltó. Al reanudarla,
+    // el siguiente ingest le lee (solo a ella) desde ese snapshot hasta LastProcessedSnapshot.
+    public Dictionary<string, string> PendingBackfill { get; init; } = new();
+
     // Snapshot cerrado pero incompleto que frena el pipeline (el ingest se para en él). Lo vigila el
     // scheduler: alerta tras una gracia y cada 24 h mientras siga igual. Se rearma al avanzar.
     public IncompleteSnapshot? IncompleteSnapshot { get; init; }
