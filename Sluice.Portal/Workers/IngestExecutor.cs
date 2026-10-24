@@ -261,6 +261,9 @@ public sealed class IngestExecutor : IIngestExecutor
         var unreadableValues = new Dictionary<string, CsvValueIssues>(StringComparer.OrdinalIgnoreCase);
         var totalCsvRows = 0;
         var snapshotsProcessed = 0;
+        // Los de backfill cuentan como leídos (un job que solo rellena no es "sin datos nuevos"),
+        // pero no mueven lastSnapshot ni el watermark.
+        var snapshotsSelected = backfillSnapshots.Count + selection.ToProcess.Count;
         SnapshotIntegrity? incomplete = null;
         string? incompleteSnapshot = null;
         string? lastSnapshot = pipelineState.LastProcessedSnapshot;
@@ -269,7 +272,8 @@ public sealed class IngestExecutor : IIngestExecutor
         // Primer snapshot que se salta cada tabla en pausa; las reanudadas salen al terminar su lectura.
         var pendingBackfill = new Dictionary<string, string>(pipelineState.PendingBackfill, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var (entity, from) in backfill)
+        foreach (var (entity, from) in backfill.Where(e => pipelineState.LastProcessedSnapshot is not null
+            && string.CompareOrdinal(e.Value, pipelineState.LastProcessedSnapshot) <= 0))
         {
             _jobs.AppendEvent(task.JobId, EventLevel.Info,
                 $"{entity}: reanudada tras una pausa; se leen los snapshots que se saltó, desde {from}.",
@@ -283,7 +287,7 @@ public sealed class IngestExecutor : IIngestExecutor
                 null, "Event.Ingest.BackfillSnapshotsMissing", entity, backfill[entity]);
         }
 
-        progress.StartStep(JobStepCatalog.Snapshots, total: selection.ToProcess.Count);
+        progress.StartStep(JobStepCatalog.Snapshots, total: snapshotsSelected);
         // Primero los snapshots ya procesados que leen las tablas reanudadas (los transitorios van de
         // más viejo a más nuevo), luego los nuevos.
         foreach (var (snapshot, backfilling) in backfillSnapshots.Select(s => (s, true)).Concat(selection.ToProcess.Select(s => (s, false))))
@@ -440,8 +444,9 @@ public sealed class IngestExecutor : IIngestExecutor
             if (!backfilling)
             {
                 lastSnapshot = snapshot;
-                snapshotsProcessed++;
             }
+
+            snapshotsProcessed++;
 
             progress.Report(JobStepCatalog.Snapshots, snapshotsProcessed, failed: entityFailures.Count, rows: totalCsvRows, force: true);
         }
@@ -766,7 +771,7 @@ public sealed class IngestExecutor : IIngestExecutor
             Summary = new Dictionary<string, object?>
             {
                 ["snapshotsProcessed"] = snapshotsProcessed,
-                ["snapshotsSelected"] = selection.ToProcess.Count,
+                ["snapshotsSelected"] = snapshotsSelected,
                 ["csvRows"] = totalCsvRows,
                 ["entities"] = manifestEntities.Count,
                 ["entityFailures"] = fullyFailedEntities.Count,
@@ -796,7 +801,7 @@ public sealed class IngestExecutor : IIngestExecutor
 
         var completionNote = incomplete is null
             ? $"Ingest completed: {snapshotsProcessed} snapshot(s), {manifestEntities.Count} entity(ies)."
-            : $"Ingest stopped early after {snapshotsProcessed}/{selection.ToProcess.Count} snapshot(s): {incomplete.Reason}";
+            : $"Ingest stopped early after {snapshotsProcessed}/{snapshotsSelected} snapshot(s): {incomplete.Reason}";
         if (fullyFailedEntities.Count > 0)
         {
             completionNote += $" {fullyFailedEntities.Count} entity(ies) failed: {string.Join(", ", fullyFailedEntities)}.";
@@ -812,11 +817,6 @@ public sealed class IngestExecutor : IIngestExecutor
             completionNote += $" {entitiesWithUnreadableValues.Count} entity(ies) with CSV values loaded as NULL: {string.Join(", ", entitiesWithUnreadableValues.Select(e => e.Key))}.";
         }
 
-        if (backfillMissing.Count > 0)
-        {
-            completionNote += $" {backfillMissing.Count} resumed table(s) missing snapshots skipped while paused: {string.Join(", ", backfillMissing)}.";
-        }
-
         var completionLevel = jobStatusAfterIngest == JobStatus.Error
             ? EventLevel.Error
             : jobStatusAfterIngest == JobStatus.Partial || incomplete is not null
@@ -826,7 +826,7 @@ public sealed class IngestExecutor : IIngestExecutor
         // cada una con su clave: EventText las pinta juntas.
         var completionBase = incomplete is null
             ? new EventPart("Event.Ingest.Completed", snapshotsProcessed, manifestEntities.Count)
-            : new EventPart("Event.Ingest.StoppedEarly", snapshotsProcessed, selection.ToProcess.Count, incomplete.Reason);
+            : new EventPart("Event.Ingest.StoppedEarly", snapshotsProcessed, snapshotsSelected, incomplete.Reason);
         object PartOrEmpty(string key, IReadOnlyCollection<string> entities) =>
             entities.Count > 0 ? new EventPart(key, entities.Count, string.Join(", ", entities)) : "";
         _jobs.AppendEvent(task.JobId, completionLevel, completionNote, null, "Event.Ingest.CompletionWithParts",
