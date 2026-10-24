@@ -318,13 +318,7 @@ public sealed class SnapshotRetentionService
         if (entities.Count == 0)
         {
             var listed = await parquetStore.ListParquetAsync($"{pipelineId}/", cancellationToken);
-            entities = listed
-                .Select(a => a.Path)
-                .Where(p => p.Count(c => c == '/') == 1 && p.EndsWith(".parquet", StringComparison.OrdinalIgnoreCase))
-                .Select(p => Path.GetFileNameWithoutExtension(p.Split('/').Last()))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(e => e, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            entities = ConsolidatedEntities(listed);
         }
 
         var missing = new List<string>();
@@ -339,6 +333,33 @@ public sealed class SnapshotRetentionService
 
         return new ParquetCertificationResult(missing.Count == 0, missing);
     }
+
+    // Para quien ya tiene el listado del pipeline (el Panel): diferencia de conjuntos contra ese
+    // listado en vez de un Exists por tabla.
+    public static ParquetCertificationResult CertifyParquet(
+        string pipelineId,
+        PipelineState state,
+        IReadOnlyList<ParquetArtifact> listed)
+    {
+        var existing = listed.Select(a => a.Path).ToHashSet(StringComparer.Ordinal);
+        var entities = state.Tables.Count == 0
+            ? ConsolidatedEntities(listed)
+            : state.Tables.Keys.OrderBy(e => e, StringComparer.OrdinalIgnoreCase).ToList();
+        var missing = entities
+            .Where(e => !existing.Contains(IngestManifestStore.GetConsolidatedBlobPath(pipelineId, e)))
+            .ToList();
+
+        return new ParquetCertificationResult(missing.Count == 0, missing);
+    }
+
+    private static List<string> ConsolidatedEntities(IReadOnlyList<ParquetArtifact> listed) =>
+        listed
+            .Select(a => a.Path)
+            .Where(p => p.Count(c => c == '/') == 1 && p.EndsWith(".parquet", StringComparison.OrdinalIgnoreCase))
+            .Select(p => Path.GetFileNameWithoutExtension(p.Split('/').Last()))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(e => e, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 }
 
 public sealed record SnapshotRetentionAnalysis(
