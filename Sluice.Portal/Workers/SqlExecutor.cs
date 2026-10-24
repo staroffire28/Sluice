@@ -140,15 +140,22 @@ public sealed class SqlExecutor : ISqlExecutor
                     ? null
                     : await parquetStore.ReadTextAsync(entry.SchemaPath, cancellationToken);
 
+                // El ingest dejó la tabla en el manifest, así que su consolidado debería estar: sin él la
+                // tabla no se carga, y es un fallo de la entidad (antes contaba como "skipped" y el job
+                // cerraba Ok).
                 if (schemaJson is null || !await parquetStore.ParquetExistsAsync(entry.ParquetPath, cancellationToken))
                 {
+                    failedEntities++;
                     entityResults.Add(new JobEntityResult
                     {
                         Entity = entry.Entity,
                         CsvRows = entry.CsvRows,
-                        Status = "skipped",
+                        Status = "error",
                         Message = "Missing parquet or schema in ADLS.",
                     });
+                    _jobs.AppendEvent(task.JobId, EventLevel.Error,
+                        $"{entry.Entity}: falta el parquet consolidado o su schema en el almacén; la tabla no se carga en SQL.",
+                        null, "Event.Sql.MissingParquet", entry.Entity);
                     continue;
                 }
 
