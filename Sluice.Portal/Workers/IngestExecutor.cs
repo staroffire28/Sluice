@@ -353,10 +353,11 @@ public sealed class IngestExecutor : IIngestExecutor
 
                     entityIssues.Merge(issues);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
                 {
                     // La cancelación del worker (SIGTERM/redeploy) no es un fallo de la entidad:
                     // se propaga para no dar el snapshot por procesado con entidades "fallidas".
+                    // Se mira el token y no el tipo: puede llegar traducida a otra excepción.
                     // Una entidad con CSV corrupto, schema inválido o un fallo puntual de lectura
                     // NO debe abortar el resto de entidades/snapshots del job: se registra el
                     // fallo puntual y se continúa (mismo criterio de aislamiento por entidad que
