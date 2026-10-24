@@ -594,7 +594,8 @@ public sealed class IngestExecutor : IIngestExecutor
         // La poda va por puntos de restauración (todas las tablas a la vez), así que una vez por job.
         // Si falla, la ingesta ya está hecha: solo se avisa y se reintenta en la siguiente. Con
         // settings.json ilegible no se poda: los días por defecto podrían borrar, sin vuelta atrás,
-        // versiones que el ajuste guardado conserva.
+        // versiones que el ajuste guardado conserva. Sin SettingsStore tampoco: podar con 0 días
+        // borraría todas las versiones.
         AppSettings? settings = null;
         if (_settings is not null && !_settings.TryGet(out settings))
         {
@@ -602,11 +603,11 @@ public sealed class IngestExecutor : IIngestExecutor
                 "settings.json no se puede leer: no se podan las versiones del parquet hasta que se corrija.",
                 null, "Event.Ingest.SettingsUnreadable");
         }
-        else
+        else if (settings is not null)
         {
             try
             {
-                await ParquetVersions.PruneAsync(parquetStore, task.PipelineId, settings?.ParquetVersionDays ?? 0, DateTimeOffset.UtcNow, pipelineState.RetiredSnapshots, cancellationToken);
+                await ParquetVersions.PruneAsync(parquetStore, task.PipelineId, settings.ParquetVersionDays, DateTimeOffset.UtcNow, pipelineState.RetiredSnapshots, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
