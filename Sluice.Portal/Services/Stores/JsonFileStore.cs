@@ -61,15 +61,25 @@ public abstract class JsonFileStore<T>
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
-            var modified = File.GetLastWriteTimeUtc(path);
-            if (!_unreadableWarned.TryGetValue(path, out var warned) || warned != modified)
-            {
-                _unreadableWarned[path] = modified;
-                _logger.LogWarning(ex, "Fichero ilegible omitido del listado: {Path}", path);
-            }
-
+            WarnUnreadable(path, ex);
             return default;
         }
+    }
+
+    protected void WarnUnreadable(string path, Exception ex)
+    {
+        var modified = File.GetLastWriteTimeUtc(path);
+        lock (_unreadableWarned)
+        {
+            if (_unreadableWarned.TryGetValue(path, out var warned) && warned == modified)
+            {
+                return;
+            }
+
+            _unreadableWarned[path] = modified;
+        }
+
+        _logger.LogWarning(ex, "Fichero ilegible omitido del listado: {Path}", path);
     }
 
     public T? Get(string id)
