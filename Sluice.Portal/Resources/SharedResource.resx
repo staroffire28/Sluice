@@ -233,6 +233,9 @@
   <data name="Page.Pipelines.ResetSuccess" xml:space="preserve"><value>Pipeline restablecido: {1} fichero(s) borrado(s) en ADLS, {0} tabla(s) vaciada(s) en SQL.</value></data>
   <data name="Page.Pipelines.ResetKeeps" xml:space="preserve"><value>Se conservan la configuración del pipeline (origen y destino), las tablas en pausa y los CSV originales de Synapse Link. La próxima ejecución volverá a procesar todos los snapshots desde cero y puede tardar bastante.</value></data>
   <data name="Page.Pipelines.ResetTruncateSqlHint" xml:space="preserve"><value>Si no la marcas, la próxima ejecución actualizará con MERGE las filas que ya existen en SQL.</value></data>
+  <data name="Page.Pipelines.ResetHistoryLost" xml:space="preserve"><value>La retención de origen borra snapshots del lago, que ahora los conserva desde {0}. La historia de los snapshots anteriores ya borrados solo existe en el parquet que este reset va a borrar: después no se podrá reconstruir.</value></data>
+  <data name="Page.Pipelines.ResetHistoryLostUnknown" xml:space="preserve"><value>La retención de origen borra snapshots del lago y no se pudo comprobar desde cuándo los conserva. La historia de los snapshots ya borrados solo existe en el parquet que este reset va a borrar: después no se podrá reconstruir.</value></data>
+  <data name="Page.Pipelines.ResetHistoryAck" xml:space="preserve"><value>Entiendo que esa historia se pierde</value></data>
   <data name="Page.Pipelines.ResetFailed" xml:space="preserve"><value>No se pudieron vaciar {0} tabla(s) en SQL. El restablecimiento se detuvo sin borrar nada en ADLS ni el estado, para no dejar datos antiguos en SQL.</value></data>
   <data name="Page.Pipelines.NewTitle" xml:space="preserve"><value>Nuevo pipeline</value></data>
   <data name="Page.Pipelines.EditTitle" xml:space="preserve"><value>Editar pipeline</value></data>
@@ -325,6 +328,7 @@
   <data name="Page.Parquet.ConfirmRestore" xml:space="preserve"><value>¿Volver al snapshot {0}? {1} tabla(s) recuperan el parquet que tenían y {2} que aún no existían se archivan. Las copias actuales pasan a ser versiones (el punto más reciente deshace la restauración) y SQL se recarga para las tablas que vuelven.</value></data>
   <data name="Page.Parquet.PendingReloadNote" xml:space="preserve"><value>También se recargan en SQL {0} tabla(s) de una restauración anterior que no terminó.</value></data>
   <data name="Page.Parquet.Restored" xml:space="preserve"><value>Punto del snapshot {0} restaurado; se están recargando las tablas en SQL.</value></data>
+  <data name="Page.Parquet.RestoreSnapshotsMissing" xml:space="preserve"><value>No se puede restaurar el punto {0}: el lago ya no conserva todos los snapshots posteriores (el más antiguo que queda es {1}), y al rebobinar se perderían sus cambios.</value></data>
   <data name="Page.Catalog.Title" xml:space="preserve"><value>Catálogo de tablas</value></data>
   <data name="Page.Catalog.Subtitle" xml:space="preserve"><value>Qué tablas y columnas del lago se cargan en SQL</value></data>
   <data name="Page.Catalog.Hint" xml:space="preserve"><value>Una tabla excluida no se ingiere ni se carga; las tablas nuevas que aparezcan en el lago se cargan solas. Es el mismo ajuste que la sincronización de cada tabla en Tablas.</value></data>
@@ -490,6 +494,7 @@
   <data name="Page.Settings.Validation.LeaseSeconds" xml:space="preserve"><value>El lease de tareas debe ser de al menos 30 segundos; con menos, las tareas en curso se darían por vencidas.</value></data>
   <data name="Page.Settings.Validation.Divergence" xml:space="preserve"><value>El umbral de divergencia debe estar entre 0 y 100 %.</value></data>
   <data name="Page.Settings.Validation.WebhookHttps" xml:space="preserve"><value>La URL del webhook debe ser una dirección https:// completa.</value></data>
+  <data name="Page.Settings.Validation.SourceRetentionBelowVersions" xml:space="preserve"><value>Con la simulación desactivada, la retención de snapshots de origen debe ser de al menos los días de versiones del parquet: si no, restaurar un punto necesitaría snapshots que ya se borraron.</value></data>
   <data name="Page.Settings.Alerts.Enabled" xml:space="preserve"><value>Activar alertas</value></data>
   <data name="Page.Settings.PipelineLagAlertHours" xml:space="preserve"><value>Horas de atraso para alertar</value></data>
   <data name="Page.Settings.PipelineLagAlertHours.Hint" xml:space="preserve"><value>Alerta cuando un snapshot cerrado lleva más de estas horas sin procesarse en un pipeline con scheduler (una vez por episodio, y otra vez cuando vuelva a atrasarse). No cuenta la carga inicial. 0 o negativo la desactiva.</value></data>

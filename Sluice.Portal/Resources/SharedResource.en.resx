@@ -234,6 +234,9 @@
   <data name="Page.Pipelines.ResetSuccess" xml:space="preserve"><value>Pipeline reset: {1} file(s) deleted in ADLS, {0} table(s) emptied in SQL.</value></data>
   <data name="Page.Pipelines.ResetKeeps" xml:space="preserve"><value>The pipeline's configuration (source and destination), paused tables and the original Synapse Link CSVs are kept. The next run will reprocess every snapshot from scratch and may take a while.</value></data>
   <data name="Page.Pipelines.ResetTruncateSqlHint" xml:space="preserve"><value>If unchecked, the next run updates the rows already in SQL with MERGE.</value></data>
+  <data name="Page.Pipelines.ResetHistoryLost" xml:space="preserve"><value>Source snapshot retention deletes snapshots from the lake, which now keeps them from {0}. The history of earlier, already deleted snapshots only exists in the parquet this reset deletes: it cannot be rebuilt afterwards.</value></data>
+  <data name="Page.Pipelines.ResetHistoryLostUnknown" xml:space="preserve"><value>Source snapshot retention deletes snapshots from the lake, and it could not be checked which ones it still keeps. The history of already deleted snapshots only exists in the parquet this reset deletes: it cannot be rebuilt afterwards.</value></data>
+  <data name="Page.Pipelines.ResetHistoryAck" xml:space="preserve"><value>I understand that history is lost</value></data>
   <data name="Page.Pipelines.ResetFailed" xml:space="preserve"><value>Couldn't empty {0} table(s) in SQL. The reset stopped without deleting anything in ADLS or the state, so no stale data is left in SQL.</value></data>
   <data name="Page.Pipelines.NewTitle" xml:space="preserve"><value>New pipeline</value></data>
   <data name="Page.Pipelines.EditTitle" xml:space="preserve"><value>Edit pipeline</value></data>
@@ -326,6 +329,7 @@
   <data name="Page.Parquet.ConfirmRestore" xml:space="preserve"><value>Go back to snapshot {0}? {1} table(s) get back the Parquet they had and {2} that did not exist yet are archived. The current copies become versions (the most recent point undoes the restore) and SQL is reloaded for the tables that go back.</value></data>
   <data name="Page.Parquet.PendingReloadNote" xml:space="preserve"><value>SQL is also reloaded for {0} table(s) from an earlier restore that did not finish.</value></data>
   <data name="Page.Parquet.Restored" xml:space="preserve"><value>Restore point of snapshot {0} restored; the tables are being reloaded in SQL.</value></data>
+  <data name="Page.Parquet.RestoreSnapshotsMissing" xml:space="preserve"><value>Cannot restore point {0}: the lake no longer keeps every later snapshot (the oldest left is {1}), so rewinding would lose their changes.</value></data>
   <data name="Page.Catalog.Title" xml:space="preserve"><value>Table catalog</value></data>
   <data name="Page.Catalog.Subtitle" xml:space="preserve"><value>Which lake tables and columns are loaded into SQL</value></data>
   <data name="Page.Catalog.Hint" xml:space="preserve"><value>An excluded table is neither ingested nor loaded; new tables that show up in the lake are loaded automatically. It is the same setting as each table's sync in Tables.</value></data>
@@ -491,6 +495,7 @@
   <data name="Page.Settings.Validation.LeaseSeconds" xml:space="preserve"><value>The task lease must be at least 30 seconds; with less, running tasks would be treated as expired.</value></data>
   <data name="Page.Settings.Validation.Divergence" xml:space="preserve"><value>The divergence threshold must be between 0 and 100%.</value></data>
   <data name="Page.Settings.Validation.WebhookHttps" xml:space="preserve"><value>The webhook URL must be a full https:// address.</value></data>
+  <data name="Page.Settings.Validation.SourceRetentionBelowVersions" xml:space="preserve"><value>With dry-run off, source snapshot retention must be at least the parquet version days; otherwise restoring a point would need snapshots that were already deleted.</value></data>
   <data name="Page.Settings.Alerts.Enabled" xml:space="preserve"><value>Enable alerts</value></data>
   <data name="Page.Settings.PipelineLagAlertHours" xml:space="preserve"><value>Hours behind before alerting</value></data>
   <data name="Page.Settings.PipelineLagAlertHours.Hint" xml:space="preserve"><value>Alerts when a closed snapshot has waited longer than these hours on a pipeline with the scheduler on (once per episode, and again if it falls behind again). The initial load doesn't count. 0 or negative disables it.</value></data>

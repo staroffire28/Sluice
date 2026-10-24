@@ -166,6 +166,10 @@ public sealed class SettingsStore
         { TaskLeaseSeconds: < MinTaskLeaseSeconds } => "Page.Settings.Validation.LeaseSeconds",
         { ReconDivergencePct: < 0 or > 100 } => "Page.Settings.Validation.Divergence",
         { AlertWebhookUrl: { } url } when !IsHttpsUrl(url) => "Page.Settings.Validation.WebhookHttps",
+        // Borrando de verdad, la retención de origen no puede ser más corta que las versiones del
+        // parquet: restaurar un punto (o resetear) necesita releer los snapshots posteriores a él.
+        { SourceSnapshotRetentionDays: > 0 and var retention, ParquetVersionDays: > 0 and var versions, SourceSnapshotRetentionDryRun: false }
+            when retention < versions => "Page.Settings.Validation.SourceRetentionBelowVersions",
         _ => null,
     };
 
