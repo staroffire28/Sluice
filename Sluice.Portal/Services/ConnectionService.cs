@@ -187,8 +187,9 @@ public sealed class ConnectionService : IConnectionService
         var merged = Merge(existing, connection);
 
         // Otro host, cuenta, base de datos, container o almacenamiento con un job en curso: el job
-        // seguiría en el sitio viejo y el siguiente en el nuevo. Se toma el lock de ejecución de cada pipeline que la usa (por id,
-        // siempre en el mismo orden) y se mantiene hasta guardar, copia del Parquet incluida.
+        // seguiría en el sitio viejo y el siguiente en el nuevo. Se toma el lock de ejecución de cada
+        // pipeline que la usa (por id, siempre en el mismo orden) y se mantiene hasta guardar, copia del
+        // Parquet incluida.
         var locks = new List<IDisposable>();
         try
         {
