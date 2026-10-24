@@ -938,6 +938,7 @@
   <data name="Activity.Connection.Created" xml:space="preserve"><value>Connection '{1}' ({0}) created.</value></data>
   <data name="Activity.Connection.ConnectionStringConverted" xml:space="preserve"><value>Destination connection '{0}': its connection string was turned into fields.</value></data>
   <data name="Activity.Connection.ConnectionStringNeedsFields" xml:space="preserve"><value>Destination connection '{0}': its connection string used options that are no longer supported ({1}) and was removed; its pipelines won't start until its fields are filled in.</value></data>
+  <data name="Activity.Connection.FieldsRequiredHold" xml:space="preserve"><value>Pipeline {0} on hold: destination connection '{1}' used a connection string with options that are no longer supported; fill in its fields again in Destinations.</value></data>
   <data name="Activity.Connection.Updated" xml:space="preserve"><value>Connection '{1}' ({0}) updated.</value></data>
   <data name="Activity.Connection.UpdatedCopied" xml:space="preserve"><value>Connection '{1}' ({0}) updated; Parquet of {2:N0} table(s) copied to the new location.</value></data>
   <data name="Activity.Connection.NotFound" xml:space="preserve"><value>Connection {0} does not exist.</value></data>

@@ -937,6 +937,7 @@
   <data name="Activity.Connection.Created" xml:space="preserve"><value>Conexión {0} '{1}' creada.</value></data>
   <data name="Activity.Connection.ConnectionStringConverted" xml:space="preserve"><value>Conexión de destino '{0}': la cadena de conexión pasa a campos.</value></data>
   <data name="Activity.Connection.ConnectionStringNeedsFields" xml:space="preserve"><value>Conexión de destino '{0}': su cadena de conexión usaba opciones que ya no se admiten ({1}) y se ha quitado; sus pipelines no arrancan hasta que se escriban sus campos.</value></data>
+  <data name="Activity.Connection.FieldsRequiredHold" xml:space="preserve"><value>Pipeline {0} parado: la conexión de destino '{1}' usaba una cadena de conexión con opciones que ya no se admiten; vuelve a escribir sus campos en Destinos.</value></data>
   <data name="Activity.Connection.Updated" xml:space="preserve"><value>Conexión {0} '{1}' actualizada.</value></data>
   <data name="Activity.Connection.UpdatedCopied" xml:space="preserve"><value>Conexión {0} '{1}' actualizada; Parquet de {2:N0} tabla(s) copiado al sitio nuevo.</value></data>
   <data name="Activity.Connection.NotFound" xml:space="preserve"><value>La conexión {0} no existe.</value></data>
