@@ -8,7 +8,7 @@ Sluice Portal protects **operator access** (UI + management API) with a single s
 |----------|----------------------|---------|--------|
 | `UI_API_KEY` | Yes, unless `AUTH_MODE=none` | — | Shared key for `/login` and session creation. When set, UI and `/api/*` require a valid `sluice_session` cookie. A key shorter than 32 characters logs a warning at startup. |
 | `AUTH_MODE` | No | `key` | `key` requires `UI_API_KEY`. `none` is open access on purpose: no key, `/api/*` open, and the landing (`/login`) offers **Enter** instead of a key field. Any other value stops startup. |
-| `SESSION_EXPIRY_HOURS` | No | `12` | Hours until the HMAC session cookie expires. |
+| `SESSION_EXPIRY_HOURS` | No | `12` | Hours until the HMAC session cookie expires. A value below 1 stops startup. |
 | `KNOWN_PROXIES` / `KNOWN_NETWORKS` | No | — | Reverse proxies (IPs / CIDR networks) trusted for `X-Forwarded-For` / `X-Forwarded-Proto`. When unset, only loopback is trusted and a warning is logged at startup. |
 
 **Production startup rules** (when `ASPNETCORE_ENVIRONMENT` is not `Development`):
