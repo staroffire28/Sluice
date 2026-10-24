@@ -6,7 +6,8 @@
 # lease de tareas, % de divergencia) se editan en la página /settings del portal.
 # Aquí solo van la clave entre servicios y el modo/volumen.
 #
-# TRANSLATE_ENUMS (opt-in, off por defecto): traduce los optionsets de Dataverse/F&O
+# TRANSLATE_ENUMS (activo por defecto en este compose; TRANSLATE_ENUMS=false en .env lo apaga):
+# traduce los optionsets de Dataverse/F&O
 # añadiendo al final de cada tabla una columna [<col>_$label] con el ExternalValue
 # (idioma 1033, excluye sysdatastatecode), leído del GlobalOptionsetMetadata.csv del
 # snapshot más reciente. Solo lo usa la etapa SQL, así que basta ponerlo en worker-sql.
@@ -47,6 +48,11 @@ services:
       DATA_DIR: C:/data
       UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
+      # Alertas, deadman y sesión (opcionales, desde .env; ver .env.example). Vacías, no se usan.
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      DEADMAN_PING_URL: ${DEADMAN_PING_URL:-}
+      CHANGELOG_STALL_HOURS: ${CHANGELOG_STALL_HOURS:-}
+      SESSION_EXPIRY_HOURS: ${SESSION_EXPIRY_HOURS:-}
     volumes:
       - pipeline-data:C:/data
     healthcheck:
@@ -72,6 +78,7 @@ services:
       UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
       WORKER_STAGE: ingest
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}   # las etapas también envían alertas
     volumes:
       - pipeline-data:C:/data
     depends_on:
@@ -97,7 +104,8 @@ services:
       UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
       WORKER_STAGE: sql
-      TRANSLATE_ENUMS: "true"
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}   # las etapas también envían alertas
+      TRANSLATE_ENUMS: ${TRANSLATE_ENUMS:-true}
     volumes:
       - pipeline-data:C:/data
     depends_on:
@@ -120,6 +128,7 @@ services:
       UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
       WORKER_STAGE: reconcile
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}   # las etapas también envían alertas
     volumes:
       - pipeline-data:C:/data
     depends_on:
