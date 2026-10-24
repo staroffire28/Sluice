@@ -96,7 +96,8 @@
                     <FluentMenu>
                         <FluentButton slot="@FluentSlot.Trigger" Appearance="ButtonAppearance.Subtle" IconOnly="true"
                                       IconStart="@(new Icons.Regular.Size20.MoreHorizontal())"
-                                      Title="@L["Common.Actions"]" data-testid="@($"table-actions-{context.Entity}")" />
+                                      Title="@L["Common.Actions"]" aria-label="@($"{L["Common.Actions"]} {context.Entity}")"
+                                      data-testid="@($"table-actions-{context.Entity}")" />
                         <FluentMenuList>
                             <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity" TestId="@($"resync-{context.Entity}")" />
                             <FluentMenuItem data-testid="@($"analytics-{context.Entity}")" IconStart="@(new Icons.Regular.Size20.DataTrending())"

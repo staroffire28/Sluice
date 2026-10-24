@@ -68,13 +68,15 @@
                                           data-testid="@($"parquet-download-{context.Path}")"
                                           Appearance="ButtonAppearance.Subtle"
                                           IconStart="@(new Icons.Regular.Size20.ArrowDownload())"
-                                          Title="@L["Common.Download"]" />
+                                          Title="@L["Common.Download"]"
+                                          aria-label="@($"{L["Common.Download"]} {context.Path}")" />
                         }
                         @if (!context.Missing)
                         {
                             <FluentButton Appearance="ButtonAppearance.Subtle"
                                           IconStart="@(new Icons.Regular.Size20.Delete())"
                                           Title="@L["Common.Delete"]"
+                                          aria-label="@($"{L["Common.Delete"]} {context.Path}")"
                                           OnClick="@(() => ConfirmDeleteAsync(context.Path))" />
                         }
                     </TemplateColumn>

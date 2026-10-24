@@ -16,6 +16,7 @@
             @foreach (var p in DocsService.Pages)
             {
                 <a class="docs-nav__link @(p.Slug == _current ? "docs-nav__link--active" : null)"
+                   aria-current="@(p.Slug == _current ? "page" : null)"
                    href="@($"/ayuda/{p.Slug}")">@L[p.TitleKey]</a>
             }
         </nav>

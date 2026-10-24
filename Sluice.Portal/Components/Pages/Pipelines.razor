@@ -77,7 +77,8 @@
                 </TemplateColumn>
                 <TemplateColumn Title="@L["Common.Actions"]">
                     <FluentMenu>
-                        <FluentMenuButton Appearance="ButtonAppearance.Outline" data-testid="@($"actions-{context.Id}")" Label="@L["Common.Actions"]" />
+                        <FluentMenuButton Appearance="ButtonAppearance.Outline" data-testid="@($"actions-{context.Id}")" Label="@L["Common.Actions"]"
+                                          aria-label="@($"{L["Common.Actions"]} {context.Name}")" />
                         <FluentMenuList>
                             <PipelineRunActions PipelineId="@context.Id" OnCompleted="@OnRunCompleted" />
                             <FluentMenuItem data-testid="@($"edit-{context.Id}")" OnClick="@(() => Edit(context))">@L["Common.Edit"]</FluentMenuItem>

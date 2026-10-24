@@ -14,6 +14,9 @@
         <FluentButton Appearance="ButtonAppearance.Subtle" Style="white-space:nowrap;" data-testid="@($"unqueue-{PipelineId}")" OnClick="RemoveAsync">@L["Page.Pipelines.Unqueue"]</FluentButton>
     </FluentStack>
 }
+@* Resultado de quitar de la cola: región viva y destino del foco, porque el botón desaparece con
+   la etiqueta y el foco se perdía. *@
+<span role="status" tabindex="-1" class="field-hint" data-testid="@($"unqueue-status-{PipelineId}")" @ref="_status">@_result</span>
 
 @code {
     [Parameter, EditorRequired]
@@ -27,6 +30,28 @@
     [Parameter]
     public EventCallback OnChanged { get; set; }
 
+    private ElementReference _status;
+    private string? _result;
+    private bool _focusStatus;
+
+    // Un nuevo encolado borra el resultado del anterior.
+    protected override void OnParametersSet()
+    {
+        if (Queued is not null)
+        {
+            _result = null;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusStatus)
+        {
+            _focusStatus = false;
+            await _status.FocusAsync();
+        }
+    }
+
     private async Task RemoveAsync()
     {
         if (Queued is not { } queued)
@@ -38,13 +63,16 @@
         var label = JobTypeLabels.Get(L, queued.Type);
         if (Orchestration.DequeueRun(Audit.Current, PipelineId) is not null)
         {
-            await NotificationService.ShowSuccessToastAsync(string.Format(L["Page.Pipelines.Unqueued"].Value, label));
+            _result = string.Format(L["Page.Pipelines.Unqueued"].Value, label);
+            await NotificationService.ShowSuccessToastAsync(_result);
         }
         else
         {
-            await NotificationService.ShowInfoToastAsync(string.Format(L["Page.Pipelines.QueueAlreadyStarted"].Value, label));
+            _result = string.Format(L["Page.Pipelines.QueueAlreadyStarted"].Value, label);
+            await NotificationService.ShowInfoToastAsync(_result);
         }
 
+        _focusStatus = true;
         await OnChanged.InvokeAsync();
     }
 }
