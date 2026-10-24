@@ -18,6 +18,11 @@
 <FluentStack Class="page-stack" Orientation="Orientation.Vertical" VerticalGap="12">
     <PageHeader Title="@L["Page.Settings.Title"]" Subtitle="@L["Page.Settings.Subtitle"]" />
 
+    @if (_unreadable)
+    {
+        <FluentMessageBar data-testid="settings-unreadable" Intent="MessageBarIntent.Warning">@L["Page.Settings.Unreadable"]</FluentMessageBar>
+    }
+
     <PageSection Title="@L["Page.Settings.Scheduler.Title"]">
         <div class="dialog-form dialog-form--narrow">
             <FluentNumberInput TValue="int" @bind-Value="_pollMinutes" Label="@L["Page.Settings.PollMinutes"]" />
@@ -154,6 +159,12 @@
             <FluentMessageBar data-testid="settings-save-error" Intent="MessageBarIntent.Error">@_saveError</FluentMessageBar>
         }
 
+        @if (_confirmOverwrite)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Warning">@L["Page.Settings.Unreadable.ConfirmPrompt"]</FluentMessageBar>
+            <FluentButton Appearance="ButtonAppearance.Outline" data-testid="settings-overwrite-confirm" OnClick="ConfirmOverwrite">@L["Page.Settings.Unreadable.Confirm"]</FluentButton>
+        }
+
         @if (_saved)
         {
             <FluentMessageBar data-testid="settings-saved" Intent="MessageBarIntent.Success">@L["Page.Settings.Saved"]</FluentMessageBar>
@@ -181,6 +192,11 @@
         string.IsNullOrWhiteSpace(_alertWebhookUrl) ? _storedWebhookUrl : _alertWebhookUrl.Trim();
     private bool _saved;
     private string? _saveError;
+    // settings.json existe y no se puede leer: la página muestra los valores por defecto, y guardar
+    // sobrescribiría lo que tenía (el webhook, por ejemplo). Solo se guarda tras confirmarlo.
+    private bool _unreadable;
+    private bool _confirmOverwrite;
+    private bool _overwriteConfirmed;
     private bool _testingAlert;
     private AlertDeliveryResult? _testResult;
     private AlertDeliveryStatus? _delivery;
@@ -198,7 +214,7 @@
     protected override void OnInitialized()
     {
         _delivery = DeliveryStatusStore.Get();
-        var settings = SettingsStore.Get();
+        _unreadable = !SettingsStore.TryGet(out var settings);
         _pollMinutes = settings.SchedulerPollMinutes;
         _leaseSeconds = settings.TaskLeaseSeconds;
         _divergencePct = settings.ReconDivergencePct;
@@ -248,11 +264,25 @@
             return;
         }
 
+        if (_unreadable && !_overwriteConfirmed)
+        {
+            _confirmOverwrite = true;
+            return;
+        }
+
         SettingsService.Save(Audit.Current, settings);
         _storedWebhookUrl = settings.AlertWebhookUrl;
         _alertWebhookUrl = null;
         _saved = true;
         _testResult = null;
+        _unreadable = false;
+        _confirmOverwrite = false;
+    }
+
+    private void ConfirmOverwrite()
+    {
+        _overwriteConfirmed = true;
+        SaveSettings();
     }
 
     private async Task TestAlertAsync()

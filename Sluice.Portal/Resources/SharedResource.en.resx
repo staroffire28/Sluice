@@ -484,6 +484,9 @@
   <data name="Page.Dashboard.ReloadFromParquet" xml:space="preserve"><value>Reload parquet</value></data>
   <data name="Page.Dashboard.ReloadFromParquetConfirm" xml:space="preserve"><value>Reload SQL from consolidated parquet in ADLS (no CSV re-read). Continue?</value></data>
   <data name="Page.Settings.Saved" xml:space="preserve"><value>Settings saved. They apply without restart.</value></data>
+  <data name="Page.Settings.Unreadable" xml:space="preserve"><value>settings.json cannot be read: the page shows the default values, not the saved ones. Saving overwrites the file with these values and loses what it had (for example, the alert webhook).</value></data>
+  <data name="Page.Settings.Unreadable.ConfirmPrompt" xml:space="preserve"><value>settings.json cannot be read. Overwrite it with the values on this page?</value></data>
+  <data name="Page.Settings.Unreadable.Confirm" xml:space="preserve"><value>Overwrite settings.json</value></data>
   <data name="Page.Settings.Alerts.Title" xml:space="preserve"><value>Alerts</value></data>
   <data name="Page.Settings.Alerts.Hint" xml:space="preserve"><value>Sluice posts a JSON notice to this URL when a job fails, when a reconciliation exceeds the threshold, when “Compare values” finds differences, and on system problems (scheduler, possible SQL block, retention). It is usually the HTTP trigger URL of an Azure Logic App that turns each notice into an email: you can download a ready-to-deploy one below.</value></data>
   <data name="Page.Settings.Alerts.UrlRequired" xml:space="preserve"><value>Enter a webhook URL before enabling alerts.</value></data>

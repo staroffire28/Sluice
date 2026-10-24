@@ -483,6 +483,9 @@
   <data name="Page.Dashboard.ReloadFromParquet" xml:space="preserve"><value>Reload parquet</value></data>
   <data name="Page.Dashboard.ReloadFromParquetConfirm" xml:space="preserve"><value>Recarga SQL desde los parquet consolidados en ADLS (sin re-leer CSV). ¿Continuar?</value></data>
   <data name="Page.Settings.Saved" xml:space="preserve"><value>Ajustes guardados. Aplican sin reiniciar.</value></data>
+  <data name="Page.Settings.Unreadable" xml:space="preserve"><value>No se puede leer settings.json: la página muestra los valores por defecto, no los guardados. Si guardas, el fichero se sobrescribe con estos valores y se pierde lo que tenía (por ejemplo, el webhook de alertas).</value></data>
+  <data name="Page.Settings.Unreadable.ConfirmPrompt" xml:space="preserve"><value>settings.json no se puede leer. ¿Sobrescribirlo con los valores de esta página?</value></data>
+  <data name="Page.Settings.Unreadable.Confirm" xml:space="preserve"><value>Sobrescribir settings.json</value></data>
   <data name="Page.Settings.Alerts.Title" xml:space="preserve"><value>Alertas</value></data>
   <data name="Page.Settings.Alerts.Hint" xml:space="preserve"><value>Sluice envía un aviso en JSON a esta URL cuando falla un job, cuando una conciliación supera el umbral, cuando «Comparar valores» encuentra diferencias y ante problemas del sistema (scheduler, posible bloqueo en SQL, retención). Lo habitual es la URL del disparador HTTP de una Azure Logic App, que convierte cada aviso en un correo: más abajo puedes descargar una lista para desplegar.</value></data>
   <data name="Page.Settings.Alerts.UrlRequired" xml:space="preserve"><value>Indica la URL del webhook antes de activar las alertas.</value></data>
