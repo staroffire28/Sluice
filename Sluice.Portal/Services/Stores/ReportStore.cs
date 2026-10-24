@@ -204,7 +204,8 @@ public sealed class ReportStore
     private static string PointerPath(string dir, string pipelineId) => Path.Combine(dir, $"{PointerPrefix}{pipelineId}.json");
 
     // Sin puntero (reportes de antes de él) o si apunta a un fichero que ya no está, se busca entre
-    // todos una vez y se deja el puntero para la siguiente.
+    // todos una vez y se deja el puntero para la siguiente. Lo encontrado así manda: sustituye al puntero
+    // aunque este sea más reciente, porque ya no sirve.
     private T? GetLatest<T>(string kind, string pipelineId, Func<T, string> idOf, Func<T, string> pipelineOf, Func<T, DateTimeOffset> createdAt)
         where T : class
     {
@@ -232,7 +233,7 @@ public sealed class ReportStore
             {
                 try
                 {
-                    UpdatePointer(dir, pipelineId, idOf(latest), createdAt(latest));
+                    AtomicJsonFile.Write(PointerPath(dir, pipelineId), new LatestPointer(idOf(latest), createdAt(latest)));
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
