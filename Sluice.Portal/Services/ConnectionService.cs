@@ -18,8 +18,9 @@ public interface IConnectionService
     Connection Create(AuditActor actor, Connection connection);
 
     // Si un origen cambia dónde guarda el Parquet (parquet_storage), copia antes al sitio nuevo los
-    // consolidados de sus pipelines. CopiedTables: cuántos se copiaron. Cambiar el host, la cuenta o
-    // el almacenamiento con un job en curso en un pipeline que la usa lanza PipelineBusyException.
+    // consolidados de sus pipelines. CopiedTables: cuántos se copiaron. Cambiar el host, la cuenta, la
+    // base de datos, el container o el almacenamiento con un job en curso en un pipeline que la usa
+    // lanza PipelineBusyException.
     Task<(Connection? Connection, int CopiedTables)> UpdateAsync(AuditActor actor, string id, Connection connection, CancellationToken cancellationToken = default);
 
     // null si se borró; si no, el motivo.
