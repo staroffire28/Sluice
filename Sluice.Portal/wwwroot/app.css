@@ -41,9 +41,10 @@ html, body {
 }
 
 /* Cabecera: los botones de idioma, tema y cerrar sesión no se encogen ni salen de la pantalla, y
-   la insignia de estado no parte su texto. En un móvil (<=600px) se ocultan el nombre de la app
-   (queda el logo) y la insignia "Demo" para que quepan el estado y "Acceso abierto", que es un
-   aviso de seguridad. */
+   la insignia de estado no se encoge ni parte su texto. En un móvil (<=600px) se ocultan el
+   nombre de la app (queda el logo) y la insignia "Demo" para que quepan el estado y "Acceso
+   abierto", que es un aviso de seguridad; en el ancho de reflow de WCAG (320px) se oculta también
+   el logo. */
 .app-header__start {
     min-width: 0;
 }
@@ -66,12 +67,19 @@ html, body {
 }
 
 #health-pill {
+    flex: none;
     white-space: nowrap;
 }
 
 @media (max-width: 600px) {
     .app-header__title,
     .demo-badge {
+        display: none;
+    }
+}
+
+@media (max-width: 360px) {
+    .app-header__logo {
         display: none;
     }
 }
