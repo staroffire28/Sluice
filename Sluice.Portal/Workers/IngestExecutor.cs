@@ -623,7 +623,10 @@ public sealed class IngestExecutor : IIngestExecutor
         // avanzara, esos datos se perderían en silencio. Una tabla rota de forma permanente se
         // puede pausar para dejar avanzar al resto.
         var processedUpTo = entityFailures.Count > 0 ? pipelineState.LastProcessedSnapshot : lastSnapshot;
-        if (entityFailures.Count > 0 && lastSnapshot is not null)
+        // Si solo fallaron snapshots de backfill no se retiene nada nuevo: la tabla sigue en
+        // PendingBackfill y el siguiente job la reintenta.
+        if (entityFailures.Count > 0 && lastSnapshot is not null
+            && !string.Equals(lastSnapshot, pipelineState.LastProcessedSnapshot, StringComparison.Ordinal))
         {
             _jobs.AppendEvent(task.JobId, EventLevel.Warning,
                 $"{entityFailures.Count} tabla(s) con fallos: el snapshot {lastSnapshot} no se marca como procesado y se reintentará en el próximo run.",
