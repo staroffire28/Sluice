@@ -111,6 +111,7 @@ public sealed class ConnectionService : IConnectionService
             throw new InvalidOperationException($"Id de conexión no válido: '{connection.Id}'.");
         }
 
+        RejectConnectionString(connection.Config);
         _store.SaveNew(connection);
         return SecretMasker.Mask(connection);
     }
@@ -119,6 +120,7 @@ public sealed class ConnectionService : IConnectionService
     // el client_secret de Azure en un origen que pasa a local) y no se arrastra.
     private static Connection Merge(Connection existing, Connection connection)
     {
+        RejectConnectionString(connection.Config);
         var merged = connection with
         {
             Id = existing.Id,
@@ -129,7 +131,7 @@ public sealed class ConnectionService : IConnectionService
 
         // Al guardar, un secreto que no viaja porque cambió su destino es un error explícito, no una
         // conexión que falla después sin contraseña.
-        if (SameType(existing, connection) && ChangedSecretTarget(existing.Config, connection.Config) is { } target)
+        if (SameType(existing, connection) && SecretDropReason(existing.Config, connection.Config) is { } target)
         {
             var missing = existing.Config
                 .Where(e => SecretMasker.IsSecretKey(e.Key) && !string.IsNullOrEmpty(e.Value)
@@ -143,7 +145,24 @@ public sealed class ConnectionService : IConnectionService
             }
         }
 
+        // Un destino que la migración marcó vuelve a arrancar en cuanto tiene todos sus campos.
+        if (merged.Config.ContainsKey(ConnectionMigrations.FieldsRequiredKey)
+            && new[] { "host", "database", "user", "password" }.All(key => !string.IsNullOrWhiteSpace(merged.Config.GetValueOrDefault(key))))
+        {
+            merged.Config.Remove(ConnectionMigrations.FieldsRequiredKey);
+        }
+
         return merged;
+    }
+
+    // La cadena de conexión SQL libre ya no se admite: apuntaba a cualquier servidor con cualquier
+    // autenticación. Las guardadas las pasa a campos ConnectionMigrations.
+    private static void RejectConnectionString(IReadOnlyDictionary<string, string?> config)
+    {
+        if (config.Keys.Any(key => string.Equals(key, "connection_string", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException("connection_string ya no se admite: usa host, database, user y password.");
+        }
     }
 
     private static bool SameType(Connection a, Connection b) =>
@@ -312,11 +331,24 @@ public sealed class ConnectionService : IConnectionService
         return null;
     }
 
+    // Por qué el secreto guardado no se reutiliza: otro destino, o pasar a confiar en cualquier
+    // certificado del servidor (un MITM recibiría la contraseña guardada sin que nadie la escribiera).
+    private static string? SecretDropReason(
+        IReadOnlyDictionary<string, string?> existing,
+        IReadOnlyDictionary<string, string?> incoming)
+    {
+        static bool Trusts(IReadOnlyDictionary<string, string?> config) =>
+            bool.TryParse(config.GetValueOrDefault("trust_server_certificate"), out var trust) && trust;
+
+        return ChangedSecretTarget(existing, incoming)
+            ?? (Trusts(incoming) && !Trusts(existing) ? "trust_server_certificate" : null);
+    }
+
     private static Dictionary<string, string?> MergeConfig(
         IReadOnlyDictionary<string, string?> existing,
         IReadOnlyDictionary<string, string?> incoming)
     {
-        var keepSecrets = ChangedSecretTarget(existing, incoming) is null;
+        var keepSecrets = SecretDropReason(existing, incoming) is null;
         var merged = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         foreach (var (key, value) in existing)
         {
