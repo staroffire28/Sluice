@@ -44,9 +44,16 @@ html, body {
    la insignia de estado no se encoge ni parte su texto. En un móvil (<=600px) se ocultan el
    nombre de la app (queda el logo) y la insignia "Demo" para que quepan el estado y "Acceso
    abierto", que es un aviso de seguridad; en el ancho de reflow de WCAG (320px) se oculta también
-   el logo. */
+   el logo. Si el estado es largo ("Comprobando…", "Sin conexión"), "Acceso abierto" se recorta
+   con puntos suspensivos (el texto completo sigue en su title) en vez de invadir los botones. */
 .app-header__start {
     min-width: 0;
+}
+
+.app-header__start .open-access-badge {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .app-header__end {
