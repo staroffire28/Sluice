@@ -325,7 +325,8 @@ public static class ManagementEndpoints
         });
         api.MapGet("/jobs/export", (string? pipelineId, JobStatus? status, DateOnly? from, DateOnly? to, IJobService svc, IStringLocalizer<SharedResource> l) =>
         {
-            var jobs = svc.List(1, int.MaxValue, NullIfBlank(pipelineId), status, new DateRange(from, to));
+            // Del índice: el CSV no necesita los eventos ni las tablas de cada job.
+            var jobs = svc.ListIndex(NullIfBlank(pipelineId), status, new DateRange(from, to));
             return Csv("jobs", writer =>
             {
                 CsvWriter.WriteRow(writer, [l["Page.Jobs.ColumnJob"].Value, l["Common.Pipeline"].Value, l["Page.Jobs.ColumnType"].Value, l["Common.Status"].Value, l["Page.Jobs.ColumnStarted"].Value, l["Page.Jobs.ColumnFinished"].Value]);
