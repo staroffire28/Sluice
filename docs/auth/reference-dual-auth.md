@@ -51,11 +51,11 @@ Login page (no session required). Exempt from auth middleware.
 
 ### `GET /health`
 
-Public health check. Returns `{ "status": "ok" }`.
+Public health check. Returns `{ "status": "ok" }`. Used by the Docker healthcheck, and the only route a worker (`WORKER_STAGE`) answers.
 
 ### `GET /internal/health`
 
-Anonymous liveness endpoint used by the Docker healthcheck. Requires no key or session.
+Anonymous liveness endpoint, same answer as `/health`. Requires no key or session. Orchestrator only.
 
 ## Session cookie
 
