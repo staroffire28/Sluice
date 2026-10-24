@@ -98,6 +98,7 @@
   <data name="Common.Status.RetentionRetained" xml:space="preserve"><value>Retenido</value></data>
   <data name="Common.Status.RetentionEligible" xml:space="preserve"><value>Elegible purga</value></data>
   <data name="Common.Status.RetentionProtected" xml:space="preserve"><value>Protegido</value></data>
+  <data name="Common.ConnectionType.Local" xml:space="preserve"><value>Carpeta local</value></data>
   <data name="Common.JobType.Incremental" xml:space="preserve"><value>Incremental</value></data>
   <data name="Common.JobType.Force" xml:space="preserve"><value>Forzar</value></data>
   <data name="Common.JobType.Reconcile" xml:space="preserve"><value>Reconciliar</value></data>
@@ -696,6 +697,9 @@
   <data name="Page.JobDetail.TimelineSnapshots" xml:space="preserve"><value>{0} snapshots procesados</value></data>
   <data name="Page.JobDetail.TimelineMerged" xml:space="preserve"><value>{0} entidades cargadas</value></data>
   <data name="Page.JobDetail.TimelineCompared" xml:space="preserve"><value>{0} entidades conciliadas</value></data>
+  <data name="Page.JobDetail.TimelineSnapshotsOne" xml:space="preserve"><value>1 snapshot procesado</value></data>
+  <data name="Page.JobDetail.TimelineMergedOne" xml:space="preserve"><value>1 entidad cargada</value></data>
+  <data name="Page.JobDetail.TimelineComparedOne" xml:space="preserve"><value>1 entidad conciliada</value></data>
   <data name="Page.JobDetail.EventCount" xml:space="preserve"><value>{0} eventos</value></data>
   <data name="Page.JobDetail.EventCountOne" xml:space="preserve"><value>1 evento</value></data>
   <data name="Page.JobDetail.WarningCount" xml:space="preserve"><value>{0} avisos</value></data>
