@@ -188,20 +188,26 @@ public sealed class PipelineSchedulerService : BackgroundService
         var failed = 0;
         foreach (var pipeline in _pipelines.List().Where(p => p.Enabled))
         {
-            if (_stateStore.GetOrCreate(pipeline.Id).RestoreInProgress is null)
-            {
-                _restoreHoldNoticed.Remove(pipeline.Id);
-                _restoreHoldAlerted.Remove(pipeline.Id);
-            }
-
             if (_jobs.ListRunning().Any(j => j.PipelineId == pipeline.Id))
             {
+                // Con un job en curso no hay restore a medias (no arranca nada mientras haya uno
+                // pendiente): el episodio terminó.
+                _restoreHoldNoticed.Remove(pipeline.Id);
+                _restoreHoldAlerted.Remove(pipeline.Id);
                 continue;
             }
 
             evaluated++;
             try
             {
+                // Dentro del try: un pipeline_state.json ilegible cuenta como fallo de este pipeline,
+                // no tumba el poll de los demás.
+                if (_stateStore.GetOrCreate(pipeline.Id).RestoreInProgress is null)
+                {
+                    _restoreHoldNoticed.Remove(pipeline.Id);
+                    _restoreHoldAlerted.Remove(pipeline.Id);
+                }
+
                 var catalog = await _snapshots.GetCatalogAsync(pipeline.Id, ct);
                 try
                 {
@@ -293,18 +299,34 @@ public sealed class PipelineSchedulerService : BackgroundService
                 continue;
             }
 
+            Job job;
             try
             {
-                var job = await _orchestration.StartQueuedAsync(pipeline.Id, queued, ct);
+                job = await _orchestration.StartQueuedAsync(pipeline.Id, queued, ct);
                 _runQueue.Complete(pipeline.Id);
-                var requestedAt = queued.RequestedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
-                _jobs.AppendEvent(job.Id, EventLevel.Info, $"Lanzado desde la cola (pedido el {requestedAt} UTC).", null, "Event.Job.LaunchedFromQueue", requestedAt);
+                _restoreHoldNoticed.Remove(pipeline.Id);
+                _restoreHoldAlerted.Remove(pipeline.Id);
             }
             catch (PipelineBusyException ex)
             {
                 // Un job recién cancelado aún detiene su stage: vuelve a la cola para el próximo poll.
                 _runQueue.Release(pipeline.Id);
                 _logger.LogInformation("Queued run waits {PipelineId}: {Reason}", pipeline.Id, ex.Message);
+                continue;
+            }
+            catch (RestorePendingException ex)
+            {
+                // Restore a medias: espera en la cola hasta que se termine, sin alertar. Un solo aviso
+                // por episodio, compartido con el del auto-run.
+                _runQueue.Release(pipeline.Id);
+                _logger.LogInformation("Queued run waits {PipelineId}: {Reason}", pipeline.Id, ex.Message);
+                if (_restoreHoldNoticed.Add(pipeline.Id))
+                {
+                    _activity.LogSystem("restore.pending", $"Pipeline {pipeline.Name} parado: {ex.Message}", pipeline.Id, null, "warning",
+                        "Activity.Restore.Pending", pipeline.Name, ex.Message);
+                }
+
+                continue;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -314,6 +336,19 @@ public sealed class PipelineSchedulerService : BackgroundService
                 var message = $"No se pudo lanzar {queued.Type} en cola del pipeline {pipeline.Id}: {ex.Message}";
                 _logger.LogWarning(ex, "Queued run failed for pipeline {PipelineId}", pipeline.Id);
                 await _alerts.SendAsync(message, ct);
+                continue;
+            }
+
+            // Fuera del try de arriba: el job ya arrancó, así que un fallo al anotarlo no es un
+            // "no se pudo lanzar".
+            try
+            {
+                var requestedAt = queued.RequestedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+                _jobs.AppendEvent(job.Id, EventLevel.Info, $"Lanzado desde la cola (pedido el {requestedAt} UTC).", null, "Event.Job.LaunchedFromQueue", requestedAt);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Queued run {JobId} started, but its queue event could not be saved", job.Id);
             }
         }
     }
