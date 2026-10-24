@@ -194,9 +194,9 @@ public sealed class ConnectionService : IConnectionService
         {
             if (ChangedSecretTarget(existing.Config, merged.Config) is not null
                 || ParquetStorageOf(existing) != ParquetStorageOf(merged)
-                || !string.Equals(ParquetContainerOf(existing), ParquetContainerOf(merged), StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(existing.Config.GetValueOrDefault("database"), merged.Config.GetValueOrDefault("database"), StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(existing.Config.GetValueOrDefault("container"), merged.Config.GetValueOrDefault("container"), StringComparison.OrdinalIgnoreCase))
+                || !SameTarget(ParquetContainerOf(existing), ParquetContainerOf(merged))
+                || !SameTarget(existing.Config.GetValueOrDefault("database"), merged.Config.GetValueOrDefault("database"))
+                || !SameTarget(existing.Config.GetValueOrDefault("container"), merged.Config.GetValueOrDefault("container")))
             {
                 foreach (var pipelineId in _pipelines.ListAll()
                     .Where(p => p.SourceId == id || p.DestinationId == id)
@@ -237,6 +237,10 @@ public sealed class ConnectionService : IConnectionService
         AdlsClientFactory.KeepsParquetOnPortal(connection)
             ? AdlsClientFactory.PortalParquetStorage
             : AdlsClientFactory.AdlsParquetStorage;
+
+    // Una clave ausente y un valor vacío (lo que envía el formulario) apuntan al mismo sitio.
+    private static bool SameTarget(string? a, string? b) =>
+        string.Equals(string.IsNullOrWhiteSpace(a) ? null : a.Trim(), string.IsNullOrWhiteSpace(b) ? null : b.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private static string? ParquetContainerOf(Connection connection) =>
         connection.Config.GetValueOrDefault("parquet_container") ?? connection.Config.GetValueOrDefault("destination_container");
