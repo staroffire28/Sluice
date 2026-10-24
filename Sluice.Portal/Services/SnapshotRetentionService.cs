@@ -174,12 +174,13 @@ public sealed class SnapshotRetentionService
                 var allSnapshots = await adls.ListSnapshotFoldersAsync(cancellationToken);
                 var currentFolder = await adls.GetSettledSnapshotAsync(cancellationToken);
                 var state = _pipelines.GetState(pipeline.Id);
+                var floor = SharedLastProcessed(pipeline.SourceId);
                 var selection = SnapshotSelector.Select(
                     allSnapshots,
-                    state.LastProcessedSnapshot,
+                    floor,
                     currentFolder);
 
-                var analysis = Analyze(now, settings, allSnapshots, state.LastProcessedSnapshot, selection);
+                var analysis = Analyze(now, settings, allSnapshots, floor, selection);
                 if (analysis.EligibleForPurge.Count == 0)
                 {
                     continue;
@@ -212,12 +213,12 @@ public sealed class SnapshotRetentionService
                         break;
                     }
 
-                    var stateNow = _pipelines.GetState(pipeline.Id);
+                    var floorNow = SharedLastProcessed(pipeline.SourceId);
                     var selectionNow = SnapshotSelector.Select(
                         allSnapshots,
-                        stateNow.LastProcessedSnapshot,
+                        floorNow,
                         currentFolder);
-                    if (!Analyze(now, settings, allSnapshots, stateNow.LastProcessedSnapshot, selectionNow)
+                    if (!Analyze(now, settings, allSnapshots, floorNow, selectionNow)
                         .EligibleForPurge.Contains(folder, StringComparer.Ordinal))
                     {
                         continue;
@@ -306,6 +307,28 @@ public sealed class SnapshotRetentionService
             PipelinesSkippedCertification = totalSkippedCert,
             DryRun = settings.SourceSnapshotRetentionDryRun,
         };
+    }
+
+    // Varios pipelines pueden leer la misma fuente: el suelo de la purga es el snapshot procesado
+    // más antiguo entre todos ellos (activos o no). Si alguno aún no tiene estado, null: no se purga.
+    private string? SharedLastProcessed(string sourceId)
+    {
+        string? floor = null;
+        foreach (var pipeline in _pipelines.List().Where(p => p.SourceId == sourceId))
+        {
+            var last = _pipelines.GetState(pipeline.Id).LastProcessedSnapshot;
+            if (string.IsNullOrWhiteSpace(last))
+            {
+                return null;
+            }
+
+            if (floor is null || string.CompareOrdinal(last, floor) < 0)
+            {
+                floor = last;
+            }
+        }
+
+        return floor;
     }
 
     public static async Task<ParquetCertificationResult> CertifyParquetAsync(
