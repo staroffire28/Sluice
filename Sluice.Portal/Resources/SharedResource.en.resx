@@ -916,6 +916,7 @@
   <data name="Activity.Scheduler.Error" xml:space="preserve"><value>The scheduler failed on pipeline {0}: {1}</value></data>
   <data name="Activity.Pipeline.Lag" xml:space="preserve"><value>Pipeline {0} is behind: {1:N0} closed snapshot(s) not processed; the oldest ({2}) has been waiting for {3:0} h (threshold {4} h).</value></data>
   <data name="Activity.Snapshot.Incomplete" xml:space="preserve"><value>Pipeline {0} on hold: snapshot {1} has been closed but incomplete for {2} ({3}). Nothing else is processed until the Synapse Link export completes; check the export.</value></data>
+  <data name="Activity.Changelog.Blocked" xml:space="preserve"><value>Pipeline {0} on hold: the Synapse Link changelog has blocked it for {1} ({2}). Nothing is processed until the changelog names an existing folder; check the export.</value></data>
   <data name="Activity.Retention.Sweep" xml:space="preserve"><value>Retention: {0:N0} jobs, {1:N0} reports, {2:N0} tasks, {3:N0} runs, {4:N0} staging, {5:N0} activity logs deleted (age {6}d, floor {7}/pipeline).</value></data>
   <data name="Activity.Retention.Error" xml:space="preserve"><value>The retention sweep failed: {0}</value></data>
   <data name="Activity.SnapshotRetention.Error" xml:space="preserve"><value>The snapshot retention sweep failed: {0}</value></data>
