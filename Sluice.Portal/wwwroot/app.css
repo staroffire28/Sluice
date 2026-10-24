@@ -52,6 +52,19 @@ html, body {
     flex: none;
 }
 
+/* Los botones sutiles pintan el icono con colorNeutralForeground2 (#424242 en claro: 1,9:1 sobre
+   la cabecera de marca). Dentro de la cabecera usan los colores de la hamburguesa de Fluent: el
+   texto sobre marca y, al pasar el ratón, el fondo de marca más oscuro. */
+.app-header__end fluent-button {
+    --colorNeutralForeground2: var(--colorNeutralForegroundOnBrand);
+    --colorNeutralForeground2Hover: var(--colorNeutralForegroundOnBrand);
+    --colorNeutralForeground2Pressed: var(--colorNeutralForegroundOnBrand);
+    --colorNeutralForeground2BrandHover: var(--colorNeutralForegroundOnBrand);
+    --colorNeutralForeground2BrandPressed: var(--colorNeutralForegroundOnBrand);
+    --colorSubtleBackgroundHover: var(--colorBrandBackgroundHover);
+    --colorSubtleBackgroundPressed: var(--colorBrandBackgroundPressed);
+}
+
 #health-pill {
     white-space: nowrap;
 }
