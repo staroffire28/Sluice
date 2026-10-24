@@ -29,7 +29,7 @@ El trabajo fluye por una **cola basada en archivos**: cada tarea es un archivo J
 | Página | Ruta | Qué haces ahí |
 |---|---|---|
 | Panel | `/` | Salud, cola, workers; lanzar y cancelar corridas. Mientras ninguna ejecución haya cargado tablas, muestra **Primeros pasos**: conectar origen y destino, crear un pipeline, elegir tablas (opcional) y ejecutarlo, cada paso con su enlace. |
-| Jobs | `/jobs` | Historial de corridas (filtros de pipeline, estado y fechas Desde/Hasta); abrir detalle; descargar reporte PDF/JSON; **Exportar CSV** con los filtros aplicados. La columna *Trabajo* muestra el id corto (el sufijo final); el id completo aparece al pasar el ratón, en el detalle y en el CSV. |
+| Jobs | `/jobs` | Historial de corridas (filtros de pipeline, estado y fechas Desde/Hasta); abrir detalle; descargar reporte PDF/JSON; **Exportar CSV** con los filtros aplicados. La columna *Trabajo* muestra el id corto (el sufijo final); el id completo aparece al pasar el ratón, en el detalle y en el CSV. Las fechas, el filtro Desde/Hasta (días completos) y el CSV usan la zona horaria de tu navegador. |
 | Detalle del job | `/jobs/{id}` | Progreso en vivo: etapas, resultados por tabla, línea de tiempo; descargar el reporte PDF. |
 | Tablas | `/tables` | Conteos de filas, watermarks, último dato (resaltado tras los *Días sin datos*, ver Ajustes) y estado de carga por tabla; **Re-sincronizar** cualquier tabla desde su Parquet. |
 | Orígenes | `/sources` | Conexiones de origen ADLS (crear, probar, editar, eliminar). |
