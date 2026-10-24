@@ -190,6 +190,10 @@ public sealed class PipelineSchedulerService : BackgroundService
         {
             if (_jobs.ListRunning().Any(j => j.PipelineId == pipeline.Id))
             {
+                // Con un job en curso no hay restore a medias (no arranca nada mientras haya uno
+                // pendiente): el episodio terminó.
+                _restoreHoldNoticed.Remove(pipeline.Id);
+                _restoreHoldAlerted.Remove(pipeline.Id);
                 continue;
             }
 
@@ -301,6 +305,7 @@ public sealed class PipelineSchedulerService : BackgroundService
                 job = await _orchestration.StartQueuedAsync(pipeline.Id, queued, ct);
                 _runQueue.Complete(pipeline.Id);
                 _restoreHoldNoticed.Remove(pipeline.Id);
+                _restoreHoldAlerted.Remove(pipeline.Id);
             }
             catch (PipelineBusyException ex)
             {
