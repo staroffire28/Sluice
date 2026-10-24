@@ -57,6 +57,10 @@ public static class ManagementEndpoints
             {
                 return (await svc.UpdateAsync(AuditActor.FromHttp(http), id, connection, ct)).Connection is { } c ? Results.Ok(c) : Results.NotFound();
             }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
+            }
             catch (InvalidOperationException ex)
             {
                 return Results.BadRequest(new { error = ex.Message });
@@ -97,11 +101,15 @@ public static class ManagementEndpoints
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid pipeline.");
             }
         });
-        api.MapPut("/pipelines/{id}", (string id, PipelineModel pipeline, HttpContext http, IPipelineService svc) =>
+        api.MapPut("/pipelines/{id}", async (string id, PipelineModel pipeline, HttpContext http, IPipelineService svc, CancellationToken ct) =>
         {
             try
             {
-                return svc.Update(AuditActor.FromHttp(http), id, pipeline) is { } p ? Results.Ok(p) : Results.NotFound();
+                return await svc.UpdateAsync(AuditActor.FromHttp(http), id, pipeline, ct) is { } p ? Results.Ok(p) : Results.NotFound();
+            }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
             }
             catch (InvalidOperationException ex)
             {
