@@ -38,6 +38,10 @@ public sealed class PipelineSchedulerService : BackgroundService
     // el estado del pipeline ya no tiene el restore a medias.
     private readonly HashSet<string> _restoreHoldNoticed = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _restoreHoldAlerted = new(StringComparer.OrdinalIgnoreCase);
+    // Fallo del scheduler en un pipeline: lo mismo, una vez por episodio. Se rearman cuando el pipeline
+    // vuelve a evaluarse sin error.
+    private readonly HashSet<string> _schedulerErrorNoticed = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _schedulerErrorAlerted = new(StringComparer.OrdinalIgnoreCase);
     private bool _alertDeliveryFailedThisPoll;
 
     public PipelineSchedulerService(
@@ -200,6 +204,7 @@ public sealed class PipelineSchedulerService : BackgroundService
             }
 
             evaluated++;
+            var pipelineFailed = false;
             try
             {
                 // Dentro del try: un pipeline_state.json ilegible cuenta como fallo de este pipeline,
@@ -272,13 +277,33 @@ public sealed class PipelineSchedulerService : BackgroundService
                     _restoreHoldAlerted.Add(pipeline.Id);
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
+                // La cancelación del apagado no entra aquí: no es un fallo del pipeline. El fallo se
+                // registra y alerta una vez por episodio (la alerta cuenta solo si llega al webhook), no
+                // en cada poll; se rearma cuando el pipeline vuelve a evaluarse sin error.
                 failed++;
+                pipelineFailed = true;
                 _logger.LogWarning(ex, "Scheduler failed for pipeline {PipelineId}", pipeline.Id);
-                _activity.LogSystem("scheduler.error", $"El scheduler falló en el pipeline {pipeline.Id}: {ex.Message}", pipeline.Id, null, "error",
-                    "Activity.Scheduler.Error", pipeline.Id, ex.Message);
-                await _alerts.SendAsync($"Scheduler failed for {pipeline.Id}: {ex.Message}", ct);
+                if (_schedulerErrorNoticed.Add(pipeline.Id))
+                {
+                    _activity.LogSystem("scheduler.error", $"El scheduler falló en el pipeline {pipeline.Id}: {ex.Message}", pipeline.Id, null, "error",
+                        "Activity.Scheduler.Error", pipeline.Id, ex.Message);
+                }
+
+                if (!_schedulerErrorAlerted.Contains(pipeline.Id)
+                    && await TrySendPendingAlertAsync($"Scheduler failed for {pipeline.Id}: {ex.Message}", ct))
+                {
+                    _schedulerErrorAlerted.Add(pipeline.Id);
+                }
+            }
+            finally
+            {
+                if (!pipelineFailed)
+                {
+                    _schedulerErrorNoticed.Remove(pipeline.Id);
+                    _schedulerErrorAlerted.Remove(pipeline.Id);
+                }
             }
         }
 
