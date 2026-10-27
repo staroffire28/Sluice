@@ -157,6 +157,9 @@ public sealed class PipelineService : IPipelineService
             _stateStore.Delete(id);
         }
 
+        // Las copias locales de sus consolidados (Pipeline.ConsolidatedCache) solo ocuparían disco.
+        new Pipeline.ConsolidatedCache(_options.DataDir).RemovePipeline(id);
+
         // Sin pipeline no hay nada que ejecutar, y otro creado luego con el mismo id no debe heredarlo.
         _runQueue?.Discard(actor, id, "el pipeline se borró");
         return null;

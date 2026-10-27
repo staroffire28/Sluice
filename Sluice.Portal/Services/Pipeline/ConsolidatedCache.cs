@@ -57,6 +57,31 @@ public sealed class ConsolidatedCache(string dataDir)
         Commit(temp, path, remote);
     }
 
+    // Una copia que deja de servir: la tabla se restaura a otro punto o se archiva. Una copia vieja nunca
+    // se usaría (otro ETag), pero ocuparía disco.
+    public void Remove(string pipelineId, string entity)
+    {
+        var path = GetPath(pipelineId, entity);
+        // Sin caché (p. ej. el parquet en el disco del portal) no hay carpeta, y File.Delete lanza.
+        if (!Directory.Exists(Path.GetDirectoryName(path)))
+        {
+            return;
+        }
+
+        File.Delete(MetadataPath(path));
+        File.Delete(path);
+    }
+
+    // Todas las copias del pipeline: al resetearlo o borrarlo.
+    public void RemovePipeline(string pipelineId)
+    {
+        var directory = Path.GetDirectoryName(GetPath(pipelineId, "_"))!;
+        if (Directory.Exists(directory))
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     // Primero se quita el .json viejo y al final se escribe el nuevo: si el proceso cae entre medias,
     // queda una copia sin metadatos, que no se usa. Si falla antes, el .json viejo no casa con el ETag
     // nuevo del remoto. En los dos casos el run siguiente lo baja.
