@@ -16,7 +16,7 @@ The portal is light; the heavy systems (SQL Server, ADLS) are external. These fi
 | Minimum (PoC / low volume) | 2 | 4 GB | 20 GB |
 | Recommended (production) | 4–8 | 16 GB | 100 GB+ SSD |
 
-- **Disk** is dominated by the `pipeline-data` volume (jobs, reports, parquet staging). It is bounded by the retention setting (default 90 days). Use SSD for the queue.
+- **Disk** is dominated by the `pipeline-data` volume (jobs, reports, parquet staging). It is bounded by the retention setting (default 90 days), except the local copy of each consolidated Parquet kept in ADLS, which takes as much as those files (see *Local volume* under Retention in the reference). Use SSD for the queue.
 - **RAM** peaks during parquet consolidation (one snapshot at a time). 16 GB is comfortable for parallel pipelines.
 - SQL Server and ADLS run elsewhere and are not counted here.
 
