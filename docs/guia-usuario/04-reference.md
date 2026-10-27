@@ -81,7 +81,7 @@ A janitor caps the volume's growth. The **job is the unit of retention**: an old
 
 A second janitor purges **already processed** CSV folders in the Synapse Link source container. When several pipelines read the same source, a folder counts as processed only once every one of them (enabled or not) has processed it, and nothing is purged while any of them has a running job. Consolidated parquet (in its dedicated container or on the portal disk) is the recovery artifact.
 
-- **Always kept**: the last 14 processed snapshots (floor K), pending or in-export snapshots, `Changelog/`, CDM metadata and any folder not named like a Synapse Link snapshot (`YYYY-MM-DDTHH.MM.SSZ`).
+- **Always kept**: the last 14 processed snapshots (floor K), pending or in-export snapshots, every snapshot from the oldest one a resumed table of a pipeline reading the source still has to re-read, `Changelog/`, CDM metadata and any folder not named like a Synapse Link snapshot (`YYYY-MM-DDTHH.MM.SSZ`).
 - **Knob**: `SourceSnapshotRetentionDays` in `/settings` (default 30). `0` or negative disables purging.
 - **Cadence**: every 6 hours, on the orchestrator only; logged as `snapshot-retention.sweep`.
 - **Recovery after purge**: use **Force** (or `POST /api/pipelines/{id}/reload-from-parquet`, same path) to reload SQL from consolidated parquet. Incremental still reads new CSV snapshots from ADLS.
