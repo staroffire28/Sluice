@@ -108,7 +108,12 @@ public sealed class JobStore : JsonFileStore<Job>
     {
         lock (_indexLock)
         {
-            _index.Remove(id);
+            // Se invalida sin quitarla: ListIndex la relee, y si no puede leerla en ese momento se
+            // queda con la última. Un fichero borrado sale por el barrido de los que ya no están.
+            if (_index.TryGetValue(id, out var cached))
+            {
+                _index[id] = cached with { WriteTime = default };
+            }
         }
     }
 

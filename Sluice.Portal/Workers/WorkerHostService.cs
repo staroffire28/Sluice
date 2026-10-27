@@ -183,7 +183,19 @@ public sealed class WorkerHostService : BackgroundService
             }
 
             await StopHeartbeatAsync();
-            var job = await _tasks.CompleteAsync(task.Id, stage, workerId, ct);
+            PipelineTask? job;
+            try
+            {
+                job = await _tasks.CompleteAsync(task.Id, stage, workerId, ct);
+            }
+            catch (IOException ex)
+            {
+                // Lock de la tarea ocupado: el stage terminó bien, así que no es un fallo. La tarea
+                // se queda en claimed/ sin latido; al vencer el lease el reclaim la devuelve a pending.
+                _logger.LogWarning(ex, "No se pudo completar la tarea {TaskId} del stage {Stage}: lock ocupado; se reclamará al vencer el lease.", task.Id, stage);
+                return;
+            }
+
             if (job is not null)
             {
                 await _router.RouteCompletedTaskAsync(job, ct);

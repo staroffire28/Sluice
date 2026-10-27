@@ -82,10 +82,10 @@ public sealed class TaskStore : ITaskStore
                 await using (var pending = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Delete))
                 {
                     task = await JsonSerializer.DeserializeAsync<PipelineTask>(pending, JsonDefaults.Options, cancellationToken);
-                    // Un pendiente con lease es un reclaim a medio camino (movido, aún sin
-                    // limpiar): reclamarlo dejaría en claimed/ un lease vencido que otro
-                    // reclaim devolvería a pending. Se toma en el siguiente intento.
-                    if (task is null || task.LeaseExpiresAt is not null)
+                    // Un pendiente que aún lleva lease bajo el lock es un reclaim que cayó entre
+                    // moverlo y limpiarlo (uno en curso tiene el lock hasta escribir): se reclama
+                    // como cualquier otro, el lease nuevo sustituye al vencido.
+                    if (task is null)
                     {
                         continue;
                     }
@@ -258,8 +258,8 @@ public sealed class TaskStore : ITaskStore
                     continue;
                 }
 
-                // Solo llega aquí quien ganó el move. Un pendiente nunca debe llevar lease:
-                // TryClaimAsync salta los que aún lo tienen hasta que esta limpieza termina.
+                // Solo llega aquí quien ganó el move. Un pendiente no debe llevar lease; si esta
+                // limpieza no llega a escribirse, TryClaimAsync lo reclama igualmente.
                 var reclaimed = current with
                 {
                     Status = PipelineTaskStatus.Pending,
