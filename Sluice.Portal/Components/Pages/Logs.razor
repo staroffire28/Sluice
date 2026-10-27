@@ -1,11 +1,13 @@
 @page "/logs"
 @rendermode InteractiveServer
 @using System.Globalization
+@using System.Text.Json
 @using Microsoft.AspNetCore.WebUtilities
 @using Sluice.Portal.Components.Shared
 @using Sluice.Portal.Models
 @using Sluice.Portal.Services.Logging
 @inject IActivityLog ActivityLog
+@inject IPipelineService PipelineService
 @inject IStringLocalizer<SharedResource> L
 @inject BrowserTime Time
 
@@ -42,7 +44,7 @@
         <FluentDataGrid Class="data-panel data-panel--compact logs-grid"
                         RowSize="DataGridRowSize.Small"
                         MultiLine="false"
-                        GridTemplateColumns="8.5rem 5.5rem 11rem 5rem 10rem 1fr 9rem 10rem"
+                        GridTemplateColumns="7.5rem 6rem 8rem 5.5rem 8rem minmax(12rem, 1fr) 7rem 6rem"
                         Items="@_entries.AsQueryable()"
                         TGridItem="ActivityLogEntry">
             @* Fecha corta ("09 oct 20:28") para que quepa en la columna; la completa, con
@@ -70,13 +72,15 @@
                 <span class="cell-ellipsis" title="@context.Action">@context.Action</span>
             </TemplateColumn>
             <TemplateColumn Title="@L["Page.Logs.Col.Message"]">
-                <span class="cell-ellipsis" title="@EventText.Render(L, context)">@EventText.Render(L, context)</span>
+                <span class="cell-ellipsis" title="@RenderMessage(context)">@RenderMessage(context)</span>
             </TemplateColumn>
             <TemplateColumn Title="@L["Page.Logs.Col.Pipeline"]">
-                <span class="cell-ellipsis" title="@(context.PipelineId ?? "")">@(context.PipelineId ?? "—")</span>
+                @* El nombre del pipeline; el id, en el tooltip. *@
+                <span class="cell-ellipsis" title="@(context.PipelineId ?? "")">@(context.PipelineId is { } pipelineId ? PipelineName(pipelineId) : "—")</span>
             </TemplateColumn>
             <TemplateColumn Title="@L["Page.Logs.Col.Job"]">
-                <span class="cell-ellipsis" title="@(context.JobId ?? "")">@(context.JobId ?? "—")</span>
+                @* Solo el hash del id, como en Jobs; el id completo, en el tooltip y en el CSV. *@
+                <code class="cell-mono cell-nowrap" title="@(context.JobId ?? "")">@(context.JobId is { } jobId ? JobIdLabels.Short(jobId) : "—")</code>
             </TemplateColumn>
         </FluentDataGrid>
     </PanelState>
@@ -87,6 +91,7 @@
 
 @code {
     private List<ActivityLogEntry> _entries = [];
+    private Dictionary<string, string> _pipelineNames = [];
     private string _sourceFilter = "";
     private string _levelFilter = "";
     private string _search = "";
@@ -111,7 +116,8 @@
 
     private void Load()
     {
-        var result = ActivityLog.QueryPage(new ActivityLogFilter(NullIfBlank(_sourceFilter), NullIfBlank(_levelFilter), NullIfBlank(_search), _range, Time.Zone, e => EventText.Render(L, e)), _page, PageSize);
+        _pipelineNames = PipelineService.List().ToDictionary(p => p.Id, p => p.Name);
+        var result = ActivityLog.QueryPage(new ActivityLogFilter(NullIfBlank(_sourceFilter), NullIfBlank(_levelFilter), NullIfBlank(_search), _range, Time.Zone, RenderMessage), _page, PageSize);
         _page = result.Page;
         _totalCount = result.Total;
         _totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
@@ -131,6 +137,30 @@
     });
 
     private static string? NullIfBlank(string value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    // Un pipeline borrado ya no tiene nombre: se muestra su id.
+    private string PipelineName(string id) => _pipelineNames.GetValueOrDefault(id) ?? id;
+
+    // El mensaje con el nombre del pipeline en vez de su id: se sustituyen los argumentos que son
+    // exactamente el id (no el texto, que lo lleva también dentro del id del job). La búsqueda
+    // encuentra por el mismo texto.
+    private string RenderMessage(ActivityLogEntry e)
+    {
+        if (e.PipelineId is not { } id || e.MessageArgs is not { } args || !_pipelineNames.TryGetValue(id, out var name))
+        {
+            return EventText.Render(L, e);
+        }
+
+        var named = args.Select(a => IsText(a, id) ? name : a).ToArray();
+        return EventText.Render(L, e.MessageKey, named, e.Message);
+    }
+
+    private static bool IsText(object? arg, string value) => arg switch
+    {
+        string s => s == value,
+        JsonElement { ValueKind: JsonValueKind.String } json => json.GetString() == value,
+        _ => false,
+    };
 
     private void OnPageChanged(int page)
     {
