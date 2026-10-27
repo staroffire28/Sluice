@@ -171,19 +171,42 @@ public sealed class ConnectionService : IConnectionService
     // Tras la purga de los CSV de Synapse Link, el Parquet consolidado puede ser la única copia de la
     // historia: al cambiar de sitio se copia (sin borrar el original) antes de guardar la conexión y,
     // si la copia falla, no se guarda nada. Un cambio de tipo no mueve el Parquet.
-    public Task<(Connection? Connection, int CopiedTables)> UpdateAsync(AuditActor actor, string id, Connection connection, CancellationToken cancellationToken = default) =>
-        _audit.AuditAsync(
+    // La entrada dice qué claves cambiaron; los secretos, solo que cambiaron (AuditChanges).
+    public async Task<(Connection? Connection, int CopiedTables)> UpdateAsync(AuditActor actor, string id, Connection connection, CancellationToken cancellationToken = default)
+    {
+        var result = await _audit.AuditAsync(
             actor,
             "connection.update",
             null,
             () => UpdateCoreAsync(id, connection, cancellationToken),
-            result => result.CopiedTables > 0 && result.Connection is { } updated
-                ? new AuditResult($"Conexión {RoleLabel(updated.Role)} '{updated.Name}' actualizada; Parquet de {result.CopiedTables} tabla(s) copiado al sitio nuevo.",
-                    MessageKey: "Activity.Connection.UpdatedCopied", MessageArgs: [RolePart(updated.Role), updated.Name, result.CopiedTables])
-                : Updated(id)(result.Connection),
+            result => result.Connection is not { } updated
+                ? Updated(id)(null)
+                : (result.CopiedTables > 0, result.Changes) switch
+                {
+                    (true, { } changes) => new AuditResult(
+                        $"Conexión {RoleLabel(updated.Role)} '{updated.Name}' actualizada ({changes.Text}); Parquet de {result.CopiedTables} tabla(s) copiado al sitio nuevo.",
+                        MessageKey: "Activity.Connection.UpdatedCopiedChanges", MessageArgs: [RolePart(updated.Role), updated.Name, result.CopiedTables, changes.Part]),
+                    (true, null) => new AuditResult(
+                        $"Conexión {RoleLabel(updated.Role)} '{updated.Name}' actualizada; Parquet de {result.CopiedTables} tabla(s) copiado al sitio nuevo.",
+                        MessageKey: "Activity.Connection.UpdatedCopied", MessageArgs: [RolePart(updated.Role), updated.Name, result.CopiedTables]),
+                    (false, { } changes) => new AuditResult(
+                        $"Conexión {RoleLabel(updated.Role)} '{updated.Name}' actualizada: {changes.Text}.",
+                        MessageKey: "Activity.Connection.UpdatedChanges", MessageArgs: [RolePart(updated.Role), updated.Name, changes.Part]),
+                    _ => Updated(id)(updated),
+                },
             $"No se pudo guardar la conexión {RoleLabel(connection.Role)} '{connection.Name}'",
             failureKey: "Activity.Failed.ConnectionSave", failureArgs: [RolePart(connection.Role), connection.Name],
             target: id);
+        return (result.Connection, result.CopiedTables);
+    }
+
+    // Nombre, tipo y configuración, para comparar antes y después de editar.
+    private static Dictionary<string, string?> AuditedFields(Connection connection) =>
+        new(connection.Config, StringComparer.Ordinal)
+        {
+            ["name"] = connection.Name,
+            ["type"] = connection.Type,
+        };
 
     private static Func<Connection?, AuditResult> Updated(string id) => updated => updated is null
         ? new AuditResult($"La conexión {id} no existe.", Outcome: AuditOutcome.Rejected, MessageKey: "Activity.Connection.NotFound", MessageArgs: [id])
@@ -196,12 +219,12 @@ public sealed class ConnectionService : IConnectionService
     private static EventPart RolePart(ConnectionRole role) =>
         new(role == ConnectionRole.Source ? "Activity.Connection.RoleSource" : "Activity.Connection.RoleDestination");
 
-    private async Task<(Connection? Connection, int CopiedTables)> UpdateCoreAsync(string id, Connection connection, CancellationToken cancellationToken)
+    private async Task<(Connection? Connection, int CopiedTables, AuditChanges? Changes)> UpdateCoreAsync(string id, Connection connection, CancellationToken cancellationToken)
     {
         var existing = _store.GetById(id);
         if (existing is null)
         {
-            return (null, 0);
+            return (null, 0, null);
         }
 
         var merged = Merge(existing, connection);
@@ -242,7 +265,7 @@ public sealed class ConnectionService : IConnectionService
         }
     }
 
-    private async Task<(Connection? Connection, int CopiedTables)> SaveMergedAsync(Connection existing, Connection merged, CancellationToken cancellationToken)
+    private async Task<(Connection? Connection, int CopiedTables, AuditChanges? Changes)> SaveMergedAsync(Connection existing, Connection merged, CancellationToken cancellationToken)
     {
         var copied = existing.Role == ConnectionRole.Source
             && SameType(existing, merged)
@@ -251,7 +274,7 @@ public sealed class ConnectionService : IConnectionService
                 ? await CopyConsolidatedParquetAsync(existing, merged, cancellationToken)
                 : 0;
         _store.Save(merged);
-        return (SecretMasker.Mask(merged), copied);
+        return (SecretMasker.Mask(merged), copied, AuditChanges.Between(AuditedFields(existing), AuditedFields(merged), SecretMasker.IsSecretKey));
     }
 
     private static string ParquetStorageOf(Connection connection) =>
