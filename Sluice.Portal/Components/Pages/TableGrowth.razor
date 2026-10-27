@@ -49,7 +49,7 @@
                     }
                     else
                     {
-                        <ApexChart TItem="TableGrowthPoint" Title="@L["Page.TableGrowth.Chart.Growth"]" Options="_growthOptions" Height="300" @key="(_themeMode, Time.Zone)">
+                        <ApexChart TItem="TableGrowthPoint" Title="@L["Page.TableGrowth.Chart.Growth"]" Options="_growthOptions" Height="300" @key="(_themeMode, Time.Zone, _loads)">
                             <ApexPointSeries TItem="TableGrowthPoint"
                                              Items="_report.Growth"
                                              Name="@L["Page.TableGrowth.Series.RowCount"]"
@@ -67,7 +67,7 @@
                     }
                     else
                     {
-                        <ApexChart TItem="TableLoadPoint" Title="@L["Page.TableGrowth.Chart.Load"]" Options="_loadOptions" Height="300" @key="(_themeMode, Time.Zone)">
+                        <ApexChart TItem="TableLoadPoint" Title="@L["Page.TableGrowth.Chart.Load"]" Options="_loadOptions" Height="300" @key="(_themeMode, Time.Zone, _loads)">
                             <ApexPointSeries TItem="TableLoadPoint"
                                              Items="_report.DailyLoad"
                                              Name="@L["Page.TableGrowth.Series.CsvRows"]"
@@ -103,10 +103,14 @@
     private int _days = 90;
     private TableGrowthReport? _report;
     private Mode _themeMode = Mode.Light;
+
+    // Cuenta las cargas: en la @key de cada gráfico, que se monta de nuevo con las opciones (el
+    // eje de filas depende del máximo de los datos).
+    private int _loads;
     private string PipelineName => PipelineService.Get(PipelineId)?.Name ?? PipelineId;
 
-    private ApexChartOptions<TableGrowthPoint> _growthOptions = BrandOptions<TableGrowthPoint>(Mode.Light);
-    private ApexChartOptions<TableLoadPoint> _loadOptions = BrandOptions<TableLoadPoint>(Mode.Light);
+    private ApexChartOptions<TableGrowthPoint> _growthOptions = BrandOptions<TableGrowthPoint>(Mode.Light, 0);
+    private ApexChartOptions<TableLoadPoint> _loadOptions = BrandOptions<TableLoadPoint>(Mode.Light, 0);
 
     private string _daysString = "90";
 
@@ -131,7 +135,12 @@
         }
     }
 
-    private void Load() => _report = AnalyticsSvc.GetTableGrowth(PipelineId, Entity, _days, Time.Zone);
+    private void Load()
+    {
+        _report = AnalyticsSvc.GetTableGrowth(PipelineId, Entity, _days, Time.Zone);
+        _loads++;
+        ApplyTheme();
+    }
 
     private void OnDaysChanged()
     {
@@ -151,14 +160,16 @@
     {
         _themeMode = ThemeState.IsDark ? Mode.Dark : Mode.Light;
 
-        _growthOptions = BrandOptions<TableGrowthPoint>(_themeMode);
-        _loadOptions = BrandOptions<TableLoadPoint>(_themeMode);
+        _growthOptions = BrandOptions<TableGrowthPoint>(_themeMode, _report?.Growth.Select(p => (double)p.RowCount).DefaultIfEmpty().Max() ?? 0);
+        _loadOptions = BrandOptions<TableLoadPoint>(_themeMode, _report?.DailyLoad.Select(p => (double)p.CsvRows).DefaultIfEmpty().Max() ?? 0);
     }
 
-    private static ApexChartOptions<TItem> BrandOptions<TItem>(Mode mode) where TItem : class => new()
+    // Como en Analytics.razor: fondo y letra de la página, y ejes de filas sin decimales.
+    private static ApexChartOptions<TItem> BrandOptions<TItem>(Mode mode, double countMax) where TItem : class => new()
     {
         Colors = new List<string>(BrandPalette),
-        Chart = new Chart { Height = 300 },
+        Chart = new Chart { Height = 300, Background = "transparent", FontFamily = "inherit" },
         Theme = new ApexCharts.Theme { Mode = mode },
+        Yaxis = [ChartAxes.Count(countMax)],
     };
 }
