@@ -224,14 +224,15 @@ public sealed class ReportStore
                 return null;
             }
 
-            if (TryRead<LatestPointer>(PointerPath(dir, pipelineId)) is { } pointer)
+            var pointerPath = PointerPath(dir, pipelineId);
+            if (TryRead<LatestPointer>(pointerPath) is { } pointer)
             {
                 if (pointer.Id is null)
                 {
                     return null;
                 }
 
-                if (TryRead<T>(Path.Combine(dir, $"{pointer.Id}.json")) is { } pointed && pipelineOf(pointed) == pipelineId)
+                if (ReadPointed(pointer) is { } pointed)
                 {
                     return pointed;
                 }
@@ -244,16 +245,28 @@ public sealed class ReportStore
                 .FirstOrDefault();
             try
             {
-                AtomicJsonFile.Write(
-                    PointerPath(dir, pipelineId),
-                    latest is null ? new LatestPointer(null, DateTimeOffset.MinValue) : new LatestPointer(idOf(latest), createdAt(latest)));
+                // Si mientras se buscaba un Save de otro proceso dejó el puntero a su reporte, manda ese.
+                using (PointerLock(dir, pipelineId))
+                {
+                    if (TryRead<LatestPointer>(pointerPath) is { Id: not null } current && ReadPointed(current) is { } saved)
+                    {
+                        return saved;
+                    }
+
+                    AtomicJsonFile.Write(
+                        pointerPath,
+                        latest is null ? new LatestPointer(null, DateTimeOffset.MinValue) : new LatestPointer(idOf(latest), createdAt(latest)));
+                }
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or TimeoutException)
             {
                 // Sin puntero se vuelve a buscar en la siguiente consulta: la respuesta no cambia.
             }
 
             return latest;
+
+            T? ReadPointed(LatestPointer p) =>
+                TryRead<T>(Path.Combine(dir, $"{p.Id}.json")) is { } r && pipelineOf(r) == pipelineId ? r : null;
         }
     }
 
@@ -261,13 +274,21 @@ public sealed class ReportStore
     private void UpdatePointer(string dir, string pipelineId, string id, DateTimeOffset createdAt)
     {
         var path = PointerPath(dir, pipelineId);
-        if (TryRead<LatestPointer>(path) is { } current && current.CreatedAt > createdAt)
+        using (PointerLock(dir, pipelineId))
         {
-            return;
-        }
+            if (TryRead<LatestPointer>(path) is { } current && current.CreatedAt > createdAt)
+            {
+                return;
+            }
 
-        AtomicJsonFile.Write(path, new LatestPointer(id, createdAt));
+            AtomicJsonFile.Write(path, new LatestPointer(id, createdAt));
+        }
     }
+
+    // Lock entre procesos (api y workers comparten DATA_DIR) para leer y escribir el puntero de una vez.
+    private IDisposable PointerLock(string dir, string pipelineId) =>
+        FileLock.Acquire(
+            Path.Combine(_options.DataDir, "locks", $"report-{Path.GetFileName(dir)}-{pipelineId}.lock"), TimeSpan.FromSeconds(10));
 
     private static IEnumerable<string> ReportFiles(string dir) =>
         Directory.GetFiles(dir, "*.json")
