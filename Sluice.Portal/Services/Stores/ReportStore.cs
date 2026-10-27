@@ -210,6 +210,12 @@ public sealed class ReportStore
     private T? GetLatest<T>(string kind, string pipelineId, Func<T, string> idOf, Func<T, string> pipelineOf, Func<T, DateTimeOffset> createdAt)
         where T : class
     {
+        // El id llega de la ruta: si no es un id válido no se lee ni se escribe nada fuera de reports/{kind}.
+        if (!EntityIds.IsValid(pipelineId))
+        {
+            return null;
+        }
+
         lock (_lock)
         {
             var dir = ReportDir(kind);
