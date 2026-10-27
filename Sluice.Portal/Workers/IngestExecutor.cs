@@ -143,7 +143,14 @@ public sealed class IngestExecutor : IIngestExecutor
                 StageStatus = new Dictionary<string, string>(job.StageStatus) { ["ingest"] = "blocked" },
                 StageTimings = job.StageTimings.Set("ingest", started: stageStart, finished: DateTimeOffset.UtcNow),
             });
-            _jobs.AppendEvent(task.JobId, EventLevel.Warning, selection.BlockReason ?? "Blocked.");
+            if (selection.BlockReasonKey is { } reasonKey)
+            {
+                _jobs.AppendEvent(task.JobId, EventLevel.Warning, selection.BlockReason ?? "Blocked.", null, reasonKey, selection.BlockReasonArgs ?? []);
+            }
+            else
+            {
+                _jobs.AppendEvent(task.JobId, EventLevel.Warning, selection.BlockReason ?? "Blocked.");
+            }
             progress.CompleteStep(JobStepCatalog.Discover, "blocked");
             progress.Finish("blocked");
             return;

@@ -7,7 +7,11 @@ public static class SnapshotSelector
         IReadOnlyList<string> ToProcess,
         IReadOnlyList<string> Unclosed,
         bool Blocked,
-        string? BlockReason);
+        string? BlockReason,
+        // El motivo como clave del recurso con sus argumentos, para pintarlo en el idioma del
+        // usuario (evento del job, Snapshots); BlockReason queda en inglés para los logs.
+        string? BlockReasonKey = null,
+        object?[]? BlockReasonArgs = null);
 
     // Decide qué snapshots son seguros de procesar.
     //
@@ -30,12 +34,14 @@ public static class SnapshotSelector
 
         if (string.IsNullOrWhiteSpace(currentFolder))
         {
-            return new SelectionResult(null, [], [], true, "Changelog empty or missing — export in progress.");
+            return new SelectionResult(null, [], [], true, "Changelog empty or missing — export in progress.",
+                "Event.Ingest.ChangelogMissing", []);
         }
 
         if (!snapshots.Contains(currentFolder))
         {
-            return new SelectionResult(null, [], [], true, $"Changelog folder '{currentFolder}' not found.");
+            return new SelectionResult(null, [], [], true, $"Changelog folder '{currentFolder}' not found.",
+                "Event.Ingest.ChangelogFolderMissing", [currentFolder]);
         }
 
         var currentIndex = snapshots.IndexOf(currentFolder);

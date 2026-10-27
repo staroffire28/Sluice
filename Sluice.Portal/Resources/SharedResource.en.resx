@@ -865,6 +865,8 @@
   <data name="Event.AutoFix.Launched" xml:space="preserve"><value>Automatic fix: job {0} re-syncs {1}.</value></data>
   <data name="Event.AutoFix.NotLaunched" xml:space="preserve"><value>Automatic fix not launched: {0}</value></data>
   <data name="Event.Ingest.StoppingAtSnapshot" xml:space="preserve"><value>Stopping at snapshot {0}: {1} Will retry on the next run.</value></data>
+  <data name="Event.Ingest.ChangelogMissing" xml:space="preserve"><value>Changelog empty or missing — export in progress.</value></data>
+  <data name="Event.Ingest.ChangelogFolderMissing" xml:space="preserve"><value>Changelog folder '{0}' not found.</value></data>
   <data name="Event.Ingest.ProcessingSnapshot" xml:space="preserve"><value>Processing snapshot {0}.</value></data>
   <data name="Event.Ingest.EntityFailed" xml:space="preserve"><value>{0}: ingest failed for snapshot {1} — {2}: {3}</value></data>
   <data name="Event.Ingest.SkippedPaused" xml:space="preserve"><value>{0:N0} table(s) skipped because they are paused: {1}.</value></data>

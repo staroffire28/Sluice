@@ -864,6 +864,8 @@
   <data name="Event.AutoFix.Launched" xml:space="preserve"><value>Corrección automática: el job {0} re-sincroniza {1}.</value></data>
   <data name="Event.AutoFix.NotLaunched" xml:space="preserve"><value>Corrección automática no lanzada: {0}</value></data>
   <data name="Event.Ingest.StoppingAtSnapshot" xml:space="preserve"><value>Se detiene en el snapshot {0}: {1} Se reintentará en el próximo run.</value></data>
+  <data name="Event.Ingest.ChangelogMissing" xml:space="preserve"><value>El changelog está vacío o no existe: la exportación está en curso.</value></data>
+  <data name="Event.Ingest.ChangelogFolderMissing" xml:space="preserve"><value>No se encuentra la carpeta del changelog '{0}'.</value></data>
   <data name="Event.Ingest.ProcessingSnapshot" xml:space="preserve"><value>Procesando el snapshot {0}.</value></data>
   <data name="Event.Ingest.EntityFailed" xml:space="preserve"><value>{0}: falló la ingesta del snapshot {1} — {2}: {3}</value></data>
   <data name="Event.Ingest.SkippedPaused" xml:space="preserve"><value>{0:N0} tabla(s) omitida(s) por pausa: {1}.</value></data>

@@ -69,7 +69,7 @@
                 @if (_catalog.Blocked)
                 {
                     <FluentMessageBar Intent="MessageBarIntent.Error" Style="margin-bottom:0.75rem;">
-                        @_catalog.BlockReason
+                        @EventText.Render(L, _catalog.BlockReasonKey, _catalog.BlockReasonArgs, _catalog.BlockReason ?? "")
                     </FluentMessageBar>
                 }
 

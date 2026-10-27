@@ -17,7 +17,9 @@ public sealed record SnapshotCatalogResult(
     bool Blocked,
     string? BlockReason,
     int EligibleRetentionPurgeCount,
-    bool RetentionDryRun);
+    bool RetentionDryRun,
+    string? BlockReasonKey = null,
+    object?[]? BlockReasonArgs = null);
 
 public sealed record SnapshotRetentionPreviewResult(
     int EligibleCount,
@@ -103,7 +105,9 @@ public sealed class SnapshotCatalogService : ISnapshotCatalogService
             selection.Blocked,
             selection.BlockReason,
             analysis.EligibleForPurge.Count,
-            appSettings.SourceSnapshotRetentionDryRun);
+            appSettings.SourceSnapshotRetentionDryRun,
+            selection.BlockReasonKey,
+            selection.BlockReasonArgs);
     }
 
     public async Task<SnapshotRetentionPreviewResult> GetRetentionPreviewAsync(
