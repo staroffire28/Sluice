@@ -145,7 +145,7 @@ docker compose -f docker-compose.linux.yml up -d --build --scale worker-ingest=3
 
 ## Ajustes (`/settings`)
 
-Se editan en el portal, se guardan en el volumen y aplican sin reiniciar.
+Se editan en el portal, se guardan en el volumen y aplican sin reiniciar. Si `settings.json` no se puede leer, la página avisa de que muestra los valores por defecto, y guardar pide confirmación antes de sobrescribir el fichero (se perdería lo que tenía, como el webhook).
 
 | Ajuste | Controla | Default |
 |---|---|---|
