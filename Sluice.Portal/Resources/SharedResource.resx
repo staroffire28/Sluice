@@ -930,7 +930,7 @@
   <data name="Activity.SnapshotRetention.SweepTotal" xml:space="preserve"><value>Retención snapshots origen: {0:N0} carpeta(s) eliminadas (antigüedad {1}d, piso {2}).</value></data>
   <data name="Activity.Alert.DeliveryFailed" xml:space="preserve"><value>No se pudo entregar la alerta {0} al webhook ({1}): {2}. Las alertas no llegan hasta que se avise de que se ha recuperado.</value></data>
   <data name="Activity.Alert.DeliveryRecovered" xml:space="preserve"><value>El webhook de alertas ({0}) vuelve a responder (alerta {1}).</value></data>
-  <data name="Activity.Alert.DeliveryRecovered.Lost" xml:space="preserve"><value>El webhook de alertas ({0}) vuelve a responder (alerta {1}). Mientras estaba caído no se entregaron {2:N0} alerta(s).</value></data>
+  <data name="Activity.Alert.DeliveryRecovered.Lost" xml:space="preserve"><value>El webhook de alertas ({0}) vuelve a responder (alerta {1}). Mientras estaba caído fallaron {2:N0} intento(s) de entrega: las alertas de un solo disparo de ese periodo (fallo de job, Partial, divergencia...) no se reenvían; las deduplicadas se reintentan.</value></data>
   <data name="Activity.Demo.Failed" xml:space="preserve"><value>No se pudo preparar la demo: {0}</value></data>
   <data name="Activity.Failure" xml:space="preserve"><value>{0}: {1}</value></data>
   <data name="Activity.Connection.RoleSource" xml:space="preserve"><value>de origen</value></data>

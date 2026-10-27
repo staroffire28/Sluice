@@ -57,7 +57,8 @@ public sealed record AlertDeliveryStatus
     public DateTimeOffset? LastSuccessAt { get; init; }
     public DateTimeOffset? LastFailureAt { get; init; }
 
-    // Alertas que no llegaron desde la última entregada: las de un solo disparo (fallo, Partial,
-    // divergencia...) no se reintentan, y el aviso de recuperación dice cuántas se perdieron.
+    // Intentos de entrega fallidos desde la última entrega correcta, incluidos los reintentos de
+    // las alertas deduplicadas en cada poll. El aviso de recuperación los cita y recuerda que las
+    // de un solo disparo (fallo, Partial, divergencia...) no se reenvían.
     public int FailedSinceLastSuccess { get; init; }
 }
