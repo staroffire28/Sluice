@@ -188,7 +188,7 @@ public sealed class WorkerHostService : BackgroundService
             {
                 job = await _tasks.CompleteAsync(task.Id, stage, workerId, ct);
             }
-            catch (IOException ex)
+            catch (TaskBusyException ex)
             {
                 // Lock de la tarea ocupado: el stage terminó bien, así que no es un fallo. La tarea
                 // se queda en claimed/ sin latido; al vencer el lease el reclaim la devuelve a pending.

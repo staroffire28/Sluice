@@ -144,7 +144,7 @@ public sealed class TaskStore : ITaskStore
         // claimed/X la dejaría a la vez en pending/ y en claimed/, y se ejecutaría dos veces. Con el
         // lock ocupado se lanza (el bucle del latido lo reintenta); null diría "ya no es tuya".
         using var taskLock = await TryLockTaskAsync(stage, taskId, cancellationToken)
-            ?? throw new IOException($"La tarea {taskId} está ocupada por otro proceso.");
+            ?? throw new TaskBusyException(taskId);
         var path = GetPath(stage, PipelineTaskStatus.Claimed, taskId);
         if (!File.Exists(path))
         {
@@ -386,7 +386,7 @@ public sealed class TaskStore : ITaskStore
         // claimed/X que un reclaim estaba devolviendo a pending, y la tarea quedaba en dos sitios. Con
         // el lock ocupado se lanza (como en HeartbeatAsync); null diría "ya no es tuya".
         using var taskLock = await TryLockTaskAsync(stage, taskId, cancellationToken)
-            ?? throw new IOException($"La tarea {taskId} está ocupada por otro proceso.");
+            ?? throw new TaskBusyException(taskId);
         var claimedPath = GetPath(stage, PipelineTaskStatus.Claimed, taskId);
         if (!File.Exists(claimedPath))
         {
