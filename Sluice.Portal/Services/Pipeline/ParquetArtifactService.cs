@@ -110,15 +110,20 @@ public sealed class ParquetArtifactService : IParquetArtifactService
 
         using var runLock = await PipelineRunLock.AcquireAsync(_options.DataDir, pipelineId, PipelineRunLock.DefaultTimeout, cancellationToken);
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
-        // Se compara la ruta como la resuelve el store: "p1/./X.parquet", "p1//X.parquet" o "p1/X.parquet."
-        // (Windows quita los '.' y ' ' finales de cada segmento) apuntan al consolidado.
-        var normalizedPath = string.Join('/', blobPath.Replace('\\', '/')
-            .Split('/')
-            .Select(segment => segment.TrimEnd('.', ' '))
-            .Where(segment => segment.Length > 0));
+        // Solo se borra una ruta tal cual la lista el store: cualquier otra forma de nombrar el mismo
+        // fichero (alias de ruta, streams, nombres cortos) se trata como ruta inválida.
+        var store = await StoreFor(pipelineId, cancellationToken);
+        var listed = (await store.ListParquetAsync($"{pipelineId}/", cancellationToken))
+            .FirstOrDefault(artifact => string.Equals(artifact.Path, blobPath, StringComparison.Ordinal));
+        if (listed is null)
+        {
+            return false;
+        }
+
+        var listedPath = listed.Path.Replace('\\', '/').TrimStart('/');
         var liveTable = _pipelines.GetState(pipelineId).Tables.Keys.FirstOrDefault(entity =>
-            string.Equals(normalizedPath, IngestManifestStore.GetConsolidatedBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase)
-            || string.Equals(normalizedPath, IngestManifestStore.GetConsolidatedSchemaBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase));
+            string.Equals(listedPath, IngestManifestStore.GetConsolidatedBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase)
+            || string.Equals(listedPath, IngestManifestStore.GetConsolidatedSchemaBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase));
         if (liveTable is not null)
         {
             throw new InvalidOperationException(
