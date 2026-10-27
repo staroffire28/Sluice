@@ -81,7 +81,7 @@ Un janitor limita el crecimiento del volumen. El **job es la unidad de retenció
 
 Un segundo janitor purga carpetas CSV **ya procesadas** en el container origen de Synapse Link. El parquet consolidado (en su container dedicado o en el disco del portal) es el artefacto de recovery.
 
-- **Siempre se conservan**: las últimas 14 snapshots procesadas (piso K), snapshots pendientes o en export, `Changelog/` y metadatos CDM.
+- **Siempre se conservan**: las últimas 14 snapshots procesadas (piso K), snapshots pendientes o en export, `Changelog/`, metadatos CDM y cualquier carpeta que no se llame como un snapshot de Synapse Link (`YYYY-MM-DDTHH.MM.SSZ`).
 - **Perilla**: `SourceSnapshotRetentionDays` en `/settings` (por defecto 30). `0` o negativo desactiva la purga.
 - **Cadencia**: cada 6 horas, solo en el orquestador; registrado como `snapshot-retention.sweep`.
 - **Recovery tras purga**: usa **Force** (o `POST /api/pipelines/{id}/reload-from-parquet`, mismo camino) para recargar SQL desde parquet consolidado. Incremental sigue leyendo CSV nuevos en ADLS.
