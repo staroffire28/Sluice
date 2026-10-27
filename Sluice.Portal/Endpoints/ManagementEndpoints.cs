@@ -310,18 +310,17 @@ public static class ManagementEndpoints
         api.MapGet("/logs/export", (string? source, string? level, string? search, DateOnly? from, DateOnly? to, string? tz, IActivityLog log, IStringLocalizer<SharedResource> l, IPipelineService pipelines) =>
         {
             var zone = !string.IsNullOrWhiteSpace(tz) && TimeZoneInfo.TryFindSystemTimeZoneById(tz, out var found) ? found : null;
-            // El mensaje se pinta y se busca como en la tabla: en el idioma de la petición y con el
-            // nombre del pipeline en vez de su id.
+            // La búsqueda encuentra también por el texto pintado en el idioma de la petición y con el
+            // nombre del pipeline, como la tabla; la columna del mensaje es el texto guardado.
             var pipelineNames = pipelines.List().ToDictionary(p => p.Id, p => p.Name);
-            string Render(ActivityLogEntry e) => EventText.Render(l, e, pipelineNames);
-            var entries = log.Query(new ActivityLogFilter(NullIfBlank(source), NullIfBlank(level), NullIfBlank(search), new DateRange(from, to), zone, Render));
+            var entries = log.Query(new ActivityLogFilter(NullIfBlank(source), NullIfBlank(level), NullIfBlank(search), new DateRange(from, to), zone, e => EventText.Render(l, e, pipelineNames)));
             return Csv("logs", writer =>
             {
                 CsvWriter.WriteRow(writer, [l["Page.Logs.Col.Date"].Value, l["Page.Logs.Col.Source"].Value, l["Page.Logs.Col.Actor"].Value, l["Page.Logs.Col.Level"].Value, l["Page.Logs.Col.Action"].Value, l["Page.Logs.Col.Message"].Value, l["Page.Logs.Col.Pipeline"].Value, l["Page.Logs.Col.Job"].Value, l["Page.Logs.Col.Host"].Value]);
                 foreach (var e in entries)
                 {
                     var sourceLabel = e.Source == "user" ? l["Page.Logs.Source.User"].Value : l["Page.Logs.Source.System"].Value;
-                    CsvWriter.WriteRow(writer, [CsvDate(e.Timestamp, zone), sourceLabel, e.ActorLabel, e.Level.ToLowerInvariant(), e.Action, Render(e), e.PipelineId, e.JobId, e.HostName]);
+                    CsvWriter.WriteRow(writer, [CsvDate(e.Timestamp, zone), sourceLabel, e.ActorLabel, e.Level.ToLowerInvariant(), e.Action, e.Message, e.PipelineId, e.JobId, e.HostName]);
                 }
             });
         });

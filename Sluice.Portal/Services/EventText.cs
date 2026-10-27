@@ -16,7 +16,7 @@ public static class EventText
 
     // El mensaje de un registro con el nombre del pipeline en vez de su id: se sustituyen los
     // argumentos que son exactamente el id (no el texto, que lo lleva también dentro del id del
-    // job). Lo usan la tabla de Logs y su CSV, para que pinten y busquen por el mismo texto.
+    // job). Lo usan la tabla de Logs y la búsqueda de su CSV, para que encuentren por el mismo texto.
     public static string Render(IStringLocalizer l, ActivityLogEntry e, IReadOnlyDictionary<string, string> pipelineNames)
     {
         if (e.PipelineId is not { } id || e.MessageArgs is not { } args || !pipelineNames.TryGetValue(id, out var name))
