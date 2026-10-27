@@ -37,6 +37,10 @@ public sealed record ReconcileAlert
 
     // El job ES la corrección automática y no resolvió la divergencia.
     public bool AutoFixAttempted { get; init; }
+
+    // Si el job podía corregirse solo, el aviso espera a que StageRouter intente lanzar la corrección
+    // al cerrar el job: true = lanzada, false = no se pudo lanzar, null = no se intentó (desactivada).
+    public bool? AutoFixLaunched { get; init; }
 }
 
 public sealed record AlertDeliveryResult(bool Success, string? Detail, int? StatusCode)

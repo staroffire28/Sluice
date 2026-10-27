@@ -125,11 +125,12 @@ public sealed class AlertService
             return AlertDeliveryResult.NotConfigured;
         }
 
-        // off = corrección automática desactivada; scheduled = se lanzará al cerrar el job;
-        // unresolved = este job ya era la corrección y no bastó; none = no aplica (p. ej. re-sync manual).
+        // scheduled = la corrección se lanzó al cerrar el job; failed = no se pudo lanzar (el motivo va en
+        // el mensaje); off = desactivada; unresolved = este job ya era la corrección y no bastó;
+        // none = no aplica (p. ej. re-sync manual).
         var autoRemediation = alert.AutoFixAttempted ? "unresolved"
             : !alert.AutoFixEligible ? "none"
-            : _settings.Get().AutoRemediate ? "scheduled" : "off";
+            : alert.AutoFixLaunched switch { true => "scheduled", false => "failed", null => "off" };
 
         return await DeliverAsync(url, alert.EventType, new
         {

@@ -8,6 +8,10 @@ namespace Sluice.Portal.Services;
 public static class AutoRemediation
 {
     public const string SummaryKey = "autoRemediateEntities";
+
+    // El aviso de conciliación de un job que podía corregirse solo (ReconcileAlert en JSON): lo manda
+    // StageRouter después de intentar la corrección, para que diga lo que pasó de verdad.
+    public const string PendingAlertKey = "reconcileAlertPending";
     public const string TriggeredByAuto = "auto";
     public const string TriggeredByUser = "user";
 
