@@ -878,6 +878,7 @@
   <data name="Event.Ingest.SettingsUnreadable" xml:space="preserve"><value>settings.json cannot be read: Parquet versions are not pruned until it is fixed.</value></data>
   <data name="Event.Ingest.PruneFailed" xml:space="preserve"><value>Could not prune the Parquet versions: {0}</value></data>
   <data name="Event.Ingest.UnreadableValues" xml:space="preserve"><value>{0}: {1:N0} CSV value(s) could not be read with their column type and were loaded as NULL — {2}.</value></data>
+  <data name="Event.Ingest.ShortRows" xml:space="preserve"><value>{0}: {1:N0} CSV row(s) have fewer columns than the schema; the missing ones were loaded as NULL.</value></data>
   <data name="Event.Ingest.CompletionWithParts" xml:space="preserve"><value>{0}{1}{2}{3}</value></data>
   <data name="Event.Ingest.Part.Failed" xml:space="preserve"><value> {0:N0} entity(ies) failed: {1}.</value></data>
   <data name="Event.Ingest.Part.PartialFailures" xml:space="preserve"><value> {0:N0} entity(ies) with partial snapshot failures (possible incomplete data): {1}.</value></data>

@@ -877,6 +877,7 @@
   <data name="Event.Ingest.SettingsUnreadable" xml:space="preserve"><value>settings.json no se puede leer: no se podan las versiones del parquet hasta que se corrija.</value></data>
   <data name="Event.Ingest.PruneFailed" xml:space="preserve"><value>No se pudieron podar las versiones del parquet: {0}</value></data>
   <data name="Event.Ingest.UnreadableValues" xml:space="preserve"><value>{0}: {1:N0} valor(es) del CSV no se pudieron leer con el tipo de su columna y se cargaron como NULL — {2}.</value></data>
+  <data name="Event.Ingest.ShortRows" xml:space="preserve"><value>{0}: {1:N0} fila(s) del CSV traen menos columnas que el esquema; las que faltan se cargaron como NULL.</value></data>
   <data name="Event.Ingest.CompletionWithParts" xml:space="preserve"><value>{0}{1}{2}{3}</value></data>
   <data name="Event.Ingest.Part.Failed" xml:space="preserve"><value> {0:N0} entidad(es) fallaron: {1}.</value></data>
   <data name="Event.Ingest.Part.PartialFailures" xml:space="preserve"><value> {0:N0} entidad(es) con fallos parciales de snapshots (posibles datos incompletos): {1}.</value></data>

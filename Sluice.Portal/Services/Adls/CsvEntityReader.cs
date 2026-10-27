@@ -25,6 +25,13 @@ public static class CsvEntityReader
         {
             var values = ParseCsvLine(record);
             var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            // Fila "corta" (menos columnas que el esquema): las que faltan quedan a null, y se cuenta
+            // para avisar, porque ese NULL no es el dato del origen.
+            if (values.Count < columns.Count)
+            {
+                issues?.RecordShortRow();
+            }
+
             for (var i = 0; i < columns.Count; i++)
             {
                 var raw = i < values.Count ? values[i] : null;
@@ -211,6 +218,11 @@ public sealed class CsvValueIssues
 
     public int Total { get; private set; }
 
+    // Filas con menos columnas que el esquema (las que faltan se cargan como NULL).
+    public int ShortRows { get; private set; }
+
+    public void RecordShortRow() => ShortRows++;
+
     public void Record(string column, string raw)
     {
         var sample = raw.Length > MaxSampleLength ? raw[..MaxSampleLength] + "…" : raw;
@@ -226,6 +238,7 @@ public sealed class CsvValueIssues
         }
 
         Total += other.Total;
+        ShortRows += other.ShortRows;
     }
 
     public override string ToString() => string.Join("; ", _byColumn

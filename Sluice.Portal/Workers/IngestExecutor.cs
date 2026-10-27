@@ -462,6 +462,7 @@ public sealed class IngestExecutor : IIngestExecutor
         }
 
         var manifestEntities = new List<IngestEntityManifest>();
+        var entitiesWithoutId = new List<string>();
 
         progress.StartStep(JobStepCatalog.Consolidate, total: transientPaths.Count);
         foreach (var (entity, transients) in transientPaths)
@@ -516,6 +517,8 @@ public sealed class IngestExecutor : IIngestExecutor
 
             if (result.RowsWithoutId > 0)
             {
+                // Esas filas no llegan ni al parquet ni a SQL: el job queda en Partial (antes cerraba Ok).
+                entitiesWithoutId.Add(entity);
                 _jobs.AppendEvent(task.JobId, EventLevel.Warning,
                     $"{entity}: {result.RowsWithoutId} fila(s) sin Id válido descartada(s).",
                     null, "Event.Ingest.RowsWithoutId", entity, result.RowsWithoutId);
@@ -724,6 +727,19 @@ public sealed class IngestExecutor : IIngestExecutor
                 null, "Event.Ingest.UnreadableValues", entity, issues.Total, issues.ToString());
         }
 
+        // Filas del CSV con menos columnas que el esquema: las que faltan se cargaron como NULL. Mismo
+        // criterio que los valores ilegibles: el job queda en Partial.
+        var entitiesWithShortRows = unreadableValues
+            .Where(e => e.Value.ShortRows > 0 && succeededEntities.Contains(e.Key))
+            .OrderBy(e => e.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        foreach (var (entity, issues) in entitiesWithShortRows)
+        {
+            _jobs.AppendEvent(task.JobId, EventLevel.Warning,
+                $"{entity}: {issues.ShortRows} fila(s) del CSV traen menos columnas que el esquema; las que faltan se cargaron como NULL.",
+                null, "Event.Ingest.ShortRows", entity, issues.ShortRows);
+        }
+
         var consolidatedResults = manifestEntities
             .Select(m =>
             {
@@ -736,6 +752,11 @@ public sealed class IngestExecutor : IIngestExecutor
                 if (unreadableValues.TryGetValue(m.Entity, out var issues) && issues.Total > 0)
                 {
                     message += $"{JobEntityResultMerger.WarningMarker} {issues.Total} valor(es) ilegible(s) cargado(s) como NULL ({issues}).";
+                }
+
+                if (issues is { ShortRows: > 0 })
+                {
+                    message += $"{JobEntityResultMerger.WarningMarker} {issues.ShortRows} fila(s) con menos columnas que el esquema.";
                 }
 
                 return new JobEntityResult
@@ -762,6 +783,7 @@ public sealed class IngestExecutor : IIngestExecutor
         JobStatus? jobStatusAfterIngest = hasEntityError
             ? hasEntityOk ? JobStatus.Partial : JobStatus.Error
             : partiallyFailedEntities.Count > 0 || entitiesWithUnreadableValues.Count > 0 || backfillMissing.Count > 0
+                || entitiesWithShortRows.Count > 0 || entitiesWithoutId.Count > 0
                 ? JobStatus.Partial
                 : null;
 
@@ -818,6 +840,16 @@ public sealed class IngestExecutor : IIngestExecutor
         if (entitiesWithUnreadableValues.Count > 0)
         {
             completionNote += $" {entitiesWithUnreadableValues.Count} entity(ies) with CSV values loaded as NULL: {string.Join(", ", entitiesWithUnreadableValues.Select(e => e.Key))}.";
+        }
+
+        if (entitiesWithShortRows.Count > 0)
+        {
+            completionNote += $" {entitiesWithShortRows.Count} entity(ies) with CSV rows shorter than the schema: {string.Join(", ", entitiesWithShortRows.Select(e => e.Key))}.";
+        }
+
+        if (entitiesWithoutId.Count > 0)
+        {
+            completionNote += $" {entitiesWithoutId.Count} entity(ies) with rows discarded for lacking a valid Id: {string.Join(", ", entitiesWithoutId)}.";
         }
 
         var completionLevel = jobStatusAfterIngest == JobStatus.Error
