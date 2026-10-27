@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
+using Sluice.Portal.Scheduler;
 using Sluice.Portal.Services;
 using Sluice.Portal.Services.Adls;
 using Sluice.Portal.Services.Pipeline;
@@ -884,6 +885,28 @@ public sealed class IngestExecutor : IIngestExecutor
                 Message = completionNote,
                 Status = jobStatusAfterIngest == JobStatus.Partial ? PipelineFailureAlert.Warning : PipelineFailureAlert.Error,
             }, cancellationToken);
+        }
+
+        // Un Run manual que se para en un snapshot incompleto cerraba Ok sin avisar (el scheduler no
+        // lanza nada mientras haya uno pendiente, así que esto solo pasa a mano o por la API). Avisa por
+        // el webhook con la misma deduplicación que el scheduler: una vez por snapshot y de nuevo cada
+        // 24 h, con la última alerta en el estado del pipeline (IncompleteSnapshot.LastAlertedAt).
+        if (incompleteSnapshot is not null && _alerts is not null)
+        {
+            var tracked = _stateStore.GetOrCreate(task.PipelineId).IncompleteSnapshot;
+            var now = DateTimeOffset.UtcNow;
+            if (tracked?.Name == incompleteSnapshot
+                && (tracked.LastAlertedAt is not { } last || now - last >= PipelineSchedulerService.IncompleteSnapshotRepeat))
+            {
+                var message = $"Pipeline {pipeline.Name} parado: el snapshot {incompleteSnapshot} está cerrado pero incompleto ({incomplete?.Reason}). " +
+                    "No se procesa nada más hasta que el volcado de Synapse Link se complete; revisa la exportación.";
+                if ((await _alerts.SendSnapshotIncompleteAsync(pipeline.Id, pipeline.Name, incompleteSnapshot, message, cancellationToken)).Success)
+                {
+                    _stateStore.Update(task.PipelineId, s => s.IncompleteSnapshot?.Name == incompleteSnapshot
+                        ? s with { IncompleteSnapshot = s.IncompleteSnapshot with { LastAlertedAt = now } }
+                        : s);
+                }
+            }
         }
     }
 
