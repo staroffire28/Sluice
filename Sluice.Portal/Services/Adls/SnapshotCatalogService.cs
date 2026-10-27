@@ -84,7 +84,8 @@ public sealed class SnapshotCatalogService : ISnapshotCatalogService
             appSettings,
             allSnapshots,
             retentionFloor,
-            SnapshotSelector.Select(allSnapshots, retentionFloor, currentFolder));
+            SnapshotSelector.Select(allSnapshots, retentionFloor, currentFolder),
+            SnapshotRetentionService.SharedBackfillFrom(_pipelines, pipeline.SourceId));
 
         var entries = allSnapshots
             .Select(name => new SnapshotEntry(
@@ -127,7 +128,8 @@ public sealed class SnapshotCatalogService : ISnapshotCatalogService
             appSettings,
             allSnapshots,
             retentionFloor,
-            selection);
+            selection,
+            SnapshotRetentionService.SharedBackfillFrom(_pipelines, pipeline.SourceId));
         var cert = await SnapshotRetentionService.CertifyParquetAsync(
             pipelineId,
             parquetStore,
