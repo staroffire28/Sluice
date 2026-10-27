@@ -887,15 +887,17 @@ public sealed class IngestExecutor : IIngestExecutor
             }, cancellationToken);
         }
 
-        // Un Run manual que se para en un snapshot incompleto cerraba Ok sin avisar (el scheduler no
-        // lanza nada mientras haya uno pendiente, así que esto solo pasa a mano o por la API). Avisa por
-        // el webhook con la misma deduplicación que el scheduler: una vez por snapshot y de nuevo cada
-        // 24 h, con la última alerta en el estado del pipeline (IncompleteSnapshot.LastAlertedAt).
+        // Un Run que se para en un snapshot incompleto cerraba Ok sin avisar. Pasa con un Run manual o
+        // por la API, y también con uno del scheduler, que solo valida el snapshot pendiente más antiguo
+        // y puede toparse con otro posterior. Avisa por el webhook con las mismas reglas que el
+        // scheduler: tras 45 min viéndolo incompleto (desde IncompleteSnapshot.FirstSeenAt), una vez por
+        // snapshot y de nuevo cada 24 h, con la última alerta en IncompleteSnapshot.LastAlertedAt.
         if (incompleteSnapshot is not null && _alerts is not null)
         {
             var tracked = _stateStore.GetOrCreate(task.PipelineId).IncompleteSnapshot;
             var now = DateTimeOffset.UtcNow;
             if (tracked?.Name == incompleteSnapshot
+                && now - tracked.FirstSeenAt >= PipelineSchedulerService.IncompleteSnapshotGrace
                 && (tracked.LastAlertedAt is not { } last || now - last >= PipelineSchedulerService.IncompleteSnapshotRepeat))
             {
                 var message = $"Pipeline {pipeline.Name} parado: el snapshot {incompleteSnapshot} está cerrado pero incompleto ({incomplete?.Reason}). " +
