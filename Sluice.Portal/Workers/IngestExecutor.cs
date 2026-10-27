@@ -34,6 +34,7 @@ public sealed class IngestExecutor : IIngestExecutor
     private readonly JobProgressStore? _progressStore;
     private readonly AlertService? _alerts;
     private readonly SettingsStore? _settings;
+    private readonly ConsolidatedCache _consolidatedCache;
 
     public IngestExecutor(
         IJobService jobs,
@@ -59,6 +60,7 @@ public sealed class IngestExecutor : IIngestExecutor
         _progressStore = progress;
         _alerts = alerts;
         _settings = settings;
+        _consolidatedCache = new ConsolidatedCache(_options.DataDir);
     }
 
     public async Task ExecuteAsync(PipelineTask task, CancellationToken cancellationToken = default)
@@ -490,7 +492,7 @@ public sealed class IngestExecutor : IIngestExecutor
             var hasPreviousConsolidated = !isForce && consolidatedExists;
             if (hasPreviousConsolidated)
             {
-                sources.Add(await PreviousConsolidatedSourceAsync(parquetStore, consolidatedBlobPath, task.JobId, entity, cancellationToken));
+                sources.Add(await PreviousConsolidatedSourceAsync(parquetStore, consolidatedBlobPath, task.PipelineId, task.JobId, entity, cancellationToken));
             }
             else if (!isForce && pipelineState.Tables.ContainsKey(entity))
             {
@@ -587,6 +589,23 @@ public sealed class IngestExecutor : IIngestExecutor
                 }
 
                 hasDelta = true;
+            }
+
+            // El consolidado publicado pasa a ser la copia local (ConsolidatedCache), así el run
+            // siguiente no lo baja. Si falla, solo se pierde la caché: ese run lo bajará.
+            if (parquetStore is not LocalParquetStore)
+            {
+                try
+                {
+                    if (await parquetStore.GetParquetPropertiesAsync(consolidatedBlobPath, cancellationToken) is { } published)
+                    {
+                        _consolidatedCache.Store(task.PipelineId, entity, stagingConsolidated, published);
+                    }
+                }
+                catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogWarning(ex, "No se pudo guardar la copia local del consolidado de {Entity}; el próximo run lo bajará.", entity);
+                }
             }
 
             manifestEntities.Add(new IngestEntityManifest
@@ -915,14 +934,22 @@ public sealed class IngestExecutor : IIngestExecutor
     }
 
     // La consolidación lee cada fuente dos veces. En ADLS, abrir el consolidado anterior es descargarlo
-    // entero, así que se baja una sola vez a staging (se borra al consolidar la entidad) y las
-    // dos pasadas leen esa copia. En el disco del portal ya es un fichero local y se lee tal cual.
+    // entero, así que se baja una sola vez y las dos pasadas leen esa copia: la de ConsolidatedCache
+    // si el store da ETag y tamaño (solo se baja si el remoto cambió), y si no, una a staging (se borra
+    // al consolidar la entidad). En el disco del portal ya es un fichero local y se lee tal cual.
     private async Task<Func<CancellationToken, Task<Stream>>> PreviousConsolidatedSourceAsync(
-        IParquetStore parquetStore, string consolidatedBlobPath, string jobId, string entity, CancellationToken cancellationToken)
+        IParquetStore parquetStore, string consolidatedBlobPath, string pipelineId, string jobId, string entity, CancellationToken cancellationToken)
     {
         if (parquetStore is LocalParquetStore)
         {
             return ct => parquetStore.OpenParquetReadAsync(consolidatedBlobPath, ct);
+        }
+
+        if (await parquetStore.GetParquetPropertiesAsync(consolidatedBlobPath, cancellationToken) is { } remoteProperties)
+        {
+            var cached = await _consolidatedCache.GetOrDownloadAsync(
+                parquetStore, pipelineId, entity, consolidatedBlobPath, remoteProperties, cancellationToken);
+            return _ => Task.FromResult<Stream>(File.OpenRead(cached));
         }
 
         var local = _manifestStore.GetStagingPreviousConsolidatedPath(jobId, entity);
