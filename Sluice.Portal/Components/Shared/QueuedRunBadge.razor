@@ -33,14 +33,17 @@
     private ElementReference _status;
     private string? _result;
     private bool _focusStatus;
+    private string? _resultPipelineId;
 
-    // Un nuevo encolado borra el resultado del anterior.
+    // Un nuevo encolado borra el resultado del anterior, y también otro pipeline: el Dashboard y las
+    // filas de la tabla reutilizan la misma instancia.
     protected override void OnParametersSet()
     {
-        if (Queued is not null)
+        if (Queued is not null || PipelineId != _resultPipelineId)
         {
             _result = null;
         }
+        _resultPipelineId = PipelineId;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
