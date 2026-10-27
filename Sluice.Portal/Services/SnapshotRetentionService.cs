@@ -161,7 +161,11 @@ public sealed class SnapshotRetentionService
 
         foreach (var pipeline in _pipelines.List().Where(p => p.Enabled))
         {
-            if (runningPipelineIds.Contains(pipeline.Id))
+            var sourcePipelineIds = _pipelines.List()
+                .Where(p => p.SourceId == pipeline.SourceId)
+                .Select(p => p.Id)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (runningPipelineIds.Overlaps(sourcePipelineIds))
             {
                 totalSkipped++;
                 continue;
@@ -174,7 +178,7 @@ public sealed class SnapshotRetentionService
                 var allSnapshots = await adls.ListSnapshotFoldersAsync(cancellationToken);
                 var currentFolder = await adls.GetSettledSnapshotAsync(cancellationToken);
                 var state = _pipelines.GetState(pipeline.Id);
-                var floor = SharedLastProcessed(pipeline.SourceId);
+                var floor = SharedLastProcessed(_pipelines, pipeline.SourceId);
                 var selection = SnapshotSelector.Select(
                     allSnapshots,
                     floor,
@@ -205,7 +209,7 @@ public sealed class SnapshotRetentionService
                 var deleted = 0;
                 foreach (var folder in analysis.EligibleForPurge)
                 {
-                    if (_jobs.ListRunning().Any(j => j.PipelineId == pipeline.Id))
+                    if (_jobs.ListRunning().Any(j => sourcePipelineIds.Contains(j.PipelineId)))
                     {
                         _logger.LogInformation(
                             "Retención snapshots: purga interrumpida en {PipelineId} — job en ejecución.",
@@ -213,7 +217,7 @@ public sealed class SnapshotRetentionService
                         break;
                     }
 
-                    var floorNow = SharedLastProcessed(pipeline.SourceId);
+                    var floorNow = SharedLastProcessed(_pipelines, pipeline.SourceId);
                     var selectionNow = SnapshotSelector.Select(
                         allSnapshots,
                         floorNow,
@@ -311,12 +315,12 @@ public sealed class SnapshotRetentionService
 
     // Varios pipelines pueden leer la misma fuente: el suelo de la purga es el snapshot procesado
     // más antiguo entre todos ellos (activos o no). Si alguno aún no tiene estado, null: no se purga.
-    private string? SharedLastProcessed(string sourceId)
+    public static string? SharedLastProcessed(IPipelineService pipelines, string sourceId)
     {
         string? floor = null;
-        foreach (var pipeline in _pipelines.List().Where(p => p.SourceId == sourceId))
+        foreach (var pipeline in pipelines.List().Where(p => p.SourceId == sourceId))
         {
-            var last = _pipelines.GetState(pipeline.Id).LastProcessedSnapshot;
+            var last = pipelines.GetState(pipeline.Id).LastProcessedSnapshot;
             if (string.IsNullOrWhiteSpace(last))
             {
                 return null;
