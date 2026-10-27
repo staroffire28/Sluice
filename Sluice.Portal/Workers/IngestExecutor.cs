@@ -5,6 +5,7 @@ using Sluice.Portal.Models;
 using Sluice.Portal.Scheduler;
 using Sluice.Portal.Services;
 using Sluice.Portal.Services.Adls;
+using Sluice.Portal.Services.Logging;
 using Sluice.Portal.Services.Pipeline;
 using Sluice.Portal.Services.Stores;
 
@@ -887,17 +888,18 @@ public sealed class IngestExecutor : IIngestExecutor
             }, cancellationToken);
         }
 
-        // Un Run que se para en un snapshot incompleto cerraba Ok sin avisar. Pasa con un Run manual o
-        // por la API, y también con uno del scheduler, que solo valida el snapshot pendiente más antiguo
-        // y puede toparse con otro posterior. Avisa por el webhook con las mismas reglas que el
-        // scheduler: tras 45 min viéndolo incompleto (desde IncompleteSnapshot.FirstSeenAt), una vez por
-        // snapshot y de nuevo cada 24 h, con la última alerta en IncompleteSnapshot.LastAlertedAt.
+        // Un Run que se para en un snapshot incompleto cerraba Ok sin avisar. Avisa por el webhook una
+        // vez por snapshot y de nuevo cada 24 h, con la última alerta en IncompleteSnapshot.LastAlertedAt.
+        // Si lo lanzó el scheduler (solo valida el snapshot pendiente más antiguo y puede toparse con otro
+        // posterior que Synapse aún escribe), espera los mismos 45 min que él desde
+        // IncompleteSnapshot.FirstSeenAt. Si lo lanzó otro (a mano, por la API o un job antiguo sin
+        // lanzador), avisa ya: alguien lo pidió y puede que el scheduler esté apagado.
         if (incompleteSnapshot is not null && _alerts is not null)
         {
             var tracked = _stateStore.GetOrCreate(task.PipelineId).IncompleteSnapshot;
             var now = DateTimeOffset.UtcNow;
             if (tracked?.Name == incompleteSnapshot
-                && now - tracked.FirstSeenAt >= PipelineSchedulerService.IncompleteSnapshotGrace
+                && (job.TriggeredBy != AuditActor.Scheduler || now - tracked.FirstSeenAt >= PipelineSchedulerService.IncompleteSnapshotGrace)
                 && (tracked.LastAlertedAt is not { } last || now - last >= PipelineSchedulerService.IncompleteSnapshotRepeat))
             {
                 var message = $"Pipeline {pipeline.Name} parado: el snapshot {incompleteSnapshot} está cerrado pero incompleto ({incomplete?.Reason}). " +
