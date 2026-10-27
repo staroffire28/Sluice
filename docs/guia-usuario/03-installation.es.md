@@ -157,7 +157,7 @@ Se editan en el portal, se guardan en el volumen y aplican sin reiniciar.
 | Días sin datos para resaltar una tabla | En **Tablas**, *Último dato* se resalta cuando la última carga con filas es más antigua (por ejemplo, una tabla quitada del perfil de Synapse Link). `0` lo desactiva. | 7 |
 | Retención de snapshots origen (días) | Antigüedad a partir de la cual se purgan las carpetas CSV ya procesadas del container de Synapse Link. `0` la desactiva. | 30 |
 | Simulación de la purga de snapshots | Registra qué se borraría sin borrar nada. | Activada |
-| Exigir Parquet antes de purgar | No purga snapshots si falta algún Parquet consolidado del pipeline. | Activada |
+| Exigir Parquet antes de purgar | No purga snapshots si falta algún Parquet consolidado de un pipeline que lea esa fuente. | Activada |
 | Alertas | Activar y URL del webhook (p. ej. una Azure Logic App); **Enviar prueba** comprueba la URL. | Desactivadas |
 | Horas de atraso para alertar | Alerta cuando un snapshot cerrado lleva más de estas horas sin procesarse en un pipeline con scheduler ([detalles](04-reference.es.md#observabilidad-y-alertas)). `0` la desactiva. | 6 |
 

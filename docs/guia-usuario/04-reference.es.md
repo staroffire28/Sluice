@@ -79,14 +79,14 @@ Un janitor limita el crecimiento del volumen. El **job es la unidad de retenció
 
 ### Snapshots origen (container Synapse Link en ADLS)
 
-Un segundo janitor purga carpetas CSV **ya procesadas** en el container origen de Synapse Link. El parquet consolidado (en su container dedicado o en el disco del portal) es el artefacto de recovery.
+Un segundo janitor purga carpetas CSV **ya procesadas** en el container origen de Synapse Link. Si varios pipelines leen la misma fuente, una carpeta solo cuenta como procesada cuando todos ellos (activos o no) la han procesado, y no se purga nada mientras alguno tenga un job en ejecución. El parquet consolidado (en su container dedicado o en el disco del portal) es el artefacto de recovery.
 
 - **Siempre se conservan**: las últimas 14 snapshots procesadas (piso K), snapshots pendientes o en export, `Changelog/`, metadatos CDM y cualquier carpeta que no se llame como un snapshot de Synapse Link (`YYYY-MM-DDTHH.MM.SSZ`).
 - **Perilla**: `SourceSnapshotRetentionDays` en `/settings` (por defecto 30). `0` o negativo desactiva la purga.
 - **Cadencia**: cada 6 horas, solo en el orquestador; registrado como `snapshot-retention.sweep`.
 - **Recovery tras purga**: usa **Force** (o `POST /api/pipelines/{id}/reload-from-parquet`, mismo camino) para recargar SQL desde parquet consolidado. Incremental sigue leyendo CSV nuevos en ADLS.
 - **Dry-run**: `SourceSnapshotRetentionDryRun` en `/settings` — **activo por defecto**; simula sin borrar. Revisa `/snapshots` (columna Retención) y activity log `snapshot-retention.dry-run` antes de desactivarlo.
-- **Certificación parquet**: `SourceSnapshotRetentionRequireParquet` (default activo) — no purga si falta algún `{pipeline}/{entity}.parquet`.
+- **Certificación parquet**: `SourceSnapshotRetentionRequireParquet` (default activo) — no purga si falta algún `{pipeline}/{entity}.parquet` de cualquier pipeline que lea la fuente.
 - **Soft-delete**: habilita blob soft-delete en la storage account de Azure para recuperar carpetas borradas por error (configuración fuera del portal).
 
 ### Versiones del Parquet consolidado
