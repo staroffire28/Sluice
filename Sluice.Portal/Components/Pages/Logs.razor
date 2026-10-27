@@ -1,7 +1,6 @@
 @page "/logs"
 @rendermode InteractiveServer
 @using System.Globalization
-@using System.Text.Json
 @using Microsoft.AspNetCore.WebUtilities
 @using Sluice.Portal.Components.Shared
 @using Sluice.Portal.Models
@@ -141,26 +140,7 @@
     // Un pipeline borrado ya no tiene nombre: se muestra su id.
     private string PipelineName(string id) => _pipelineNames.GetValueOrDefault(id) ?? id;
 
-    // El mensaje con el nombre del pipeline en vez de su id: se sustituyen los argumentos que son
-    // exactamente el id (no el texto, que lo lleva también dentro del id del job). La búsqueda
-    // encuentra por el mismo texto.
-    private string RenderMessage(ActivityLogEntry e)
-    {
-        if (e.PipelineId is not { } id || e.MessageArgs is not { } args || !_pipelineNames.TryGetValue(id, out var name))
-        {
-            return EventText.Render(L, e);
-        }
-
-        var named = args.Select(a => IsText(a, id) ? name : a).ToArray();
-        return EventText.Render(L, e.MessageKey, named, e.Message);
-    }
-
-    private static bool IsText(object? arg, string value) => arg switch
-    {
-        string s => s == value,
-        JsonElement { ValueKind: JsonValueKind.String } json => json.GetString() == value,
-        _ => false,
-    };
+    private string RenderMessage(ActivityLogEntry e) => EventText.Render(L, e, _pipelineNames);
 
     private void OnPageChanged(int page)
     {
