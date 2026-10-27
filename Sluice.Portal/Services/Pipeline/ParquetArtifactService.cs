@@ -110,9 +110,13 @@ public sealed class ParquetArtifactService : IParquetArtifactService
 
         using var runLock = await PipelineRunLock.AcquireAsync(_options.DataDir, pipelineId, PipelineRunLock.DefaultTimeout, cancellationToken);
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
+        // Se compara la ruta como la resuelve el store: "p1/./X.parquet" o "p1//X.parquet" apuntan al consolidado.
+        var normalizedPath = string.Join('/', blobPath.Replace('\\', '/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Where(segment => segment != "."));
         var liveTable = _pipelines.GetState(pipelineId).Tables.Keys.FirstOrDefault(entity =>
-            string.Equals(blobPath, IngestManifestStore.GetConsolidatedBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase)
-            || string.Equals(blobPath, IngestManifestStore.GetConsolidatedSchemaBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase));
+            string.Equals(normalizedPath, IngestManifestStore.GetConsolidatedBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalizedPath, IngestManifestStore.GetConsolidatedSchemaBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase));
         if (liveTable is not null)
         {
             throw new InvalidOperationException(
