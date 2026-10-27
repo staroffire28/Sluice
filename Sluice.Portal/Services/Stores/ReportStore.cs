@@ -205,7 +205,8 @@ public sealed class ReportStore
 
     // Sin puntero (reportes de antes de él) o si apunta a un fichero que ya no está, se busca entre
     // todos una vez y se deja el puntero para la siguiente. Lo encontrado así manda: sustituye al puntero
-    // aunque este sea más reciente, porque ya no sirve.
+    // aunque este sea más reciente, porque ya no sirve. Si no hay ninguno, el puntero queda sin Id
+    // ("aún sin reporte", con la fecha mínima para que el primer Save lo sustituya) y no se vuelve a buscar.
     private T? GetLatest<T>(string kind, string pipelineId, Func<T, string> idOf, Func<T, string> pipelineOf, Func<T, DateTimeOffset> createdAt)
         where T : class
     {
@@ -217,11 +218,17 @@ public sealed class ReportStore
                 return null;
             }
 
-            if (TryRead<LatestPointer>(PointerPath(dir, pipelineId)) is { } pointer
-                && TryRead<T>(Path.Combine(dir, $"{pointer.Id}.json")) is { } pointed
-                && pipelineOf(pointed) == pipelineId)
+            if (TryRead<LatestPointer>(PointerPath(dir, pipelineId)) is { } pointer)
             {
-                return pointed;
+                if (pointer.Id is null)
+                {
+                    return null;
+                }
+
+                if (TryRead<T>(Path.Combine(dir, $"{pointer.Id}.json")) is { } pointed && pipelineOf(pointed) == pipelineId)
+                {
+                    return pointed;
+                }
             }
 
             var latest = ReportFiles(dir)
@@ -229,16 +236,15 @@ public sealed class ReportStore
                 .Where(r => r is not null && pipelineOf(r) == pipelineId)
                 .OrderByDescending(r => createdAt(r!))
                 .FirstOrDefault();
-            if (latest is not null)
+            try
             {
-                try
-                {
-                    AtomicJsonFile.Write(PointerPath(dir, pipelineId), new LatestPointer(idOf(latest), createdAt(latest)));
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    // Sin puntero se vuelve a buscar en la siguiente consulta: la respuesta no cambia.
-                }
+                AtomicJsonFile.Write(
+                    PointerPath(dir, pipelineId),
+                    latest is null ? new LatestPointer(null, DateTimeOffset.MinValue) : new LatestPointer(idOf(latest), createdAt(latest)));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Sin puntero se vuelve a buscar en la siguiente consulta: la respuesta no cambia.
             }
 
             return latest;
@@ -285,5 +291,5 @@ public sealed class ReportStore
         }
     }
 
-    private sealed record LatestPointer(string Id, DateTimeOffset CreatedAt);
+    private sealed record LatestPointer(string? Id, DateTimeOffset CreatedAt);
 }
