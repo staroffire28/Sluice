@@ -144,14 +144,16 @@
     @if (_resetHistoryAtRisk)
     {
         <FluentMessageBar Intent="MessageBarIntent.Warning">
-            @(_resetOldestSnapshot is null ? L["Page.Pipelines.ResetHistoryLostUnknown"] : L["Page.Pipelines.ResetHistoryLost", _resetOldestSnapshot])
+            @(_resetHistoryLoading ? L["Page.Pipelines.ResetHistoryChecking"]
+                : _resetOldestSnapshot is null ? L["Page.Pipelines.ResetHistoryLostUnknown"]
+                : L["Page.Pipelines.ResetHistoryLost", _resetOldestSnapshot])
         </FluentMessageBar>
         <FluentCheckbox @bind-Value="_resetHistoryAck" Label="@L["Page.Pipelines.ResetHistoryAck"]" data-testid="pipe-reset-ack" />
     }
     </ChildContent>
     <Actions>
         <FluentButton OnClick="() => _showReset = false">@L["Common.Cancel"]</FluentButton>
-        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="pipe-reset-confirm" Disabled="@(_resetting || (_resetHistoryAtRisk && !_resetHistoryAck))" Loading="@_resetting" OnClick="ResetConfirmed">@L["Page.Pipelines.Reset"]</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="pipe-reset-confirm" Disabled="@(_resetting || (_resetHistoryAtRisk && (_resetHistoryLoading || !_resetHistoryAck)))" Loading="@_resetting" OnClick="ResetConfirmed">@L["Page.Pipelines.Reset"]</FluentButton>
     </Actions>
 </InlineDialog>
 
@@ -184,6 +186,7 @@
     // parquet que el reset borra, y el reset no deja seguir sin marcar que se entiende.
     private bool _resetHistoryAtRisk;
     private bool _resetHistoryAck;
+    private bool _resetHistoryLoading;
     private string? _resetOldestSnapshot;
     private ReconcileReport? _latestReconcile;
     private Dictionary<string, string> _connectionNames = [];
@@ -391,16 +394,18 @@
         // el lago ya no tenga los primeros snapshots: se avisa y se dice desde cuándo los conserva.
         _resetHistoryAtRisk = !Settings.TryGet(out var settings)
             || (settings.SourceSnapshotRetentionDays > 0 && !settings.SourceSnapshotRetentionDryRun);
+        _resetHistoryLoading = _resetHistoryAtRisk;
         _showReset = true;
         if (!_resetHistoryAtRisk)
         {
             return;
         }
 
+        string? oldest = null;
         try
         {
             var adls = await AdlsFactory.CreateAsync(pipeline.SourceId);
-            _resetOldestSnapshot = (await adls.ListSnapshotFoldersAsync())
+            oldest = (await adls.ListSnapshotFoldersAsync())
                 .Where(Sluice.Portal.Services.Adls.ExcludedEntities.IsSnapshotFolder)
                 .Min(StringComparer.Ordinal);
         }
@@ -409,6 +414,15 @@
             // Sin el lago, el aviso sale sin fecha.
             Logger.LogWarning(ex, "Reset: no se pudo listar los snapshots del origen de {PipelineId}", pipeline.Id);
         }
+
+        // Si mientras tanto se abrió el diálogo para otro pipeline, este resultado ya no le toca.
+        if (_resetId != pipeline.Id)
+        {
+            return;
+        }
+
+        _resetOldestSnapshot = oldest;
+        _resetHistoryLoading = false;
     }
 
     private async Task ResetConfirmed()

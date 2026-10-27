@@ -236,6 +236,7 @@
   <data name="Page.Pipelines.ResetTruncateSqlHint" xml:space="preserve"><value>If unchecked, the next run updates the rows already in SQL with MERGE.</value></data>
   <data name="Page.Pipelines.ResetHistoryLost" xml:space="preserve"><value>Source snapshot retention deletes snapshots from the lake, which now keeps them from {0}. The history of earlier, already deleted snapshots only exists in the parquet this reset deletes: it cannot be rebuilt afterwards.</value></data>
   <data name="Page.Pipelines.ResetHistoryLostUnknown" xml:space="preserve"><value>Source snapshot retention deletes snapshots from the lake, and it could not be checked which ones it still keeps. The history of already deleted snapshots only exists in the parquet this reset deletes: it cannot be rebuilt afterwards.</value></data>
+  <data name="Page.Pipelines.ResetHistoryChecking" xml:space="preserve"><value>Source snapshot retention deletes snapshots from the lake. Checking which ones it still keeps…</value></data>
   <data name="Page.Pipelines.ResetHistoryAck" xml:space="preserve"><value>I understand that history is lost</value></data>
   <data name="Page.Pipelines.ResetFailed" xml:space="preserve"><value>Couldn't empty {0} table(s) in SQL. The reset stopped without deleting anything in ADLS or the state, so no stale data is left in SQL.</value></data>
   <data name="Page.Pipelines.NewTitle" xml:space="preserve"><value>New pipeline</value></data>

@@ -235,6 +235,7 @@
   <data name="Page.Pipelines.ResetTruncateSqlHint" xml:space="preserve"><value>Si no la marcas, la próxima ejecución actualizará con MERGE las filas que ya existen en SQL.</value></data>
   <data name="Page.Pipelines.ResetHistoryLost" xml:space="preserve"><value>La retención de origen borra snapshots del lago, que ahora los conserva desde {0}. La historia de los snapshots anteriores ya borrados solo existe en el parquet que este reset va a borrar: después no se podrá reconstruir.</value></data>
   <data name="Page.Pipelines.ResetHistoryLostUnknown" xml:space="preserve"><value>La retención de origen borra snapshots del lago y no se pudo comprobar desde cuándo los conserva. La historia de los snapshots ya borrados solo existe en el parquet que este reset va a borrar: después no se podrá reconstruir.</value></data>
+  <data name="Page.Pipelines.ResetHistoryChecking" xml:space="preserve"><value>La retención de origen borra snapshots del lago. Comprobando desde cuándo los conserva…</value></data>
   <data name="Page.Pipelines.ResetHistoryAck" xml:space="preserve"><value>Entiendo que esa historia se pierde</value></data>
   <data name="Page.Pipelines.ResetFailed" xml:space="preserve"><value>No se pudieron vaciar {0} tabla(s) en SQL. El restablecimiento se detuvo sin borrar nada en ADLS ni el estado, para no dejar datos antiguos en SQL.</value></data>
   <data name="Page.Pipelines.NewTitle" xml:space="preserve"><value>Nuevo pipeline</value></data>
