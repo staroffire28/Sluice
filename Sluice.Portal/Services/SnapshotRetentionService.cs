@@ -177,7 +177,6 @@ public sealed class SnapshotRetentionService
                 var parquetStore = await _adlsFactory.CreateParquetStoreAsync(pipeline.SourceId, cancellationToken);
                 var allSnapshots = await adls.ListSnapshotFoldersAsync(cancellationToken);
                 var currentFolder = await adls.GetSettledSnapshotAsync(cancellationToken);
-                var state = _pipelines.GetState(pipeline.Id);
                 var floor = SharedLastProcessed(_pipelines, pipeline.SourceId);
                 var selection = SnapshotSelector.Select(
                     allSnapshots,
@@ -190,18 +189,34 @@ public sealed class SnapshotRetentionService
                     continue;
                 }
 
+                // Las carpetas son de la fuente: cada pipeline que la lee (activo o no) debe tener su
+                // parquet consolidado antes de purgar.
                 if (settings.SourceSnapshotRetentionRequireParquet)
                 {
-                    var cert = await CertifyParquetAsync(pipeline.Id, parquetStore, state, cancellationToken);
-                    if (!cert.IsComplete)
+                    var certified = true;
+                    foreach (var sourcePipelineId in sourcePipelineIds)
                     {
-                        totalSkippedCert++;
-                        _activity.LogSystem(
-                            "snapshot-retention.skip",
-                            $"Pipeline {pipeline.Id}: purga omitida — faltan parquet consolidados: " +
-                            $"{string.Join(", ", cert.MissingEntities)}.",
-                            pipeline.Id, null, "warning",
-                            "Activity.SnapshotRetention.Skip", pipeline.Id, string.Join(", ", cert.MissingEntities));
+                        var cert = await CertifyParquetAsync(
+                            sourcePipelineId,
+                            parquetStore,
+                            _pipelines.GetState(sourcePipelineId),
+                            cancellationToken);
+                        if (!cert.IsComplete)
+                        {
+                            totalSkippedCert++;
+                            _activity.LogSystem(
+                                "snapshot-retention.skip",
+                                $"Pipeline {sourcePipelineId}: purga omitida — faltan parquet consolidados: " +
+                                $"{string.Join(", ", cert.MissingEntities)}.",
+                                sourcePipelineId, null, "warning",
+                                "Activity.SnapshotRetention.Skip", sourcePipelineId, string.Join(", ", cert.MissingEntities));
+                            certified = false;
+                            break;
+                        }
+                    }
+
+                    if (!certified)
+                    {
                         continue;
                     }
                 }
