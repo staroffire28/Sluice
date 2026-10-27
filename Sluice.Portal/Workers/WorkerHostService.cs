@@ -22,6 +22,7 @@ public sealed class WorkerHostService : BackgroundService
     private readonly AlertService _alerts;
     private readonly ILogger<WorkerHostService> _logger;
     private readonly IActivityLog _activity;
+    private readonly TimeProvider _time;
 
     public WorkerHostService(
         IOptions<AppOptions> options,
@@ -36,8 +37,10 @@ public sealed class WorkerHostService : BackgroundService
         PipelineStore pipelines,
         AlertService alerts,
         ILogger<WorkerHostService> logger,
-        IActivityLog activity)
+        IActivityLog activity,
+        TimeProvider? time = null)
     {
+        _time = time ?? TimeProvider.System;
         _options = options.Value;
         _tasks = tasks;
         _router = router;
@@ -218,7 +221,7 @@ public sealed class WorkerHostService : BackgroundService
         }
     }
 
-    // interval solo lo fijan los tests; en producción es un tercio del lease (mínimo 5 s).
+    // interval solo lo fijan los tests; en producción es un tercio del lease vigente (mínimo 5 s).
     internal async Task HeartbeatLoopAsync(
         string taskId,
         PipelineStage stage,
@@ -229,13 +232,20 @@ public sealed class WorkerHostService : BackgroundService
         CancellationToken ct,
         TimeSpan? interval = null)
     {
-        var leaseSeconds = Math.Max(15, _settings.Get().TaskLeaseSeconds);
-        using var timer = new PeriodicTimer(interval ?? TimeSpan.FromSeconds(Math.Max(5, leaseSeconds / 3)));
+        using var timer = new PeriodicTimer(interval ?? CurrentHeartbeatInterval(), _time);
         var cancelSignalled = false;
         try
         {
             while (await timer.WaitForNextTickAsync(ct))
             {
+                // El intervalo sigue el lease vigente: fijado al empezar, bajar el lease desde Ajustes
+                // con la tarea en curso lo dejaba vencer antes del siguiente latido, y otra réplica
+                // ejecutaba la misma tarea.
+                if (interval is null)
+                {
+                    timer.Period = CurrentHeartbeatInterval();
+                }
+
                 try
                 {
                     if (await _tasks.HeartbeatAsync(taskId, stage, workerId, ct) is null)
@@ -271,6 +281,9 @@ public sealed class WorkerHostService : BackgroundService
             // El stage terminó: se cancela el latido.
         }
     }
+
+    private TimeSpan CurrentHeartbeatInterval() =>
+        TimeSpan.FromSeconds(Math.Max(5, Math.Max(15, _settings.Get().TaskLeaseSeconds) / 3));
 
     internal async Task MarkJobFailedAsync(string jobId, PipelineStage stage, string message, CancellationToken ct, string? code = null)
     {

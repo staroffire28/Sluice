@@ -55,9 +55,16 @@ public sealed class JobStore : JsonFileStore<Job>
                 {
                     job = Read(file.FullName);
                 }
-                catch (Exception ex) when (ex is System.Text.Json.JsonException or IOException or UnauthorizedAccessException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    // Corrupto o a medio mover por otro proceso: se omite, como en ListAll.
+                    // Abierto o a medio mover por otro proceso: se queda lo último leído, sin tocar la
+                    // caché, y se relee en la siguiente consulta. Quitarlo hacía que un job en curso
+                    // desapareciera de ListRunning y de las guardas por un error transitorio.
+                    continue;
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    // Corrupto: se omite, como en ListAll.
                     job = null;
                 }
 

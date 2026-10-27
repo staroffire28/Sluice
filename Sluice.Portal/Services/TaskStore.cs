@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -219,7 +220,7 @@ public sealed class TaskStore : ITaskStore
                     continue;
                 }
 
-                if (task?.LeaseExpiresAt is null || task.LeaseExpiresAt > now)
+                if (!IsExpired(task, file, now))
                 {
                     continue;
                 }
@@ -244,7 +245,7 @@ public sealed class TaskStore : ITaskStore
                     await using (var expired = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Delete))
                     {
                         current = await JsonSerializer.DeserializeAsync<PipelineTask>(expired, JsonDefaults.Options, cancellationToken);
-                        if (current?.LeaseExpiresAt is null || current.LeaseExpiresAt > now)
+                        if (!IsExpired(current, file, now))
                         {
                             continue;
                         }
@@ -271,6 +272,15 @@ public sealed class TaskStore : ITaskStore
             }
         }
     }
+
+    // Vencida: con el lease pasado, o sin lease y escrita hace más de un lease. Esta última es un claim
+    // que cayó entre mover el pendiente a claimed/ y escribir su lease: nadie la renovaba ni la
+    // reclamaba. Un claim en curso tiene el lock de la tarea, así que bajo el lock ya lleva lease.
+    private bool IsExpired([NotNullWhen(true)] PipelineTask? task, string file, DateTimeOffset now) =>
+        task is not null && (task.LeaseExpiresAt is { } lease
+            ? lease <= now
+            : new DateTimeOffset(File.GetLastWriteTimeUtc(file), TimeSpan.Zero)
+                .AddSeconds(Math.Max(SettingsStore.MinTaskLeaseSeconds, _settings.Get().TaskLeaseSeconds)) <= now);
 
     public int CountByStatus(PipelineStage stage, PipelineTaskStatus status)
     {
@@ -372,6 +382,11 @@ public sealed class TaskStore : ITaskStore
         Func<PipelineTask, PipelineTask> transform,
         CancellationToken cancellationToken)
     {
+        // Bajo el lock de la tarea, como el latido y el reclaim: sin él, completar podía mover el
+        // claimed/X que un reclaim estaba devolviendo a pending, y la tarea quedaba en dos sitios. Con
+        // el lock ocupado se lanza (como en HeartbeatAsync); null diría "ya no es tuya".
+        using var taskLock = await TryLockTaskAsync(stage, taskId, cancellationToken)
+            ?? throw new IOException($"La tarea {taskId} está ocupada por otro proceso.");
         var claimedPath = GetPath(stage, PipelineTaskStatus.Claimed, taskId);
         if (!File.Exists(claimedPath))
         {
