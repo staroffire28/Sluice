@@ -167,9 +167,17 @@ public sealed class SnapshotRetentionService
         var totalWouldDelete = 0;
         var totalSkipped = 0;
         var totalSkippedCert = 0;
+        var sweptSourceIds = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var pipeline in _pipelines.List().Where(p => p.Enabled))
         {
+            // La purga es por fuente: una sola pasada por fuente aunque la lean varios pipelines,
+            // también si se omitió por job en ejecución o certificación incompleta.
+            if (!sweptSourceIds.Add(pipeline.SourceId))
+            {
+                continue;
+            }
+
             var sourcePipelineIds = _pipelines.List()
                 .Where(p => p.SourceId == pipeline.SourceId)
                 .Select(p => p.Id)
