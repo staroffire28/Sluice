@@ -205,14 +205,14 @@ public sealed class ReconcileExecutor : IReconcileExecutor
         // blanco Reconcile, Tablas y el banner de Pipelines. Se conserva la última real.
         if (results.Count == 0)
         {
-            FinishWithNothingToCompare(task, job.Type, progress, stageStart);
+            FinishWithNothingToCompare(task, job.Type, progress, stageStart, appendEvent: failed.Count == 0);
             return;
         }
 
         // Re-sync por tabla: el reporte arrastra las demás entidades del último reconcile para no
         // perder la foto completa del pipeline (ver ReconcileService.BuildScopedReport).
         var report = scopedEntities.Length > 0
-            ? _reconcile.BuildScopedReport(task.PipelineId, task.JobId, results)
+            ? _reconcile.BuildScopedReport(task.PipelineId, task.JobId, scopedEntities, results)
             : _reconcile.BuildReport(task.PipelineId, task.JobId, results);
 
         // Tablas sobre el umbral y no aceptadas: las que alertan y las que la corrección automática
@@ -406,7 +406,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
     };
 
     private void FinishWithNothingToCompare(
-        PipelineTask task, JobType type, StageProgress progress, DateTimeOffset stageStart)
+        PipelineTask task, JobType type, StageProgress progress, DateTimeOffset stageStart, bool appendEvent)
     {
         progress.CompleteStep(JobStepCatalog.Report, "skipped");
         progress.Finish("done");
@@ -417,6 +417,12 @@ public sealed class ReconcileExecutor : IReconcileExecutor
             StageStatus = new Dictionary<string, string>(job.StageStatus) { ["reconcile"] = "done" },
             StageTimings = job.StageTimings.Set("reconcile", started: stageStart, finished: DateTimeOffset.UtcNow),
         });
+
+        // Si todas las entidades fallaron, sus avisos por tabla ya lo explican: no se añade otro.
+        if (!appendEvent)
+        {
+            return;
+        }
 
         // En un Reconcile explícito es un aviso (no hay Parquet consolidado: falta ejecutar el
         // pipeline); en un Incremental sin datos nuevos es lo normal.

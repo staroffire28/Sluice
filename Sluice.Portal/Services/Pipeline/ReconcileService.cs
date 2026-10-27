@@ -6,7 +6,7 @@ namespace Sluice.Portal.Services.Pipeline;
 public interface IReconcileService
 {
     ReconcileReport BuildReport(string pipelineId, string jobId, IEnumerable<ReconcileEntityResult> entities);
-    ReconcileReport BuildScopedReport(string pipelineId, string jobId, IReadOnlyCollection<ReconcileEntityResult> scopedEntities);
+    ReconcileReport BuildScopedReport(string pipelineId, string jobId, IReadOnlyCollection<string> scopedEntities, IEnumerable<ReconcileEntityResult> results);
     DiffReport BuildDiffReport(string pipelineId, string jobId, IEnumerable<DiffEntityResult> entities);
 
     // Tablas que justifican actuar (alerta / corrección automática): superan el umbral y no tienen
@@ -65,13 +65,15 @@ public sealed class ReconcileService : IReconcileService
     // seguir siendo la foto completa del pipeline. Se arrastran las demás entidades del último
     // reporte (con su último conteo conocido) y se reemplazan solo las re-sincronizadas; si no, el
     // "último reporte" quedaría con esas tablas y la UI (banner, /reconcile, /tables) perdería el resto.
-    public ReconcileReport BuildScopedReport(string pipelineId, string jobId, IReadOnlyCollection<ReconcileEntityResult> scopedEntities)
+    // Una entidad re-sincronizada que no se pudo contar no está en results: tampoco arrastra su
+    // fila anterior (su divergencia vieja no debe quedar sellada con este job ni alertar).
+    public ReconcileReport BuildScopedReport(string pipelineId, string jobId, IReadOnlyCollection<string> scopedEntities, IEnumerable<ReconcileEntityResult> results)
     {
-        var scoped = scopedEntities.Select(e => e.Entity).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var scoped = scopedEntities.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var prior = _reports.GetLatestReconcile(pipelineId);
         var entities = (prior?.Entities ?? [])
             .Where(e => !scoped.Contains(e.Entity))
-            .Concat(scopedEntities);
+            .Concat(results);
 
         return BuildReport(pipelineId, jobId, entities);
     }
