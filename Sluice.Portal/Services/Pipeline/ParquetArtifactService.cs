@@ -110,10 +110,12 @@ public sealed class ParquetArtifactService : IParquetArtifactService
 
         using var runLock = await PipelineRunLock.AcquireAsync(_options.DataDir, pipelineId, PipelineRunLock.DefaultTimeout, cancellationToken);
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
-        // Se compara la ruta como la resuelve el store: "p1/./X.parquet" o "p1//X.parquet" apuntan al consolidado.
+        // Se compara la ruta como la resuelve el store: "p1/./X.parquet", "p1//X.parquet" o "p1/X.parquet."
+        // (Windows quita los '.' y ' ' finales de cada segmento) apuntan al consolidado.
         var normalizedPath = string.Join('/', blobPath.Replace('\\', '/')
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .Where(segment => segment != "."));
+            .Split('/')
+            .Select(segment => segment.TrimEnd('.', ' '))
+            .Where(segment => segment.Length > 0));
         var liveTable = _pipelines.GetState(pipelineId).Tables.Keys.FirstOrDefault(entity =>
             string.Equals(normalizedPath, IngestManifestStore.GetConsolidatedBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase)
             || string.Equals(normalizedPath, IngestManifestStore.GetConsolidatedSchemaBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase));
