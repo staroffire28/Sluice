@@ -62,23 +62,29 @@ public sealed class ConsolidatedCache(string dataDir)
     public void Remove(string pipelineId, string entity)
     {
         var path = GetPath(pipelineId, entity);
-        // Sin caché (p. ej. el parquet en el disco del portal) no hay carpeta, y File.Delete lanza.
-        if (!Directory.Exists(Path.GetDirectoryName(path)))
+        TryDelete(() =>
         {
-            return;
-        }
-
-        File.Delete(MetadataPath(path));
-        File.Delete(path);
+            File.Delete(MetadataPath(path));
+            File.Delete(path);
+        });
     }
 
     // Todas las copias del pipeline: al resetearlo o borrarlo.
-    public void RemovePipeline(string pipelineId)
+    public void RemovePipeline(string pipelineId) =>
+        TryDelete(() => Directory.Delete(Path.GetDirectoryName(GetPath(pipelineId, "_"))!, recursive: true));
+
+    // Borrar la caché es solo por ahorrar disco: si falla, no puede abortar ni dejar a medias el archivado,
+    // la restauración, el reset o el borrado del pipeline. Una copia que se quede nunca se usa (otro ETag).
+    // Sin caché (p. ej. el parquet en el disco del portal) no hay carpeta: DirectoryNotFoundException es
+    // un IOException y no hay nada que borrar.
+    private static void TryDelete(Action delete)
     {
-        var directory = Path.GetDirectoryName(GetPath(pipelineId, "_"))!;
-        if (Directory.Exists(directory))
+        try
         {
-            Directory.Delete(directory, recursive: true);
+            delete();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
         }
     }
 
