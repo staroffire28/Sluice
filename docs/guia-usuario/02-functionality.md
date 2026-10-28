@@ -29,7 +29,7 @@ Work flows through a **file-based queue**: each task is a JSON file whose folder
 | Page | Route | What you do there |
 |---|---|---|
 | Dashboard | `/` | Health, queue, workers; launch and cancel runs. Until a run has loaded tables, it shows **First steps**: connect the source and the destination, create a pipeline, choose tables (optional) and run it, each step with its link. |
-| Jobs | `/jobs` | Run history (pipeline, status and From/To date filters); open detail; download PDF/JSON report; **Export CSV** with the applied filters. The *Job* column shows the short id (the final suffix); the full id appears on hover, in the detail and in the CSV. |
+| Jobs | `/jobs` | Run history (pipeline, status and From/To date filters); open detail; download PDF/JSON report; **Export CSV** with the applied filters. The *Job* column shows the short id (the final suffix); the full id appears on hover, in the detail and in the CSV. Dates, the From/To filter (whole days) and the CSV use your browser's time zone. |
 | Job detail | `/jobs/{id}` | Live progress: stages, per-table results, timeline; download the PDF report. |
 | Tables | `/tables` | Row counts, watermarks, last data (highlighted after *Days without data*, see Settings) and load status per table; **Re-sync** any table from its Parquet. |
 | Sources | `/sources` | ADLS source connections (create, test, edit, delete). |

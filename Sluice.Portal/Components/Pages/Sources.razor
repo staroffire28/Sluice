@@ -12,6 +12,7 @@
 @using Sluice.Portal.Services.Adls
 
 @inject IStringLocalizer<SharedResource> L
+@inject BrowserTime Time
 
 <PageTitle>@L["Nav.Sources"]</PageTitle>
 
@@ -31,7 +32,7 @@
             <FluentDataGrid Class="data-panel" MultiLine="true" Items="@_items.AsQueryable()" TGridItem="Connection">
                 <PropertyColumn Property="@(c => c.Name)" Title="@L["Common.Name"]" />
                 <PropertyColumn Property="@(c => c.Type)" Title="@L["Common.Type"]" />
-                <PropertyColumn Property="@(c => c.CreatedAt)" Title="@L["Page.Sources.Created"]" Format="g" Class="cell-nowrap" />
+                <PropertyColumn Property="@(c => Time.Format(c.CreatedAt))" Title="@L["Page.Sources.Created"]" Class="cell-nowrap" />
                 <TemplateColumn Title="@L["Common.Actions"]">
                     @if (_testingId == context.Id)
                     {
@@ -154,6 +155,15 @@
     private string _clientSecret = "";
 
     protected override void OnInitialized() => Load();
+
+    // La fecha de alta va en la zona del navegador, que solo se conoce con el circuito conectado.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && await Time.InitAsync())
+        {
+            StateHasChanged();
+        }
+    }
 
     private void Load()
     {
