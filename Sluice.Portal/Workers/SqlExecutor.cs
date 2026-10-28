@@ -293,10 +293,11 @@ public sealed class SqlExecutor : ISqlExecutor
                 _jobs.AppendEvent(task.JobId, EventLevel.Info, $"{entry.Entity}: merged {merged}{(fromDelta ? " (delta)" : "")}, table count {sqlRows}.",
                     null, fromDelta ? "Event.Sql.EntityMergedDelta" : "Event.Sql.EntityMerged", entry.Entity, merged, sqlRows);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
                 // Una cancelación del worker (SIGTERM/redeploy) no es un fallo de la entidad: se
                 // propaga para que la tarea se reintente en vez de marcar el job sano como Error.
+                // Se mira el token y no el tipo: el driver la traduce a SqlException.
                 // Una entidad que falla (container parquet sin configurar, schema corrupto,
                 // error SQL) NO debe tumbar toda la etapa ni terminar en silencio: se marca
                 // 'error', se registra, y el resto de entidades continúa.
@@ -345,8 +346,11 @@ public sealed class SqlExecutor : ISqlExecutor
 
         // El delta solo sirve dentro de este job: se borra al terminar la etapa (vaya bien o mal;
         // un reintento recarga desde el consolidado). Una cancelación sale antes por excepción
-        // y lo conserva para la réplica que reclame la tarea.
-        TryDeleteDirectory(_manifestStore.GetDeltaDirectory(task.PipelineId, task.JobId));
+        // y lo conserva para la réplica que reclame la tarea; con el token ya cancelado, tampoco.
+        if (!cancellationToken.IsCancellationRequested)
+        {
+            TryDeleteDirectory(_manifestStore.GetDeltaDirectory(task.PipelineId, task.JobId));
+        }
 
         var hasEntityError = entityResults.Any(e =>
             string.Equals(e.Status, "error", StringComparison.OrdinalIgnoreCase));
