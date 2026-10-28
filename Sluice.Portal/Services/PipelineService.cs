@@ -81,17 +81,20 @@ public sealed class PipelineService : IPipelineService
         return pipeline;
     }
 
-    public Task<PipelineModel?> UpdateAsync(AuditActor actor, string id, PipelineModel pipeline, CancellationToken cancellationToken = default) =>
-        _audit.AuditAsync(
+    // La entrada dice qué campos cambiaron (AuditChanges).
+    public async Task<PipelineModel?> UpdateAsync(AuditActor actor, string id, PipelineModel pipeline, CancellationToken cancellationToken = default) =>
+        (await _audit.AuditAsync(
             actor,
             "pipeline.update",
             id,
             () => UpdateCoreAsync(id, pipeline, cancellationToken),
-            updated => updated is null
+            edit => edit is not { } done
                 ? new AuditResult($"El pipeline {id} no existe.", Outcome: AuditOutcome.Rejected, MessageKey: "Activity.Pipeline.NotFound", MessageArgs: [id])
-                : new AuditResult($"Pipeline {updated.Name} actualizado.", MessageKey: "Activity.Pipeline.Updated", MessageArgs: [updated.Name]),
+                : AuditChanges.Between(AuditChanges.Fields(done.Before, "id", "createdAt"), AuditChanges.Fields(done.After, "id", "createdAt"), _ => false) is { } changes
+                    ? new AuditResult($"Pipeline {done.After.Name} actualizado: {changes.Text}.", MessageKey: "Activity.Pipeline.UpdatedChanges", MessageArgs: [done.After.Name, changes.Part])
+                    : new AuditResult($"Pipeline {done.After.Name} actualizado.", MessageKey: "Activity.Pipeline.Updated", MessageArgs: [done.After.Name]),
             $"No se pudo guardar el pipeline {pipeline.Name}",
-            failureKey: "Activity.Failed.PipelineSave", failureArgs: [pipeline.Name]);
+            failureKey: "Activity.Failed.PipelineSave", failureArgs: [pipeline.Name]))?.After;
 
     public PipelineModel? SetScheduler(AuditActor actor, string id, bool enabled) =>
         _audit.Audit(
@@ -109,7 +112,7 @@ public sealed class PipelineService : IPipelineService
 
     // Con otro origen o destino, un job en curso acabaría entre el sitio viejo y el nuevo (p. ej. el
     // SQL mergea solo el delta en el destino nuevo): se rechaza bajo el lock de ejecución, como el borrado.
-    private async Task<PipelineModel?> UpdateCoreAsync(string id, PipelineModel pipeline, CancellationToken cancellationToken)
+    private async Task<(PipelineModel Before, PipelineModel After)?> UpdateCoreAsync(string id, PipelineModel pipeline, CancellationToken cancellationToken)
     {
         if (_store.GetById(id) is not { } existing)
         {
@@ -118,13 +121,13 @@ public sealed class PipelineService : IPipelineService
 
         if (existing.SourceId == pipeline.SourceId && existing.DestinationId == pipeline.DestinationId)
         {
-            return UpdateCore(id, pipeline);
+            return UpdateCore(id, pipeline) is { } updated ? (existing, updated) : null;
         }
 
         using var runLock = await PipelineRunLock.AcquireAsync(_options.DataDir, id, PipelineRunLock.DefaultTimeout, cancellationToken);
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, id,
             "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de cambiar su origen o su destino.", cancellationToken);
-        return UpdateCore(id, pipeline);
+        return UpdateCore(id, pipeline) is { } moved ? (existing, moved) : null;
     }
 
     private PipelineModel? UpdateCore(string id, PipelineModel pipeline)

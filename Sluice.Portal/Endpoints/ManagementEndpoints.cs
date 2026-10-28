@@ -284,12 +284,20 @@ public static class ManagementEndpoints
         // Gestión del parquet durable en ADLS (Approach B): listar / descargar / borrar.
         api.MapGet("/pipelines/{id}/parquet", async (string id, IParquetArtifactService parquet, CancellationToken ct) =>
             Results.Ok(await parquet.ListAsync(id, ct)));
-        api.MapGet("/pipelines/{id}/parquet/download", async (string id, string path, IParquetArtifactService parquet, CancellationToken ct) =>
+        // La descarga queda en el registro: el parquet trae los datos del cliente.
+        api.MapGet("/pipelines/{id}/parquet/download", async (string id, string path, HttpContext http, IParquetArtifactService parquet, IAuditLog audit, CancellationToken ct) =>
         {
             var stream = await parquet.OpenAsync(id, path, ct);
-            return stream is null
-                ? Results.NotFound()
-                : Results.Stream(stream, "application/octet-stream", path.Split('/').Last());
+            if (stream is null)
+            {
+                audit.Record(AuditActor.FromHttp(http), "parquet.download", AuditOutcome.Rejected, id, null, path,
+                    $"No se descargó {path} del pipeline {id}: no existe o no es de ese pipeline.", null, "Activity.Parquet.DownloadNotFound", path, id);
+                return Results.NotFound();
+            }
+
+            audit.Record(AuditActor.FromHttp(http), "parquet.download", AuditOutcome.Ok, id, null, path,
+                $"Descargó {path} del pipeline {id}.", null, "Activity.Parquet.Downloaded", path, id);
+            return Results.Stream(stream, "application/octet-stream", path.Split('/').Last());
         });
         api.MapDelete("/pipelines/{id}/parquet", async (string id, string path, HttpContext http, IParquetArtifactService parquet, CancellationToken ct) =>
         {
@@ -353,19 +361,22 @@ public static class ManagementEndpoints
         // no solo la página visible.
         // tz: la zona del navegador que usa la tabla de Logs (sin ella o si no se reconoce, la del
         // servidor), para que el CSV filtre los días y escriba las horas igual que la tabla.
-        api.MapGet("/logs/export", (string? source, string? level, string? search, DateOnly? from, DateOnly? to, string? tz, IActivityLog log, IStringLocalizer<SharedResource> l) =>
+        api.MapGet("/logs/export", (string? source, string? level, string? search, DateOnly? from, DateOnly? to, string? tz, HttpContext http, IActivityLog log, IAuditLog audit, IStringLocalizer<SharedResource> l) =>
         {
             var zone = !string.IsNullOrWhiteSpace(tz) && TimeZoneInfo.TryFindSystemTimeZoneById(tz, out var found) ? found : null;
             // La búsqueda encuentra también por el texto pintado en el idioma de la petición, como
             // la tabla; la columna del mensaje es el texto guardado.
             var entries = log.Query(new ActivityLogFilter(NullIfBlank(source), NullIfBlank(level), NullIfBlank(search), new DateRange(from, to), zone, e => EventText.Render(l, e)));
+            // Después de la consulta, para que la propia exportación no salga en el CSV.
+            audit.Record(AuditActor.FromHttp(http), "logs.export", AuditOutcome.Ok, null, null, null,
+                $"Exportó {entries.Count} entrada(s) del registro de actividad.", null, "Activity.Logs.Exported", entries.Count);
             return Csv("logs", writer =>
             {
-                CsvWriter.WriteRow(writer, [l["Page.Logs.Col.Date"].Value, l["Page.Logs.Col.Source"].Value, l["Page.Logs.Col.Actor"].Value, l["Page.Logs.Col.Level"].Value, l["Page.Logs.Col.Action"].Value, l["Page.Logs.Col.Message"].Value, l["Page.Logs.Col.Pipeline"].Value, l["Page.Logs.Col.Job"].Value, l["Page.Logs.Col.Host"].Value]);
+                CsvWriter.WriteRow(writer, [l["Page.Logs.Col.Date"].Value, l["Page.Logs.Col.Source"].Value, l["Page.Logs.Col.Actor"].Value, l["Page.Logs.Col.Level"].Value, l["Page.Logs.Col.Action"].Value, l["Page.Logs.Col.Outcome"].Value, l["Page.Logs.Col.Target"].Value, l["Page.Logs.Col.Message"].Value, l["Page.Logs.Col.Pipeline"].Value, l["Page.Logs.Col.Job"].Value, l["Page.Logs.Col.Host"].Value]);
                 foreach (var e in entries)
                 {
                     var sourceLabel = e.Source == "user" ? l["Page.Logs.Source.User"].Value : l["Page.Logs.Source.System"].Value;
-                    CsvWriter.WriteRow(writer, [CsvDate(e.Timestamp, zone), sourceLabel, e.ActorLabel, e.Level.ToLowerInvariant(), e.Action, e.Message, e.PipelineId, e.JobId, e.HostName]);
+                    CsvWriter.WriteRow(writer, [CsvDate(e.Timestamp, zone), sourceLabel, e.ActorLabel, e.Level.ToLowerInvariant(), e.Action, e.Outcome?.ToString().ToLowerInvariant(), e.Target, e.Message, e.PipelineId, e.JobId, e.HostName]);
                 }
             });
         });

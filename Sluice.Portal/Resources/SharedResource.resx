@@ -451,6 +451,8 @@
   <data name="Page.Logs.Col.Job" xml:space="preserve"><value>Job</value></data>
   <data name="Page.Logs.Col.Actor" xml:space="preserve"><value>Actor</value></data>
   <data name="Page.Logs.Col.Host" xml:space="preserve"><value>Máquina</value></data>
+  <data name="Page.Logs.Col.Outcome" xml:space="preserve"><value>Resultado</value></data>
+  <data name="Page.Logs.Col.Target" xml:space="preserve"><value>Objetivo</value></data>
   <data name="Page.Settings.Title" xml:space="preserve"><value>Ajustes</value></data>
   <data name="Page.Settings.Subtitle" xml:space="preserve"><value>Parámetros operativos globales del scheduler y la conciliación.</value></data>
   <data name="Page.Settings.Scheduler.Title" xml:space="preserve"><value>Scheduler y cola</value></data>
@@ -957,6 +959,8 @@
   <data name="Activity.Connection.FieldsRequiredHold" xml:space="preserve"><value>Pipeline {0} parado: la conexión de destino '{1}' usaba una cadena de conexión con opciones que ya no se admiten; vuelve a escribir sus campos en Destinos.</value></data>
   <data name="Activity.Connection.Updated" xml:space="preserve"><value>Conexión {0} '{1}' actualizada.</value></data>
   <data name="Activity.Connection.UpdatedCopied" xml:space="preserve"><value>Conexión {0} '{1}' actualizada; Parquet de {2:N0} tabla(s) copiado al sitio nuevo.</value></data>
+  <data name="Activity.Connection.UpdatedChanges" xml:space="preserve"><value>Conexión {0} '{1}' actualizada: {2}.</value></data>
+  <data name="Activity.Connection.UpdatedCopiedChanges" xml:space="preserve"><value>Conexión {0} '{1}' actualizada ({3}); Parquet de {2:N0} tabla(s) copiado al sitio nuevo.</value></data>
   <data name="Activity.Connection.NotFound" xml:space="preserve"><value>La conexión {0} no existe.</value></data>
   <data name="Activity.Connection.Deleted" xml:space="preserve"><value>Conexión '{0}' eliminada.</value></data>
   <data name="Activity.Connection.NotDeleted" xml:space="preserve"><value>No se borró la conexión '{0}': {1}</value></data>
@@ -967,6 +971,12 @@
   <data name="Activity.Pipeline.Run" xml:space="preserve"><value>Ejecución {0} del pipeline {1} (job {2}).</value></data>
   <data name="Activity.Pipeline.Created" xml:space="preserve"><value>Pipeline {0} creado.</value></data>
   <data name="Activity.Pipeline.Updated" xml:space="preserve"><value>Pipeline {0} actualizado.</value></data>
+  <data name="Activity.Pipeline.UpdatedChanges" xml:space="preserve"><value>Pipeline {0} actualizado: {1}.</value></data>
+  <data name="Activity.Change.Secrets" xml:space="preserve"><value>secretos cambiados: {0}</value></data>
+  <data name="Activity.Change.Pair" xml:space="preserve"><value>{0}; {1}</value></data>
+  <data name="Activity.Parquet.Downloaded" xml:space="preserve"><value>Descargó {0} del pipeline {1}.</value></data>
+  <data name="Activity.Parquet.DownloadNotFound" xml:space="preserve"><value>No se descargó {0} del pipeline {1}: no existe o no es de ese pipeline.</value></data>
+  <data name="Activity.Logs.Exported" xml:space="preserve"><value>Exportó {0:N0} entrada(s) del registro de actividad.</value></data>
   <data name="Activity.Pipeline.NotFound" xml:space="preserve"><value>El pipeline {0} no existe.</value></data>
   <data name="Activity.Pipeline.SchedulerChanged" xml:space="preserve"><value>Scheduler {0} en el pipeline {1}.</value></data>
   <data name="Activity.Pipeline.SchedulerOn" xml:space="preserve"><value>activado</value></data>
