@@ -159,7 +159,7 @@ With Linux containers, `scripts/backup-data-dir.ps1` and `scripts/restore-data-d
 
 ## Settings (`/settings`)
 
-Edited in the portal, saved to the volume, applied without restart.
+Edited in the portal, saved to the volume, applied without restart. If `settings.json` can't be read, the page warns that it shows the default values, and saving asks for confirmation before overwriting the file (which would lose what it had, such as the webhook).
 
 | Setting | Controls | Default |
 |---|---|---|

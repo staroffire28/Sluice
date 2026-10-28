@@ -470,9 +470,10 @@ public sealed class PipelineSchedulerService : BackgroundService
             return false;
         }
 
-        var sent = (await send()).Success;
-        _alertDeliveryFailedThisPoll = !sent;
-        return sent;
+        var result = await send();
+        // Sin webhook no hay caída que esperar: el resto de alertas del poll se siguen registrando.
+        _alertDeliveryFailedThisPoll = !result.Success && result != AlertDeliveryResult.NotConfigured;
+        return result.Success;
     }
 
     public static readonly TimeSpan ChangelogBlockGrace = TimeSpan.FromMinutes(45);
