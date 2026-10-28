@@ -194,11 +194,11 @@ public sealed class SqlExecutor : ISqlExecutor
                 // Origen y modo: el delta (solo lo nuevo, sin reescribir lo igual) si la tabla ya
                 // tiene datos; si está vacía, el consolidado con inserción directa (el delta no la
                 // dejaría completa); en cualquier otro caso, el consolidado con MERGE incondicional.
-                var targetRows = await _mergeExecutor.CountRowsAsync(connection, schema, entry.Entity, sqlVersion, cancellationToken);
+                var hasRows = await _mergeExecutor.HasRowsAsync(connection, schema, entry.Entity, sqlVersion, cancellationToken);
                 var deltaPath = _manifestStore.GetDeltaPath(task.PipelineId, task.JobId, entry.Entity);
-                var fromDelta = useDelta && entry.HasDelta && targetRows > 0 && File.Exists(deltaPath);
+                var fromDelta = useDelta && entry.HasDelta && hasRows && File.Exists(deltaPath);
                 var mode = fromDelta ? MergeMode.UpsertNewer
-                    : targetRows == 0 ? MergeMode.InsertIntoEmpty
+                    : !hasRows ? MergeMode.InsertIntoEmpty
                     : MergeMode.Upsert;
 
                 // MERGE en streaming: se lee por lotes (un row group a la vez) y se mergea por
@@ -212,8 +212,26 @@ public sealed class SqlExecutor : ISqlExecutor
                 await using var reloadKeys = reload
                     ? _mergeExecutor.CreateSourceKeySink(connection, schema, entry.Entity, cdmSchema, sqlVersion)
                     : null;
-                // DeleteMode.Delete: las filas de borrado no se cargan; sus Id se borran al final.
-                var deleteKeys = pipeline.DeleteMode == DeleteMode.Delete ? new List<object?>() : null;
+                // DeleteMode.Delete: las filas de borrado no se cargan; sus Id se borran por lotes
+                // mientras se lee, así no se juntan todas en memoria (el mismo patrón que las claves
+                // del Reload). El consolidado deduplica por Id: una clave borrada no es la de ninguna
+                // fila que se mergee. Una tabla vacía no tiene nada que borrar (InsertIntoEmpty).
+                var applyDeletes = pipeline.DeleteMode == DeleteMode.Delete;
+                var deleteKeys = applyDeletes && mode != MergeMode.InsertIntoEmpty ? new List<object?>(mergeBatch) : null;
+                var deleted = 0;
+                async Task FlushDeletesAsync()
+                {
+                    if (deleteKeys is not { Count: > 0 })
+                    {
+                        return;
+                    }
+
+                    stallWatch.Touch($"{entry.Entity} · deletes");
+                    progress.Report(JobStepCatalog.Merge, entityResults.Count, item: entry.Entity, phase: "deletes", failed: failedEntities);
+                    deleted += await _mergeExecutor.DeleteKeysAsync(connection, schema, entry.Entity, cdmSchema, deleteKeys, sqlVersion, cancellationToken);
+                    deleteKeys.Clear();
+                }
+
                 await using (var parquetStream = fromDelta
                     ? File.OpenRead(deltaPath)
                     : await parquetStore.OpenParquetReadAsync(entry.ParquetPath, cancellationToken))
@@ -221,11 +239,15 @@ public sealed class SqlExecutor : ISqlExecutor
                     var batch = new List<Dictionary<string, object?>>(mergeBatch);
                     await foreach (var row in ParquetMaterializer.ReadStreamingAsync(parquetStream, cdmSchema, cancellationToken))
                     {
-                        if (deleteKeys is not null && DeleteRows.IsDeleteRow(row))
+                        if (applyDeletes && DeleteRows.IsDeleteRow(row))
                         {
-                            if (row.TryGetValue("Id", out var deletedId))
+                            if (deleteKeys is not null && row.TryGetValue("Id", out var deletedId))
                             {
                                 deleteKeys.Add(deletedId);
+                                if (deleteKeys.Count >= mergeBatch)
+                                {
+                                    await FlushDeletesAsync();
+                                }
                             }
 
                             continue;
@@ -268,17 +290,11 @@ public sealed class SqlExecutor : ISqlExecutor
                     }
                 }
 
-                // Una tabla vacía no tiene nada que borrar (InsertIntoEmpty ya las saltó).
-                if (deleteKeys is { Count: > 0 } && mode != MergeMode.InsertIntoEmpty)
+                await FlushDeletesAsync();
+                if (deleted > 0)
                 {
-                    stallWatch.Touch($"{entry.Entity} · deletes");
-                    progress.Report(JobStepCatalog.Merge, entityResults.Count, item: entry.Entity, phase: "deletes", failed: failedEntities);
-                    var deleted = await _mergeExecutor.DeleteKeysAsync(connection, schema, entry.Entity, cdmSchema, deleteKeys, sqlVersion, cancellationToken);
-                    if (deleted > 0)
-                    {
-                        _jobs.AppendEvent(task.JobId, EventLevel.Info, $"{entry.Entity}: {deleted} fila(s) borrada(s) en F&O eliminada(s) del destino.",
-                            null, "Event.Sql.SourceDeletesApplied", entry.Entity, deleted);
-                    }
+                    _jobs.AppendEvent(task.JobId, EventLevel.Info, $"{entry.Entity}: {deleted} fila(s) borrada(s) en F&O eliminada(s) del destino.",
+                        null, "Event.Sql.SourceDeletesApplied", entry.Entity, deleted);
                 }
 
                 stallWatch.Touch($"{entry.Entity} · count");
