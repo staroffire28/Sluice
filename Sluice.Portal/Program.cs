@@ -249,7 +249,9 @@ Sluice.Portal.Services.Connections.ConnectionMigrations.PinTrustServerCertificat
     app.Services.GetRequiredService<ConnectionStore>(), appOptions.DataDir);
 
 app.UseRequestLocalization();
+app.UseSecurityHeaders();
 app.UseStaticFiles();
+app.UseApiCrossSiteGuard();
 app.UseDualAuth();
 app.UseAntiforgery();
 

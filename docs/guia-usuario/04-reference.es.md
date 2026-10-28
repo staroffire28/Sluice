@@ -48,6 +48,8 @@ La documentación completa de autenticación (tutorial, guía práctica, referen
 - Los workers no se autentican contra el portal: no hay API entre ellos, comparten la cola de tareas en el volumen de `DATA_DIR`.
 - **Clave placeholder** (`changeme-ui`) se rechaza fuera de Development — define un valor real en `.env` antes de desplegar.
 - **Login/logout por formulario** requieren token antiforgery; el `POST /auth/login` JSON (scripts/automatización) queda exento.
+- **Los scripts y demás clientes de la API** envían la cabecera `X-Sluice-Client` (con cualquier valor) en cada `POST`, `PUT`, `PATCH` o `DELETE` a `/api/*`. Sin ella, y salvo que el navegador marque la petición como del propio portal (`Sec-Fetch-Site: same-origin`), el portal responde `403`. Así otro sitio, o un subdominio hermano, no puede actuar con tu cookie de sesión, tampoco con `AUTH_MODE=none`. Las lecturas (`GET`) no la necesitan. Ver [docs/auth](../auth/howto-login-and-api-access.md).
+- **Cabeceras de seguridad:** todas las respuestas llevan `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` y `Referrer-Policy: same-origin`, y una Content Security Policy en modo informe: la consola del navegador lista lo que bloquearía, pero aún no se bloquea nada.
 - **Data Protection** cifra los secretos de conexión en reposo; el keyring vive en `DATA_DIR/keys` en el volumen compartido.
 
 ## Observabilidad y alertas
