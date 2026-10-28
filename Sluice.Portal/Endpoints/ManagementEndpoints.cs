@@ -361,12 +361,13 @@ public static class ManagementEndpoints
         // no solo la página visible.
         // tz: la zona del navegador que usa la tabla de Logs o de Jobs (sin ella o si no se reconoce,
         // la del servidor), para que el CSV filtre los días y escriba las horas igual que la tabla.
-        api.MapGet("/logs/export", (string? source, string? level, string? search, DateOnly? from, DateOnly? to, string? tz, HttpContext http, IActivityLog log, IAuditLog audit, IStringLocalizer<SharedResource> l) =>
+        api.MapGet("/logs/export", (string? source, string? level, string? search, DateOnly? from, DateOnly? to, string? tz, HttpContext http, IActivityLog log, IAuditLog audit, IStringLocalizer<SharedResource> l, IPipelineService pipelines) =>
         {
             var zone = !string.IsNullOrWhiteSpace(tz) && TimeZoneInfo.TryFindSystemTimeZoneById(tz, out var found) ? found : null;
-            // La búsqueda encuentra también por el texto pintado en el idioma de la petición, como
-            // la tabla; la columna del mensaje es el texto guardado.
-            var entries = log.Query(new ActivityLogFilter(NullIfBlank(source), NullIfBlank(level), NullIfBlank(search), new DateRange(from, to), zone, e => EventText.Render(l, e)));
+            // La búsqueda encuentra también por el texto pintado en el idioma de la petición y con el
+            // nombre del pipeline, como la tabla; la columna del mensaje es el texto guardado.
+            var pipelineNames = pipelines.List().ToDictionary(p => p.Id, p => p.Name);
+            var entries = log.Query(new ActivityLogFilter(NullIfBlank(source), NullIfBlank(level), NullIfBlank(search), new DateRange(from, to), zone, e => EventText.Render(l, e, pipelineNames)));
             // Después de la consulta, para que la propia exportación no salga en el CSV.
             audit.Record(AuditActor.FromHttp(http), "logs.export", AuditOutcome.Ok, null, null, null,
                 $"Exportó {entries.Count} entrada(s) del registro de actividad.", null, "Activity.Logs.Exported", entries.Count);

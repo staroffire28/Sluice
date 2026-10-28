@@ -356,6 +356,10 @@ h1:focus {
     .kpi-grid {
         grid-template-columns: repeat(6, minmax(0, 1fr));
     }
+
+    .kpi-grid--five {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
 }
 
 .kpi-card {
@@ -747,6 +751,12 @@ fluent-button[appearance="subtle"]:not([icon-only])[disabled] {
     font-size: 0.95rem;
     font-weight: 500;
     word-break: break-word;
+}
+
+/* Nombre de una carpeta de snapshot ("2026-10-24T06.58.06Z"): un punto menor, para que quepa en una
+   línea en escritorio. */
+.kpi-value--snapshot {
+    font-size: 0.875rem;
 }
 
 .empty-state {

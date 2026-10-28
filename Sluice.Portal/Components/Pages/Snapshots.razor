@@ -30,14 +30,15 @@
         <PanelState IsLoading="@_loading" Error="@_error" IsEmpty="@(string.IsNullOrWhiteSpace(_pipelineId))" EmptyText="@L["Page.Snapshots.SelectPipeline"]">
             @if (_catalog is not null)
             {
-                <div class="kpi-grid" style="margin-bottom:1rem;">
+                @* Cinco cifras: en escritorio, cinco columnas para que el nombre del snapshot no se parta. *@
+                <div class="kpi-grid kpi-grid--five" style="margin-bottom:1rem;">
                     <FluentCard Class="kpi-card">
                         <FluentLabel><strong>@L["Page.Snapshots.Settled"]</strong></FluentLabel>
-                        <div class="kpi-value kpi-value--sm"><PathText Value="@(_catalog.SettledSnapshot ?? "—")" Separator="@('T')" /></div>
+                        <div class="kpi-value kpi-value--sm kpi-value--snapshot"><PathText Value="@(_catalog.SettledSnapshot ?? "—")" Separator="@('T')" /></div>
                     </FluentCard>
                     <FluentCard Class="kpi-card">
                         <FluentLabel><strong>@L["Page.Snapshots.LastProcessed"]</strong></FluentLabel>
-                        <div class="kpi-value kpi-value--sm"><PathText Value="@(_catalog.LastProcessedSnapshot ?? "—")" Separator="@('T')" /></div>
+                        <div class="kpi-value kpi-value--sm kpi-value--snapshot"><PathText Value="@(_catalog.LastProcessedSnapshot ?? "—")" Separator="@('T')" /></div>
                     </FluentCard>
                     <FluentCard Class="kpi-card">
                         <FluentLabel><strong>@L["Page.Snapshots.Pending"]</strong></FluentLabel>
