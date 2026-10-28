@@ -45,7 +45,8 @@
                     else
                     {
                         <FluentMenu>
-                            <FluentMenuButton Appearance="ButtonAppearance.Outline" data-testid="@($"dst-actions-{context.Id}")" Label="@L["Common.Actions"]" />
+                            <FluentMenuButton Appearance="ButtonAppearance.Outline" data-testid="@($"dst-actions-{context.Id}")" Label="@L["Common.Actions"]"
+                                              aria-label="@($"{L["Common.Actions"]} {context.Name}")" />
                             <FluentMenuList>
                                 <FluentMenuItem data-testid="@($"dst-test-{context.Id}")" OnClick="@(() => Test(context.Id))">@L["Common.Test"]</FluentMenuItem>
                                 <FluentMenuItem data-testid="@($"dst-edit-{context.Id}")" OnClick="@(() => Edit(context))">@L["Common.Edit"]</FluentMenuItem>

@@ -69,7 +69,8 @@
             <PropertyColumn Property="@(j => Time.Format(j.StartedAt))" Title="@L["Page.Jobs.ColumnStarted"]" Class="cell-nowrap" />
             <TemplateColumn Title="@L["Common.Actions"]">
                 <FluentMenu>
-                    <FluentMenuButton Appearance="ButtonAppearance.Outline" data-testid="@($"job-actions-{context.Id}")" Label="@L["Common.Actions"]" />
+                    <FluentMenuButton Appearance="ButtonAppearance.Outline" data-testid="@($"job-actions-{context.Id}")" Label="@L["Common.Actions"]"
+                                      aria-label="@($"{L["Common.Actions"]} {JobIdLabels.Short(context.Id)}")" />
                     <FluentMenuList>
                         <FluentMenuItem data-testid="@($"job-details-{context.Id}")" OnClick="@(() => Nav.NavigateTo($"/jobs/{context.Id}"))">@L["Common.Details"]</FluentMenuItem>
                         <FluentMenuItem data-testid="@($"job-report-{context.Id}")" OnClick="@(() => GenerateReportAsync(context.Id))">@L["Page.Jobs.Report"]</FluentMenuItem>

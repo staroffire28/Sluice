@@ -338,6 +338,7 @@
   <data name="Page.Parquet.Restored" xml:space="preserve"><value>Restore point of snapshot {0} restored; the tables are being reloaded in SQL.</value></data>
   <data name="Page.Parquet.RestoreSnapshotsMissing" xml:space="preserve"><value>Cannot restore point {0}: the lake no longer keeps every later snapshot (the oldest left is {1}), so rewinding would lose their changes.</value></data>
   <data name="Page.Catalog.Title" xml:space="preserve"><value>Table catalog</value></data>
+  <data name="Page.Catalog.ColumnSearch" xml:space="preserve"><value>Search columns</value></data>
   <data name="Page.Catalog.Subtitle" xml:space="preserve"><value>Which lake tables and columns are loaded into SQL</value></data>
   <data name="Page.Catalog.Hint" xml:space="preserve"><value>An excluded table is neither ingested nor loaded; new tables that show up in the lake are loaded automatically. It is the same setting as each table's sync in Tables.</value></data>
   <data name="Page.Catalog.IncludeAll" xml:space="preserve"><value>Include all</value></data>

@@ -337,6 +337,7 @@
   <data name="Page.Parquet.Restored" xml:space="preserve"><value>Punto del snapshot {0} restaurado; se están recargando las tablas en SQL.</value></data>
   <data name="Page.Parquet.RestoreSnapshotsMissing" xml:space="preserve"><value>No se puede restaurar el punto {0}: el lago ya no conserva todos los snapshots posteriores (el más antiguo que queda es {1}), y al rebobinar se perderían sus cambios.</value></data>
   <data name="Page.Catalog.Title" xml:space="preserve"><value>Catálogo de tablas</value></data>
+  <data name="Page.Catalog.ColumnSearch" xml:space="preserve"><value>Buscar columnas</value></data>
   <data name="Page.Catalog.Subtitle" xml:space="preserve"><value>Qué tablas y columnas del lago se cargan en SQL</value></data>
   <data name="Page.Catalog.Hint" xml:space="preserve"><value>Una tabla excluida no se ingiere ni se carga; las tablas nuevas que aparezcan en el lago se cargan solas. Es el mismo ajuste que la sincronización de cada tabla en Tablas.</value></data>
   <data name="Page.Catalog.IncludeAll" xml:space="preserve"><value>Incluir todas</value></data>
