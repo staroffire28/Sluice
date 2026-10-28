@@ -857,6 +857,8 @@
   <data name="Event.Sql.CompletedWithErrors" xml:space="preserve"><value>SQL MERGE completado con errores en entidades ({0:N0} fila(s) fusionadas): el job queda en Error.</value></data>
   <data name="Event.Reconcile.Started" xml:space="preserve"><value>Etapa de conciliación iniciada.</value></data>
   <data name="Event.Reconcile.Completed" xml:space="preserve"><value>Conciliación completada. Divergencia máxima: {0:N2} %.</value></data>
+  <data name="Event.Reconcile.MissingParquet" xml:space="preserve"><value>{0}: falta el parquet consolidado; no se concilia.</value></data>
+  <data name="Event.Reconcile.EntityFailed" xml:space="preserve"><value>{0}: no se pudo conciliar ({1}).</value></data>
   <data name="Event.Diff.Completed" xml:space="preserve"><value>Diff completado: {0:N0} entidad(es) con diferencias, {1:N0} fila(s) de delta total.</value></data>
   <data name="Event.Compare.NoParquet" xml:space="preserve"><value>No hay ningún Parquet consolidado que comparar. Ejecuta el pipeline antes de comparar valores.</value></data>
   <data name="Event.Compare.Summary" xml:space="preserve"><value>Comparación de valores: {0:N0} tabla(s), {1:N0} con diferencias.</value></data>
@@ -893,6 +895,7 @@
   <data name="Event.Sql.EntityMerged" xml:space="preserve"><value>{0}: {1:N0} fila(s) mergeadas; la tabla tiene {2:N0}.</value></data>
   <data name="Event.Sql.EntityMergedDelta" xml:space="preserve"><value>{0}: {1:N0} fila(s) mergeadas (delta); la tabla tiene {2:N0}.</value></data>
   <data name="Event.Sql.EntityFailed" xml:space="preserve"><value>{0}: falló la etapa SQL — {1}: {2}</value></data>
+  <data name="Event.Sql.MissingParquet" xml:space="preserve"><value>{0}: falta el parquet consolidado o su schema en el almacén; la tabla no se carga en SQL.</value></data>
   <data name="Event.Sql.FullMergeAfterIncomplete" xml:space="preserve"><value>El último job ({0}) no completó la etapa SQL: este Incremental mergea el consolidado completo para reponer lo que faltara.</value></data>
   <data name="Event.Sql.PossibleBlock" xml:space="preserve"><value>{0}: lleva {1} sin avanzar en SQL (posible bloqueo). La sentencia sigue en curso; revisa los bloqueos en el destino (sys.dm_exec_requests, columna blocking_session_id).</value></data>
   <data name="Event.Enums.NoSnapshot" xml:space="preserve"><value>Traducción de enums activa pero no se pudo resolver snapshot (manifest vacío, sin last-processed ni settled). Se continúa sin columnas _$label.</value></data>

@@ -90,6 +90,36 @@ public sealed class ReconcileExecutor : IReconcileExecutor
         // contra SQL. Ambos conteos deben coincidir (SQL se carga desde el consolidado).
         var results = new List<ReconcileEntityResult>();
 
+        // Una entidad que no se puede contar (sin parquet consolidado, o un fallo de SQL o del
+        // almacén) no tumba la conciliación de las demás: queda fuera del reporte, con su aviso, y el
+        // job en Partial. Antes un parquet ausente contaba 0 filas, y un fallo cortaba la etapa.
+        var failed = new List<(string Entity, string? Error)>();
+        async Task CompareCountsAsync(IParquetStore parquetStore, string entity, string blobPath)
+        {
+            try
+            {
+                if (!await parquetStore.ParquetExistsAsync(blobPath, cancellationToken))
+                {
+                    failed.Add((entity, null));
+                    return;
+                }
+
+                var sourceRows = await parquetStore.CountParquetRowsAsync(blobPath, excludeDeleteRows, cancellationToken);
+                var destRows = await _mergeExecutor.CountRowsAsync(sql, sqlSchema, entity, sqlVersion, cancellationToken);
+                results.Add(new ReconcileEntityResult
+                {
+                    Entity = entity,
+                    SourceRows = sourceRows,
+                    DestinationRows = destRows,
+                    DivergencePct = ReconcileService.ComputeDivergencePct(sourceRows, destRows),
+                });
+            }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                failed.Add((entity, ex.Message));
+            }
+        }
+
         if (scopedEntities.Length > 0)
         {
             // Re-sync por tabla: recontar el parquet consolidado de ESAS entidades directamente
@@ -99,20 +129,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
             {
                 var blobPath = IngestManifestStore.GetConsolidatedBlobPath(task.PipelineId, scopedEntity);
                 progress.Report(JobStepCatalog.Compare, results.Count, total: scopedEntities.Length, item: scopedEntity, force: true);
-                long sourceRows = 0;
-                if (await parquetStore.ParquetExistsAsync(blobPath, cancellationToken))
-                {
-                    sourceRows = await parquetStore.CountParquetRowsAsync(blobPath, excludeDeleteRows, cancellationToken);
-                }
-
-                var destRows = await _mergeExecutor.CountRowsAsync(sql, sqlSchema, scopedEntity, sqlVersion, cancellationToken);
-                results.Add(new ReconcileEntityResult
-                {
-                    Entity = scopedEntity,
-                    SourceRows = sourceRows,
-                    DestinationRows = destRows,
-                    DivergencePct = ReconcileService.ComputeDivergencePct(sourceRows, destRows),
-                });
+                await CompareCountsAsync(parquetStore, scopedEntity, blobPath);
             }
         }
         else if (manifest is not null && manifest.Entities.Count > 0)
@@ -126,20 +143,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
             foreach (var entry in manifest.Entities)
             {
                 progress.Report(JobStepCatalog.Compare, results.Count, total: manifest.Entities.Count, item: entry.Entity);
-                long sourceRows = 0;
-                if (await parquetStore.ParquetExistsAsync(entry.ParquetPath, cancellationToken))
-                {
-                    sourceRows = await parquetStore.CountParquetRowsAsync(entry.ParquetPath, excludeDeleteRows, cancellationToken);
-                }
-
-                var destRows = await _mergeExecutor.CountRowsAsync(sql, sqlSchema, entry.Entity, sqlVersion, cancellationToken);
-                results.Add(new ReconcileEntityResult
-                {
-                    Entity = entry.Entity,
-                    SourceRows = sourceRows,
-                    DestinationRows = destRows,
-                    DivergencePct = ReconcileService.ComputeDivergencePct(sourceRows, destRows),
-                });
+                await CompareCountsAsync(parquetStore, entry.Entity, entry.ParquetPath);
             }
         }
         else if (job.Type is JobType.Reconcile or JobType.Diff)
@@ -158,19 +162,31 @@ public sealed class ReconcileExecutor : IReconcileExecutor
 
                 var entity = fileName[..^".parquet".Length];
                 progress.Report(JobStepCatalog.Compare, results.Count, total: artifacts.Count, item: entity);
-                var sourceRows = await parquetStore.CountParquetRowsAsync(artifact.Path, excludeDeleteRows, cancellationToken);
-
-                var destRows = await _mergeExecutor.CountRowsAsync(sql, sqlSchema, entity, sqlVersion, cancellationToken);
-                results.Add(new ReconcileEntityResult
-                {
-                    Entity = entity,
-                    SourceRows = sourceRows,
-                    DestinationRows = destRows,
-                    DivergencePct = ReconcileService.ComputeDivergencePct(sourceRows, destRows),
-                });
+                await CompareCountsAsync(parquetStore, entity, artifact.Path);
             }
         }
         // else: corrida incremental sin snapshots nuevos → nada que reconciliar (ver más abajo).
+
+        foreach (var (entity, error) in failed)
+        {
+            if (error is null)
+            {
+                _jobs.AppendEvent(task.JobId, EventLevel.Warning,
+                    $"{entity}: falta el parquet consolidado; no se concilia.", null, "Event.Reconcile.MissingParquet", entity);
+            }
+            else
+            {
+                _jobs.AppendEvent(task.JobId, EventLevel.Warning,
+                    $"{entity}: no se pudo conciliar ({error}).", null, "Event.Reconcile.EntityFailed", entity, error);
+            }
+        }
+
+        // Diff es informativo y no marca el job (ver FinishDiff).
+        if (failed.Count > 0 && job.Type != JobType.Diff)
+        {
+            var current = _jobs.Get(task.JobId)!;
+            _jobs.Update(current.Id, current with { Status = JobStatus.Partial });
+        }
 
         // Cada rama reporta antes de procesar cada entidad: el contador final (todas las
         // procesadas) se fija aquí, una sola vez para las tres ramas.
@@ -189,14 +205,14 @@ public sealed class ReconcileExecutor : IReconcileExecutor
         // blanco Reconcile, Tablas y el banner de Pipelines. Se conserva la última real.
         if (results.Count == 0)
         {
-            FinishWithNothingToCompare(task, job.Type, progress, stageStart);
+            FinishWithNothingToCompare(task, job.Type, progress, stageStart, appendEvent: failed.Count == 0);
             return;
         }
 
         // Re-sync por tabla: el reporte arrastra las demás entidades del último reconcile para no
         // perder la foto completa del pipeline (ver ReconcileService.BuildScopedReport).
         var report = scopedEntities.Length > 0
-            ? _reconcile.BuildScopedReport(task.PipelineId, task.JobId, results)
+            ? _reconcile.BuildScopedReport(task.PipelineId, task.JobId, scopedEntities, results)
             : _reconcile.BuildReport(task.PipelineId, task.JobId, results);
 
         // Tablas sobre el umbral y no aceptadas: las que alertan y las que la corrección automática
@@ -391,7 +407,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
     };
 
     private void FinishWithNothingToCompare(
-        PipelineTask task, JobType type, StageProgress progress, DateTimeOffset stageStart)
+        PipelineTask task, JobType type, StageProgress progress, DateTimeOffset stageStart, bool appendEvent)
     {
         progress.CompleteStep(JobStepCatalog.Report, "skipped");
         progress.Finish("done");
@@ -402,6 +418,12 @@ public sealed class ReconcileExecutor : IReconcileExecutor
             StageStatus = new Dictionary<string, string>(job.StageStatus) { ["reconcile"] = "done" },
             StageTimings = job.StageTimings.Set("reconcile", started: stageStart, finished: DateTimeOffset.UtcNow),
         });
+
+        // Si todas las entidades fallaron, sus avisos por tabla ya lo explican: no se añade otro.
+        if (!appendEvent)
+        {
+            return;
+        }
 
         // En un Reconcile explícito es un aviso (no hay Parquet consolidado: falta ejecutar el
         // pipeline); en un Incremental sin datos nuevos es lo normal.

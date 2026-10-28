@@ -858,6 +858,8 @@
   <data name="Event.Sql.CompletedWithErrors" xml:space="preserve"><value>SQL MERGE completed with entity errors ({0:N0} row(s) merged): the job is marked Error.</value></data>
   <data name="Event.Reconcile.Started" xml:space="preserve"><value>Reconcile stage started.</value></data>
   <data name="Event.Reconcile.Completed" xml:space="preserve"><value>Reconcile completed. Max divergence: {0:N2}%.</value></data>
+  <data name="Event.Reconcile.MissingParquet" xml:space="preserve"><value>{0}: the consolidated Parquet file is missing; it is not reconciled.</value></data>
+  <data name="Event.Reconcile.EntityFailed" xml:space="preserve"><value>{0}: could not be reconciled ({1}).</value></data>
   <data name="Event.Diff.Completed" xml:space="preserve"><value>Diff completed: {0:N0} entity(ies) with differences, {1:N0} row(s) of total delta.</value></data>
   <data name="Event.Compare.NoParquet" xml:space="preserve"><value>There is no consolidated Parquet to compare. Run the pipeline before comparing values.</value></data>
   <data name="Event.Compare.Summary" xml:space="preserve"><value>Value comparison: {0:N0} table(s), {1:N0} with differences.</value></data>
@@ -894,6 +896,7 @@
   <data name="Event.Sql.EntityMerged" xml:space="preserve"><value>{0}: merged {1:N0}, table count {2:N0}.</value></data>
   <data name="Event.Sql.EntityMergedDelta" xml:space="preserve"><value>{0}: merged {1:N0} (delta), table count {2:N0}.</value></data>
   <data name="Event.Sql.EntityFailed" xml:space="preserve"><value>{0}: SQL stage failed — {1}: {2}</value></data>
+  <data name="Event.Sql.MissingParquet" xml:space="preserve"><value>{0}: the consolidated Parquet file or its schema is missing from the store; the table is not loaded into SQL.</value></data>
   <data name="Event.Sql.FullMergeAfterIncomplete" xml:space="preserve"><value>The last job ({0}) did not complete the SQL stage: this Incremental merges the full consolidated file to restore anything missing.</value></data>
   <data name="Event.Sql.PossibleBlock" xml:space="preserve"><value>{0}: no progress in SQL for {1} (possible blocking). The statement is still running; check blocking on the destination (sys.dm_exec_requests, column blocking_session_id).</value></data>
   <data name="Event.Enums.NoSnapshot" xml:space="preserve"><value>Enum translation is on but no snapshot could be resolved (empty manifest, no last-processed or settled snapshot). Continuing without _$label columns.</value></data>

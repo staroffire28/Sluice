@@ -26,7 +26,7 @@
 |---|---|
 | Running | In progress (being created or processing stages). |
 | OK | Finished cleanly, no divergence over the threshold. |
-| Partial | A non-accepted table diverges over the threshold (check Reconcile), or some tables failed in ingest or SQL, or some CSV values could not be read with their column type and were loaded as NULL (the table and a warning in the timeline name the column and an example). After a partial ingest the job goes on with SQL and Reconcile: until it finishes it counts as in progress (it can be cancelled, not retried). |
+| Partial | A non-accepted table diverges over the threshold (check Reconcile), or some tables failed in ingest or SQL, or some tables could not be reconciled (no consolidated Parquet or a failed count: they are left out of the report with a warning; a Diff job is not marked), or some CSV values could not be read with their column type and were loaded as NULL (the table and a warning in the timeline name the column and an example). After a partial ingest the job goes on with SQL and Reconcile: until it finishes it counts as in progress (it can be cancelled, not retried). |
 | Error | A stage threw (e.g. SQL unreachable) — check the timeline. |
 | Stalled (Blocked) | The source had no safe snapshots yet — not your fault, it will retry. |
 | Cancelled | Someone cancelled it; its pending tasks were purged. |
