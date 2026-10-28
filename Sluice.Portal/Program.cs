@@ -221,11 +221,15 @@ if (appOptions.IsUiAuthEnabled && appOptions.UiApiKey!.Length < AuthConstants.Re
         AuthConstants.RecommendedKeyLength);
 }
 
+// Primero: lo que viene detrás (HSTS, el límite de intentos de login) ve el esquema y la IP del cliente.
+app.UseForwardedHeaders();
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // El portal va detrás de un proxy con TLS: HSTS obliga al navegador a usar siempre https
-    // (solo se envía en respuestas https, que UseForwardedHeaders reconoce vía X-Forwarded-Proto).
+    // El portal va detrás de un proxy con TLS: HSTS obliga al navegador a usar siempre https.
+    // Solo se envía en respuestas https, que se reconocen vía X-Forwarded-Proto porque
+    // UseForwardedHeaders va antes.
     app.UseHsts();
 }
 
@@ -233,7 +237,6 @@ if (!app.Environment.IsDevelopment())
 Sluice.Portal.Services.Connections.ConnectionMigrations.PinTrustServerCertificate(
     app.Services.GetRequiredService<ConnectionStore>(), appOptions.DataDir);
 
-app.UseForwardedHeaders();
 app.UseRequestLocalization();
 app.UseStaticFiles();
 app.UseDualAuth();
