@@ -947,6 +947,7 @@
   <data name="Activity.SnapshotRetention.SweepTotal" xml:space="preserve"><value>Source snapshot retention: {0:N0} folder(s) deleted (age {1}d, floor {2}).</value></data>
   <data name="Activity.Alert.DeliveryFailed" xml:space="preserve"><value>Could not deliver the {0} alert to the webhook ({1}): {2}. Alerts will not arrive until it is reported as recovered.</value></data>
   <data name="Activity.Alert.DeliveryRecovered" xml:space="preserve"><value>The alert webhook ({0}) responds again ({1} alert).</value></data>
+  <data name="Activity.Alert.DeliveryRecovered.Lost" xml:space="preserve"><value>The alert webhook ({0}) responds again ({1} alert). {2:N0} delivery attempt(s) failed while it was down: one-shot alerts from that time (job failure, Partial, divergence...) are not resent; deduplicated alerts are retried.</value></data>
   <data name="Activity.Demo.Failed" xml:space="preserve"><value>Could not prepare the demo: {0}</value></data>
   <data name="Activity.Failure" xml:space="preserve"><value>{0}: {1}</value></data>
   <data name="Activity.Connection.RoleSource" xml:space="preserve"><value>source</value></data>
