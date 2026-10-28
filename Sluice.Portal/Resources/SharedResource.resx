@@ -1013,8 +1013,11 @@
   <data name="Error.QueueNotAllowed" xml:space="preserve"><value>{0} no se puede dejar en cola.</value></data>
   <data name="Error.AlreadyQueued" xml:space="preserve"><value>{0} ya está en cola para este pipeline.</value></data>
   <data name="Error.OtherQueued" xml:space="preserve"><value>Ya hay {0} en cola para este pipeline: quítalo de la cola antes de encolar {1}.</value></data>
+  <data name="Error.QueueBusy" xml:space="preserve"><value>La cola del pipeline está ocupada; inténtalo de nuevo.</value></data>
   <data name="Error.EntityRequired" xml:space="preserve"><value>Indica al menos una tabla.</value></data>
   <data name="Error.AlreadyAtRestorePoint" xml:space="preserve"><value>El pipeline ya está en el punto {0}.</value></data>
+  <data name="Error.RestoreHalfDone" xml:space="preserve"><value>El restore al punto {0} quedó a medias: termínalo restaurando ese mismo punto antes de elegir otro.</value></data>
+  <data name="Error.RestorePointPruned" xml:space="preserve"><value>El punto {0} ya no se conserva (la poda se llevó sus versiones): vuelve a abrir la lista de puntos.</value></data>
   <data name="Error.NoConsolidatedParquet" xml:space="preserve"><value>No hay parquet consolidado para este pipeline.</value></data>
   <data name="Error.PipelineRunning" xml:space="preserve"><value>Ya hay un job en ejecución para este pipeline.</value></data>
   <data name="Error.PipelineStopping" xml:space="preserve"><value>El job {0} se está deteniendo tras la cancelación; espera unos segundos y vuelve a intentarlo.</value></data>

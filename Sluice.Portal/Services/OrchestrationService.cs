@@ -488,8 +488,9 @@ public sealed class OrchestrationService : IOrchestrationService
         var state = stateStore.GetOrCreate(pipelineId);
         if (state.RestoreInProgress is { } halfDone && halfDone.Snapshot != snapshot)
         {
-            throw new InvalidOperationException(
-                $"El restore al punto {halfDone.Snapshot} quedó a medias: termínalo restaurando ese mismo punto antes de elegir otro.");
+            throw new LocalizedException(
+                $"El restore al punto {halfDone.Snapshot} quedó a medias: termínalo restaurando ese mismo punto antes de elegir otro.",
+                "Error.RestoreHalfDone", halfDone.Snapshot);
         }
 
         var from = state.RestoreInProgress is { } inProgress ? inProgress.FromSnapshot : state.LastProcessedSnapshot;
@@ -508,8 +509,9 @@ public sealed class OrchestrationService : IOrchestrationService
             && _settings.TryGet(out var settings)
             && !ParquetVersions.KeptPoints(versions, settings.ParquetVersionDays, DateTimeOffset.UtcNow, state.RetiredSnapshots).Any(p => p.Snapshot == snapshot))
         {
-            throw new InvalidOperationException(
-                $"El punto {snapshot} ya no se conserva (la poda se llevó sus versiones): vuelve a abrir la lista de puntos.");
+            throw new LocalizedException(
+                $"El punto {snapshot} ya no se conserva (la poda se llevó sus versiones): vuelve a abrir la lista de puntos.",
+                "Error.RestorePointPruned", snapshot);
         }
 
         var plan = ParquetVersions.Plan(versions, state.Tables, snapshot);
