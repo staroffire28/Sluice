@@ -8,8 +8,10 @@
 #
 # Un backup cifrado (.age) se descifra con la clave privada -Identity. Antes de tocar el
 # volumen, el script descifra el backup y lista el tar entero: si algo falla, no borra nada.
+# Después extrae en /data/.restore-new y solo si la extracción termina cambia el contenido: un
+# disco lleno a mitad deja el volumen como estaba (hace falta espacio libre para el backup extraído).
 #
-# Uso: .\scripts\restore-data-dir.ps1 -BackupFile .\backups\pipeline-data-20260701120000.tar.gz.age -Identity .\sluice-backup.key [-VolumeName sluice_pipeline-data]
+# Uso: .\scripts\restore-data-dir.ps1 -BackupFile .\backups\pipeline-data-20260701120000.tar.gz.age -Identity $HOME\sluice-backup.key [-VolumeName sluice_pipeline-data]
 param(
     [Parameter(Mandatory = $true)]
     [string]$BackupFile,
@@ -89,14 +91,15 @@ try {
     }
 
     Write-Host "Restaurando $BackupFile -> volumen '$VolumeName' ..."
+    # Primero se extrae aparte; el contenido actual solo se borra cuando el nuevo está entero.
     docker run --rm `
         -v "${VolumeName}:/data" `
         -v "${backupDir}:/backup:ro" `
         alpine `
-        sh -c "rm -rf /data/* /data/.[!.]* 2>/dev/null; tar xzf /backup/$backupName -C /data"
+        sh -c "set -e; rm -rf /data/.restore-new; mkdir /data/.restore-new; tar xzf /backup/$backupName -C /data/.restore-new || { rm -rf /data/.restore-new; exit 1; }; find /data -mindepth 1 -maxdepth 1 ! -name .restore-new -exec rm -rf {} +; find /data/.restore-new -mindepth 1 -maxdepth 1 -exec mv {} /data/ \;; rmdir /data/.restore-new"
 
     if ($LASTEXITCODE -ne 0) {
-        throw "La restauración falló (docker run exit code $LASTEXITCODE)."
+        throw "La restauración falló (docker run exit code $LASTEXITCODE). Si falló al extraer, el volumen sigue como estaba."
     }
 } finally {
     # El tar descifrado no se queda en disco.

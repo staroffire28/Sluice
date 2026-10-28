@@ -84,28 +84,25 @@ public sealed class StorageOverviewService : IStorageOverviewService
             }
 
             var adls = await _adlsFactory.CreateAsync(pipeline.SourceId, cancellationToken);
-            var parquetStore = await _adlsFactory.CreateParquetStoreAsync(pipeline.SourceId, cancellationToken);
             var allSnapshots = await adls.ListSnapshotFoldersAsync(cancellationToken);
             var currentFolder = await adls.GetSettledSnapshotAsync(cancellationToken);
             var state = _pipelines.GetState(pipelineId);
-            var selection = SnapshotSelector.Select(allSnapshots, state.LastProcessedSnapshot, currentFolder);
+            var retentionFloor = SnapshotRetentionService.SharedLastProcessed(_pipelines, pipeline.SourceId);
+            var selection = SnapshotSelector.Select(allSnapshots, retentionFloor, currentFolder);
             var analysis = SnapshotRetentionService.Analyze(
                 DateTimeOffset.UtcNow,
                 _settings.Get(),
                 allSnapshots,
-                state.LastProcessedSnapshot,
-                selection);
+                retentionFloor,
+                selection,
+                SnapshotRetentionService.SharedBackfillFrom(_pipelines, pipeline.SourceId));
 
             var parquets = await _parquet.ListAsync(pipelineId, cancellationToken);
             var consolidated = parquets
                 .Where(p => p.Path.Count(c => c == '/') == 1)
                 .ToList();
 
-            var cert = await SnapshotRetentionService.CertifyParquetAsync(
-                pipelineId,
-                parquetStore,
-                state,
-                cancellationToken);
+            var cert = SnapshotRetentionService.CertifyParquet(pipelineId, state, parquets);
 
             return new PipelineStorageStats(
                 pipelineId,

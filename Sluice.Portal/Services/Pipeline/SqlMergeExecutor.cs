@@ -48,6 +48,16 @@ public interface ISqlMergeExecutor
         SqlServerVersion sqlVersion,
         CancellationToken cancellationToken = default);
 
+    // ¿Tiene alguna fila la tabla? Para elegir cómo se carga basta saberlo, sin recorrerla entera
+    // como COUNT_BIG. Por defecto cuenta, para los dobles de test que no ejercitan SQL.
+    async Task<bool> HasRowsAsync(
+        SqlConnection connection,
+        string schema,
+        string entity,
+        SqlServerVersion sqlVersion,
+        CancellationToken cancellationToken = default) =>
+        await CountRowsAsync(connection, schema, entity, sqlVersion, cancellationToken) > 0;
+
     // Borra del destino las filas cuyo Id no está en el conjunto de claves del origen (huérfanas).
     // Lo usa el ISourceKeySink en memoria por defecto (el Reload real va por SqlSourceKeySink);
     // devuelve el número de filas eliminadas.
@@ -232,6 +242,18 @@ public sealed class SqlMergeExecutor : ISqlMergeExecutor
         cmd.CommandText = $"SELECT COUNT_BIG(1) FROM {SqlMergeBuilder.Quote(schema)}.{SqlMergeBuilder.Quote(entity)}";
         var result = await cmd.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt64(result);
+    }
+
+    public async Task<bool> HasRowsAsync(
+        SqlConnection connection,
+        string schema,
+        string entity,
+        SqlServerVersion sqlVersion,
+        CancellationToken cancellationToken = default)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT CASE WHEN EXISTS (SELECT 1 FROM {SqlMergeBuilder.Quote(schema)}.{SqlMergeBuilder.Quote(entity)}) THEN 1 ELSE 0 END";
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(cancellationToken)) == 1;
     }
 
     public async Task<bool> EnsureUniqueIdIndexAsync(

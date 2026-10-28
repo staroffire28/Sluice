@@ -13,4 +13,8 @@ public static class EventLevelLabels
             EventLevel.Error => localizer["Common.EventLevel.Error"].Value,
             _ => level.ToString(),
         };
+
+    // El activity log guarda el nivel como texto ("info", "warning", "error").
+    public static string Get(IStringLocalizer<SharedResource> localizer, string level) =>
+        Enum.TryParse<EventLevel>(level, ignoreCase: true, out var parsed) ? Get(localizer, parsed) : level;
 }

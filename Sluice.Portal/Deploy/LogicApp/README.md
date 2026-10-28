@@ -24,7 +24,7 @@ imagen de Sluice. Abre `email-preview.html` para ver cómo llega cada tipo de av
 | `system.alert` | Otros avisos del sistema (bloqueos de SQL, retención) | **ALERTA** |
 
 Las alertas de conciliación dicen además el estado de la **corrección automática** (programada,
-desactivada o no resuelta).
+no lanzada, desactivada o no resuelta).
 
 ## Requisitos
 

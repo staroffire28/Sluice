@@ -23,9 +23,9 @@
         </FluentSelect>
         <FluentSelect TOption="string" TValue="string" @bind-Value="_levelFilter" @bind-Value:after="Load" Label="@L["Page.Logs.Filter.Level"]" Style="min-width:140px;">
             <FluentOption TValue="string" Value="@string.Empty">@L["Page.Logs.All"]</FluentOption>
-            <FluentOption TValue="string" Value="@("info")">info</FluentOption>
-            <FluentOption TValue="string" Value="@("warning")">warning</FluentOption>
-            <FluentOption TValue="string" Value="@("error")">error</FluentOption>
+            <FluentOption TValue="string" Value="@("info")">@EventLevelLabels.Get(L, EventLevel.Info)</FluentOption>
+            <FluentOption TValue="string" Value="@("warning")">@EventLevelLabels.Get(L, EventLevel.Warning)</FluentOption>
+            <FluentOption TValue="string" Value="@("error")">@EventLevelLabels.Get(L, EventLevel.Error)</FluentOption>
         </FluentSelect>
         <FluentTextInput @bind-Value="_search" @bind-Value:after="Load" data-testid="logs-search" Label="@L["Page.Logs.Search"]" Placeholder="@L["Page.Logs.SearchPlaceholder"]" Style="min-width:240px;" />
         <DateRangeFilter @bind-Value="_range" @bind-Value:after="Load" />
@@ -63,7 +63,7 @@
             </TemplateColumn>
             <TemplateColumn Title="@L["Page.Logs.Col.Level"]">
                 <FluentBadge Appearance="@LevelAppearance(context.Level)" Color="@LevelColor(context.Level)">
-                    @context.Level.ToLowerInvariant()
+                    @EventLevelLabels.Get(L, context.Level)
                 </FluentBadge>
             </TemplateColumn>
             <TemplateColumn Title="@L["Page.Logs.Col.Action"]">

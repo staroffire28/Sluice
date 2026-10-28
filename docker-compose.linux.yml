@@ -6,7 +6,8 @@
 # Los parámetros operativos se editan en /settings. Aquí solo van la clave entre
 # servicios y el modo/volumen.
 #
-# TRANSLATE_ENUMS (opt-in): traduce los optionsets de Dataverse/F&O añadiendo al final
+# TRANSLATE_ENUMS (activo por defecto en este compose; TRANSLATE_ENUMS=false en .env lo apaga):
+# traduce los optionsets de Dataverse/F&O añadiendo al final
 # de cada tabla una columna [<col>_$label] con el ExternalValue (idioma 1033). Solo lo
 # usa la etapa SQL, así que basta ponerlo en worker-sql.
 #
@@ -38,6 +39,11 @@ services:
       DATA_DIR: /data
       UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
+      # Alertas, deadman y sesión (opcionales, desde .env; ver .env.example). Vacías, no se usan.
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      DEADMAN_PING_URL: ${DEADMAN_PING_URL:-}
+      CHANGELOG_STALL_HOURS: ${CHANGELOG_STALL_HOURS:-}
+      SESSION_EXPIRY_HOURS: ${SESSION_EXPIRY_HOURS:-}
     volumes:
       - pipeline-data:/data
     healthcheck:
@@ -59,9 +65,9 @@ services:
     environment:
       EXECUTION_MODE: distributed
       DATA_DIR: /data
-      UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
       WORKER_STAGE: ingest
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}   # las etapas también envían alertas
     volumes:
       - pipeline-data:/data
     depends_on:
@@ -83,10 +89,10 @@ services:
     environment:
       EXECUTION_MODE: distributed
       DATA_DIR: /data
-      UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
       WORKER_STAGE: sql
-      TRANSLATE_ENUMS: "true"
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}   # las etapas también envían alertas
+      TRANSLATE_ENUMS: ${TRANSLATE_ENUMS:-true}
     volumes:
       - pipeline-data:/data
     depends_on:
@@ -105,9 +111,9 @@ services:
     environment:
       EXECUTION_MODE: distributed
       DATA_DIR: /data
-      UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
       WORKER_STAGE: reconcile
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}   # las etapas también envían alertas
     volumes:
       - pipeline-data:/data
     depends_on:
