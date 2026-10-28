@@ -48,7 +48,7 @@ $snapshots = Invoke-RestMethod -Uri "$BaseUrl/api/pipelines/$PipelineId/snapshot
 Write-Host "Settled snapshot: $($snapshots.settledSnapshot)"
 Write-Host "Pending snapshots: $($snapshots.pendingSnapshots.Count)"
 
-$run = Invoke-RestMethod -Uri "$BaseUrl/api/pipelines/$PipelineId/run" -Method Post -WebSession $session -TimeoutSec 30
+$run = Invoke-RestMethod -Uri "$BaseUrl/api/pipelines/$PipelineId/run" -Method Post -Headers @{ 'X-Sluice-Client' = 'e2e' } -WebSession $session -TimeoutSec 30
 $jobId = $run.id
 Write-Host "Started job $jobId (type $($run.type), status $($run.status))"
 
@@ -71,7 +71,7 @@ if ($job.status -notin @("ok", "partial", 1, 2)) {
 }
 
 Write-Host "Triggering reconcile for $PipelineId ..."
-$recon = Invoke-RestMethod -Uri "$BaseUrl/api/pipelines/$PipelineId/reconcile" -Method Post -WebSession $session -TimeoutSec 30
+$recon = Invoke-RestMethod -Uri "$BaseUrl/api/pipelines/$PipelineId/reconcile" -Method Post -Headers @{ 'X-Sluice-Client' = 'e2e' } -WebSession $session -TimeoutSec 30
 $reconJobId = $recon.id
 Write-Host "Reconcile job $reconJobId started"
 

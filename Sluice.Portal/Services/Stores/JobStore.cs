@@ -14,7 +14,7 @@ public sealed class JobStore : JsonFileStore<Job>
     private readonly object _indexLock = new();
     private readonly Dictionary<string, (DateTime WriteTime, long Length, JobIndexEntry Entry)> _index = new(StringComparer.Ordinal);
 
-    public JobStore(IOptions<AppOptions> options) : base(options, "jobs")
+    public JobStore(IOptions<AppOptions> options, ILogger<JobStore>? logger = null) : base(options, "jobs", logger)
     {
         _locksDir = Path.Combine(options.Value.DataDir, "locks");
     }
@@ -62,9 +62,10 @@ public sealed class JobStore : JsonFileStore<Job>
                     // desapareciera de ListRunning y de las guardas por un error transitorio.
                     continue;
                 }
-                catch (System.Text.Json.JsonException)
+                catch (System.Text.Json.JsonException ex)
                 {
                     // Corrupto: se omite, como en ListAll.
+                    WarnUnreadable(file.FullName, ex);
                     job = null;
                 }
 
