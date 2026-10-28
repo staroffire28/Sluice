@@ -103,11 +103,7 @@ public static class ConnectionSettingsFactory
         var config = connection.Config;
         var version = SqlServerVersions.Parse(Get(config, SqlServerVersions.ConfigKey));
 
-        if (config.TryGetValue("connection_string", out var cs) && !string.IsNullOrWhiteSpace(cs))
-        {
-            return new SqlConnectionSettings(cs, version);
-        }
-
+        // Sin connection_string: solo campos (ver ConnectionMigrations.RemoveSqlConnectionStrings).
         var host = Get(config, "host", "server")
             ?? throw new InvalidOperationException("SQL Server host is not configured.");
         var database = Get(config, "database")

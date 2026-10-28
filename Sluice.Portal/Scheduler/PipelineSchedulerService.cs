@@ -38,6 +38,10 @@ public sealed class PipelineSchedulerService : BackgroundService
     // el estado del pipeline ya no tiene el restore a medias.
     private readonly HashSet<string> _restoreHoldNoticed = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _restoreHoldAlerted = new(StringComparer.OrdinalIgnoreCase);
+    // Destino marcado por la migración (faltan sus campos): igual, una vez por episodio. Se rearman en
+    // cuanto el pipeline vuelve a arrancar.
+    private readonly HashSet<string> _fieldsRequiredNoticed = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _fieldsRequiredAlerted = new(StringComparer.OrdinalIgnoreCase);
     private bool _alertDeliveryFailedThisPoll;
 
     public PipelineSchedulerService(
@@ -196,6 +200,8 @@ public sealed class PipelineSchedulerService : BackgroundService
                 // pendiente): el episodio terminó.
                 _restoreHoldNoticed.Remove(pipeline.Id);
                 _restoreHoldAlerted.Remove(pipeline.Id);
+                _fieldsRequiredNoticed.Remove(pipeline.Id);
+                _fieldsRequiredAlerted.Remove(pipeline.Id);
                 continue;
             }
 
@@ -245,6 +251,8 @@ public sealed class PipelineSchedulerService : BackgroundService
                         pipeline.Id,
                         catalog.PendingSnapshots.Count);
                     await _orchestration.RunPipelineAsync(AuditActor.Scheduler, pipeline.Id, JobType.Incremental, ct);
+                    _fieldsRequiredNoticed.Remove(pipeline.Id);
+                    _fieldsRequiredAlerted.Remove(pipeline.Id);
                 }
                 finally
                 {
@@ -270,6 +278,23 @@ public sealed class PipelineSchedulerService : BackgroundService
                 if (!_restoreHoldAlerted.Contains(pipeline.Id) && await TrySendPendingAlertAsync(message, ct))
                 {
                     _restoreHoldAlerted.Add(pipeline.Id);
+                }
+            }
+            catch (ConnectionFieldsRequiredException ex)
+            {
+                // Retención, no fallo: es lo esperado tras la migración hasta que alguien escriba los
+                // campos del destino. Igual que el restore a medias, una vez por episodio.
+                _logger.LogInformation("Scheduler hold {PipelineId}: {Reason}", pipeline.Id, ex.Message);
+                var message = $"Pipeline {pipeline.Name} parado: {ex.Message}";
+                if (_fieldsRequiredNoticed.Add(pipeline.Id))
+                {
+                    _activity.LogSystem("connection.fields-required", message, pipeline.Id, null, "warning",
+                        "Activity.Connection.FieldsRequiredHold", pipeline.Name, ex.ConnectionName);
+                }
+
+                if (!_fieldsRequiredAlerted.Contains(pipeline.Id) && await TrySendPendingAlertAsync(message, ct))
+                {
+                    _fieldsRequiredAlerted.Add(pipeline.Id);
                 }
             }
             catch (Exception ex)

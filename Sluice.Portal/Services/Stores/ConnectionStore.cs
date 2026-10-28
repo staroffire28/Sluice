@@ -15,8 +15,8 @@ public sealed class ConnectionStore : JsonFileStore<Connection>
 {
     private readonly IConnectionSecretProtector _protector;
 
-    public ConnectionStore(IOptions<AppOptions> options, IConnectionSecretProtector protector)
-        : base(options, "connections") => _protector = protector;
+    public ConnectionStore(IOptions<AppOptions> options, IConnectionSecretProtector protector, ILogger<ConnectionStore>? logger = null)
+        : base(options, "connections", logger) => _protector = protector;
 
     public IReadOnlyList<Connection> ListAll() => ListAll(Read);
 

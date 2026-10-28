@@ -107,9 +107,11 @@ public static class AuditLogExtensions
         ex is InvalidOperationException or ArgumentException ? AuditOutcome.Rejected : AuditOutcome.Error;
 
     // El scheduler y la cola reintentan en cada poll: un pipeline ocupado o retenido por un restore a
-    // medias no deja una entrada por poll (la retención ya se avisa una vez, ver PipelineSchedulerService).
+    // medias, o (en el scheduler) con un destino pendiente de campos, no deja una entrada por poll (la
+    // retención ya se avisa una vez, ver PipelineSchedulerService).
     private static bool ShouldRecord(AuditActor actor, Exception ex) =>
         ex is not OperationCanceledException
         && !(ex is PipelineBusyException && (actor == AuditActor.Scheduler || actor == AuditActor.Queue))
-        && !(ex is RestorePendingException && (actor == AuditActor.Scheduler || actor == AuditActor.Queue));
+        && !(ex is RestorePendingException && (actor == AuditActor.Scheduler || actor == AuditActor.Queue))
+        && !(ex is ConnectionFieldsRequiredException && actor == AuditActor.Scheduler);
 }
