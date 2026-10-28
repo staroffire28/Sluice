@@ -870,6 +870,8 @@
   <data name="Event.Ingest.ProcessingSnapshot" xml:space="preserve"><value>Procesando el snapshot {0}.</value></data>
   <data name="Event.Ingest.EntityFailed" xml:space="preserve"><value>{0}: falló la ingesta del snapshot {1} — {2}: {3}</value></data>
   <data name="Event.Ingest.SkippedPaused" xml:space="preserve"><value>{0:N0} tabla(s) omitida(s) por pausa: {1}.</value></data>
+  <data name="Event.Ingest.Backfilling" xml:space="preserve"><value>{0}: reanudada tras una pausa; se leen los snapshots que se saltó, desde {1}.</value></data>
+  <data name="Event.Ingest.BackfillSnapshotsMissing" xml:space="preserve"><value>{0}: el snapshot {1}, el primero que se saltó en pausa, ya no está en el lago; los cambios de ese tiempo no se recuperan. Un reset del pipeline la recarga con los snapshots que queden.</value></data>
   <data name="Event.Ingest.RowsWithoutId" xml:space="preserve"><value>{0}: {1:N0} fila(s) sin Id válido descartada(s).</value></data>
   <data name="Event.Ingest.ConsolidatedShrank" xml:space="preserve"><value>{0}: el consolidado nuevo tiene {1:N0} filas y el anterior {2:N0}. La versión anterior queda guardada en la página Parquet por si hay que restaurarla.</value></data>
   <data name="Event.Ingest.SnapshotNotMarked" xml:space="preserve"><value>{0:N0} tabla(s) con fallos: el snapshot {1} no se marca como procesado y se reintentará en el próximo run.</value></data>

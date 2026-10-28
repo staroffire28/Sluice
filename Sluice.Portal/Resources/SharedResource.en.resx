@@ -871,6 +871,8 @@
   <data name="Event.Ingest.ProcessingSnapshot" xml:space="preserve"><value>Processing snapshot {0}.</value></data>
   <data name="Event.Ingest.EntityFailed" xml:space="preserve"><value>{0}: ingest failed for snapshot {1} — {2}: {3}</value></data>
   <data name="Event.Ingest.SkippedPaused" xml:space="preserve"><value>{0:N0} table(s) skipped because they are paused: {1}.</value></data>
+  <data name="Event.Ingest.Backfilling" xml:space="preserve"><value>{0}: resumed after a pause; reading the snapshots it skipped, from {1}.</value></data>
+  <data name="Event.Ingest.BackfillSnapshotsMissing" xml:space="preserve"><value>{0}: snapshot {1}, the first one it skipped while paused, is no longer in the lake; the changes from that time cannot be recovered. A pipeline reset reloads it from the snapshots that remain.</value></data>
   <data name="Event.Ingest.RowsWithoutId" xml:space="preserve"><value>{0}: {1:N0} row(s) without a valid Id discarded.</value></data>
   <data name="Event.Ingest.ConsolidatedShrank" xml:space="preserve"><value>{0}: the new consolidated file has {1:N0} rows and the previous one {2:N0}. The previous version is kept on the Parquet page in case it needs restoring.</value></data>
   <data name="Event.Ingest.SnapshotNotMarked" xml:space="preserve"><value>{0:N0} table(s) failed: snapshot {1} is not marked as processed and will be retried on the next run.</value></data>
