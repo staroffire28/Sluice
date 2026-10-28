@@ -11,7 +11,7 @@ public static class HealthEndpoints
         // Liveness: rápido a propósito (polling cada 60s del HealthPill, healthcheck de Docker
         // cada 30s, y arranque de e2e tests que esperan /health en un loop ajustado). Solo
         // confirma que el proceso responde y que DATA_DIR es escribible — nunca toca SQL/ADLS.
-        app.MapGet("/health", (IOptions<AppOptions> options) => LivenessResult(options.Value));
+        app.MapLivenessEndpoint();
         app.MapGet("/internal/health", (IOptions<AppOptions> options) => LivenessResult(options.Value));
 
         // Readiness: además de la escritura en DATA_DIR, prueba conectividad real de ADLS/SQL
@@ -30,6 +30,13 @@ public static class HealthEndpoints
                 statusCode: report.Healthy ? 200 : 503);
         });
 
+        return app;
+    }
+
+    // Lo único que mapea un worker: el healthcheck de Docker.
+    public static IEndpointRouteBuilder MapLivenessEndpoint(this IEndpointRouteBuilder app)
+    {
+        app.MapGet("/health", (IOptions<AppOptions> options) => LivenessResult(options.Value));
         return app;
     }
 

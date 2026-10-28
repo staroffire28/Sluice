@@ -71,6 +71,7 @@ public sealed class OrchestrationService : IOrchestrationService
     private readonly PipelineStateStore? _stateStore;
     private readonly RunQueueService? _runQueue;
     private readonly SettingsStore? _settings;
+    private readonly ConnectionStore? _connections;
     private readonly IAdlsClientFactory? _adlsFactory;
 
     public OrchestrationService(
@@ -86,9 +87,11 @@ public sealed class OrchestrationService : IOrchestrationService
         PipelineStateStore? stateStore = null,
         RunQueueService? runQueue = null,
         SettingsStore? settings = null,
+        ConnectionStore? connections = null,
         IAdlsClientFactory? adlsFactory = null)
     {
         _audit = audit;
+        _connections = connections;
         _stateStore = stateStore;
         _runQueue = runQueue;
         _settings = settings;
@@ -272,8 +275,15 @@ public sealed class OrchestrationService : IOrchestrationService
 
     private async Task<Job> StartAsync(AuditActor actor, string pipelineId, JobType type, string? entity, CancellationToken cancellationToken)
     {
-        _ = _pipelines.Get(pipelineId)
+        var pipeline = _pipelines.Get(pipelineId)
             ?? throw new InvalidOperationException("Pipeline not found.");
+
+        // Un destino al que la migración le quitó la connection_string sin poder pasarla a campos no
+        // arranca nada (ni Force): antes de que el Ingest escriba nada que SQL no podría cargar.
+        if (_connections?.GetById(pipeline.DestinationId) is { } destination)
+        {
+            ConnectionFieldsRequiredException.ThrowIfMarked(destination);
+        }
 
         // Nota: Pipeline.Enabled significa "scheduler activo", NO "ejecutable". El Run manual
         // siempre se permite (crear pipeline → correr a mano → activar scheduler al validar).
@@ -685,11 +695,13 @@ public sealed class OrchestrationService : IOrchestrationService
             ],
         };
 
+        // Divergencia "antes" desde el último reporte, para el historial de remediación (un registro
+        // por tabla, todos con el mismo JobId). Se lee antes de crear el job: si fallara después, el
+        // job quedaba en Running sin tarea hasta que el vigilante lo cerraba.
+        var latest = _reports.GetLatestReconcile(pipelineId);
+
         _jobs.Create(job);
 
-        // Divergencia "antes" desde el último reporte, para el historial de remediación (un registro
-        // por tabla, todos con el mismo JobId).
-        var latest = _reports.GetLatestReconcile(pipelineId);
         foreach (var entity in entities)
         {
             var before = latest?.Entities

@@ -10,13 +10,19 @@ public static class ParquetMaterializer
 {
     // --- Streaming (para consolidación memory-safe y MERGE por lotes) ---
 
+    // Metadato del footer con las filas que no son de borrado de F&O: con él, contar sin borrados
+    // (reconcile) lee solo el footer en vez de la columna IsDelete de cada row group.
+    public const string NonDeleteRowsKey = "sluice.nonDeleteRows";
+
     // Escritura en streaming: cada batch se escribe como un row group propio, así se puede
-    // volcar gran volumen sin tener todo en memoria a la vez.
+    // volcar gran volumen sin tener todo en memoria a la vez. metadata se pide al terminar los lotes
+    // (cuando ya se conocen los recuentos) y va a los metadatos clave-valor del footer.
     public static async Task WriteStreamingAsync(
         Stream destination,
         CdmEntitySchema schema,
         IAsyncEnumerable<IReadOnlyList<Dictionary<string, object?>>> batches,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<Dictionary<string, string>>? metadata = null)
     {
         var fields = schema.Attributes.Select(CreateDataField).ToArray();
         var parquetSchema = new ParquetSchema(fields);
@@ -34,6 +40,11 @@ public static class ParquetMaterializer
             {
                 await WriteFieldAsync(groupWriter, field, schema, batch, cancellationToken);
             }
+        }
+
+        if (metadata is not null)
+        {
+            writer.CustomMetadata = metadata();
         }
     }
 
@@ -80,11 +91,19 @@ public static class ParquetMaterializer
     }
 
     // Conteo de filas por metadatos (suma de RowCount de cada row group), sin materializar. Con
-    // excludeDeleteRows y una columna IsDelete, lee además esa columna (solo esa) para no contar
-    // las filas de borrado de F&O.
+    // excludeDeleteRows vale el recuento que guardó la consolidación en el footer (NonDeleteRowsKey);
+    // si no está (un parquet anterior), se lee la columna IsDelete (solo esa) para no contar las filas
+    // de borrado de F&O.
     public static async Task<long> CountRowsAsync(Stream source, bool excludeDeleteRows = false, CancellationToken cancellationToken = default)
     {
         await using var reader = await ParquetReader.CreateAsync(source, cancellationToken: cancellationToken);
+        if (excludeDeleteRows
+            && reader.CustomMetadata.TryGetValue(NonDeleteRowsKey, out var stored)
+            && long.TryParse(stored, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var nonDeleteRows))
+        {
+            return nonDeleteRows;
+        }
+
         var isDeleteField = excludeDeleteRows
             ? reader.Schema.DataFields.FirstOrDefault(f => string.Equals(f.Name, CdmSchemaParser.IsDeleteColumn, StringComparison.OrdinalIgnoreCase))
             : null;

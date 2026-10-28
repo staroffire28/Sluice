@@ -14,5 +14,5 @@ public static class ExcludedEntities
         name.StartsWith('_') || Fixed.Contains(name);
 
     public static bool IsSnapshotFolder(string name) =>
-        System.Text.RegularExpressions.Regex.IsMatch(name, @"^\d{4}-\d{2}-\d{2}");
+        System.Text.RegularExpressions.Regex.IsMatch(name, @"^\d{4}-\d{2}-\d{2}T\d{2}\.\d{2}\.\d{2}Z$");
 }

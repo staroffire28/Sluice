@@ -30,15 +30,32 @@ public static class AppOptionsConfiguration
                 $"AUTH_MODE '{authMode}' no es válido. Valores admitidos: {AppOptions.KeyAuthMode}, {AppOptions.OpenAuthMode}.");
         }
 
+        // Un modo mal escrito ("distribuido") dejaba al worker como orquestador, y agendaban todos.
+        var executionMode = Get(configuration, "EXECUTION_MODE")?.Trim() is { Length: > 0 } rawMode ? rawMode : "local";
+        if (!executionMode.Equals("local", StringComparison.OrdinalIgnoreCase)
+            && !executionMode.Equals("distributed", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"EXECUTION_MODE '{executionMode}' no es válido. Valores admitidos: local, distributed.");
+        }
+
+        // 0 o menos daba sesiones que ya nacen caducadas: un bucle de login.
+        var sessionExpiryHours = GetInt(configuration, "SESSION_EXPIRY_HOURS", 12);
+        if (sessionExpiryHours < 1)
+        {
+            throw new InvalidOperationException(
+                $"SESSION_EXPIRY_HOURS '{sessionExpiryHours}' no es válido: tiene que ser 1 o más.");
+        }
+
         return new AppOptions
         {
             AuthMode = authMode,
-            ExecutionMode = Get(configuration, "EXECUTION_MODE") ?? "local",
+            ExecutionMode = executionMode,
             DataDir = Get(configuration, "DATA_DIR") ?? Path.Combine(Directory.GetCurrentDirectory(), "data"),
             HeartbeatMaxFailures = GetInt(configuration, "HEARTBEAT_MAX_FAILURES", 3),
             // Ver comentario en AppOptions.cs: 16h da margen sobre una cadencia real de ~12h.
             ChangelogStallHours = GetInt(configuration, "CHANGELOG_STALL_HOURS", 16),
-            SessionExpiryHours = GetInt(configuration, "SESSION_EXPIRY_HOURS", 12),
+            SessionExpiryHours = sessionExpiryHours,
             UiApiKey = Get(configuration, "UI_API_KEY"),
             AlertWebhookUrl = Get(configuration, "ALERT_WEBHOOK_URL"),
             DeadmanPingUrl = Get(configuration, "DEADMAN_PING_URL"),
