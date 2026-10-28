@@ -63,7 +63,7 @@
     }
 
     <PanelState IsLoading="@_loading" Error="@_error">
-        <section class="dash-stats" aria-label="@L["Page.Dashboard.Overview"]" data-testid="dashboard-stats">
+        <section class="@(SourceIsLocal(_selectedPipeline) ? "dash-stats dash-stats--no-storage" : "dash-stats")" aria-label="@L["Page.Dashboard.Overview"]" data-testid="dashboard-stats">
             <div class="dash-stat">
                 <span class="dash-stat__label">@L["Page.Dashboard.Tables"]</span>
                 <span class="dash-stat__value">@_tableCount.ToString("N0")</span>
@@ -118,23 +118,27 @@
                     <span class="dash-stat__value dash-stat__value--sm">—</span>
                 </div>
             }
-            <div class="dash-stat" data-testid="dashboard-storage">
-                <span class="dash-stat__label">@L["Page.Dashboard.Storage"]</span>
-                @if (_storageLoading && _storageRow is null)
-                {
-                    <span class="dash-stat__value dash-stat__value--sm">…</span>
-                }
-                else if (_storageRow is null || _storageRow.Unavailable)
-                {
-                    <span class="dash-stat__value dash-stat__value--sm">—</span>
-                    <span class="dash-stat__hint">@L["Page.Dashboard.StorageUnavailable"]</span>
-                }
-                else
-                {
-                    <span class="dash-stat__value dash-stat__value--sm">@L["Page.Dashboard.StorageParquet", _storageRow.ParquetMb]</span>
-                    <span class="dash-stat__hint">@L["Page.Dashboard.StorageFolders", _storageRow.SnapshotFolders.ToString("N0"), _storageRow.EligiblePurge.ToString("N0")]</span>
-                }
-            </div>
+            @* El almacenamiento de ADLS no aplica a un origen local (carpeta del disco). *@
+            @if (!SourceIsLocal(_selectedPipeline))
+            {
+                <div class="dash-stat" data-testid="dashboard-storage">
+                    <span class="dash-stat__label">@L["Page.Dashboard.Storage"]</span>
+                    @if (_storageLoading && _storageRow is null)
+                    {
+                        <span class="dash-stat__value dash-stat__value--sm">…</span>
+                    }
+                    else if (_storageRow is null || _storageRow.Unavailable)
+                    {
+                        <span class="dash-stat__value dash-stat__value--sm">—</span>
+                        <span class="dash-stat__hint">@L["Page.Dashboard.StorageUnavailable"]</span>
+                    }
+                    else
+                    {
+                        <span class="dash-stat__value dash-stat__value--sm">@L["Page.Dashboard.StorageParquet", _storageRow.ParquetMb]</span>
+                        <span class="dash-stat__hint">@L["Page.Dashboard.StorageFolders", _storageRow.SnapshotFolders.ToString("N0"), _storageRow.EligiblePurge.ToString("N0")]</span>
+                    }
+                </div>
+            }
         </section>
 
         @* Solo con un job activo: sin él, la cifra "Última ejecución" ya cuenta el último. *@
@@ -394,6 +398,11 @@
 
     private string PipelineName(string pipelineId) =>
         _pipelines.FirstOrDefault(p => p.Id == pipelineId)?.Name ?? pipelineId;
+
+    private bool SourceIsLocal(string? pipelineId) =>
+        _pipelines.FirstOrDefault(p => p.Id == pipelineId) is { } pipeline
+        && Connections.Get(pipeline.SourceId) is { } source
+        && string.Equals(source.Type, AdlsClientFactory.LocalType, StringComparison.OrdinalIgnoreCase);
 
     private bool ParquetOnPortal(string pipelineId) =>
         _pipelines.FirstOrDefault(p => p.Id == pipelineId) is { } pipeline

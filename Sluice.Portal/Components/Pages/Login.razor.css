@@ -46,11 +46,14 @@
     font-weight: 600;
 }
 
+/* Centrado en el alto que deja la marca (sin el modo abajo, space-between lo bajaría hasta la
+   animación). */
 .landing__pitch {
     display: flex;
     flex-direction: column;
     gap: 20px;
     max-width: 520px;
+    margin-block: auto;
 }
 
 .landing__pitch h1 {
@@ -69,8 +72,9 @@
 }
 
 .landing__meta {
-    margin: 0;
+    margin: 0 0 0 auto;
     font-size: 13px;
+    font-weight: 400;
     color: #7d93ab;
 }
 
