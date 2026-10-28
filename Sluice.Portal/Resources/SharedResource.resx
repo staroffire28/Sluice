@@ -58,6 +58,7 @@
   <data name="Common.Back" xml:space="preserve"><value>Volver</value></data>
   <data name="Common.Saved" xml:space="preserve"><value>Guardado</value></data>
   <data name="Common.NameRequired" xml:space="preserve"><value>El nombre es obligatorio y debe contener al menos una letra o un número.</value></data>
+  <data name="Common.ConnectionBusyRetarget" xml:space="preserve"><value>Un pipeline que usa esta conexión tiene un job en curso: espera a que termine o cancélalo antes de cambiar a dónde apunta.</value></data>
   <data name="Common.Deleted" xml:space="preserve"><value>{0} eliminado</value></data>
   <data name="Common.DeleteFailed" xml:space="preserve"><value>No se pudo eliminar.</value></data>
   <data name="Common.CancelJobConfirm" xml:space="preserve"><value>¿Cancelar el job {0}? Esta acción detiene su ejecución.</value></data>
@@ -789,6 +790,7 @@
   <data name="Page.Sources.ParquetStorage.Adls" xml:space="preserve"><value>Contenedor de ADLS</value></data>
   <data name="Page.Sources.ParquetStorage.Portal" xml:space="preserve"><value>Disco del portal (DATA_DIR)</value></data>
   <data name="Page.Sources.ParquetStorageHint" xml:space="preserve"><value>En el disco del portal no hace falta un contenedor de Parquet ni permiso de escritura en ADLS, pero ocupa espacio en el volumen de DATA_DIR. Al cambiarlo, Sluice copia los Parquet consolidados al sitio nuevo sin borrar los anteriores.</value></data>
+  <data name="Page.Pipelines.BusyRetarget" xml:space="preserve"><value>Este pipeline tiene un job en curso: espera a que termine o cancélalo antes de cambiar su origen o su destino.</value></data>
   <data name="Page.Sources.ParquetCopied" xml:space="preserve"><value>Parquet consolidado copiado al sitio nuevo: {0} tabla(s).</value></data>
   <data name="Report.Generated" xml:space="preserve"><value>Generado {0}</value></data>
   <data name="Report.Overline" xml:space="preserve"><value>INFORME DE CONCILIACIÓN</value></data>

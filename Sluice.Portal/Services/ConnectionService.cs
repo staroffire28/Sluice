@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
 using Sluice.Portal.Services.Adls;
 using Sluice.Portal.Services.Connections;
@@ -14,10 +16,11 @@ public interface IConnectionService
     // Lo que muta o prueba contra la red del cliente recibe quién actúa y queda en el registro de
     // actividad (ver AuditActor).
     Connection Create(AuditActor actor, Connection connection);
-    Connection? Update(AuditActor actor, string id, Connection connection);
 
-    // Como Update; si un origen cambia dónde guarda el Parquet (parquet_storage), copia antes al
-    // sitio nuevo los consolidados de sus pipelines. CopiedTables: cuántos se copiaron.
+    // Si un origen cambia dónde guarda el Parquet (parquet_storage), copia antes al sitio nuevo los
+    // consolidados de sus pipelines. CopiedTables: cuántos se copiaron. Cambiar el host, la cuenta, la
+    // base de datos, el container o el almacenamiento con un job en curso en un pipeline que la usa
+    // lanza PipelineBusyException.
     Task<(Connection? Connection, int CopiedTables)> UpdateAsync(AuditActor actor, string id, Connection connection, CancellationToken cancellationToken = default);
 
     // null si se borró; si no, el motivo.
@@ -53,19 +56,28 @@ public sealed class ConnectionService : IConnectionService
     private readonly IAdlsClientFactory _adlsFactory;
     private readonly ISqlConnectionFactory _sqlFactory;
     private readonly IAuditLog _audit;
+    private readonly IJobService _jobs;
+    private readonly ITaskStore _tasks;
+    private readonly string _dataDir;
 
     public ConnectionService(
         ConnectionStore store,
         PipelineStore pipelines,
         IAdlsClientFactory adlsFactory,
         ISqlConnectionFactory sqlFactory,
-        IAuditLog audit)
+        IAuditLog audit,
+        IJobService jobs,
+        ITaskStore tasks,
+        IOptions<AppOptions> options)
     {
         _audit = audit;
         _store = store;
         _pipelines = pipelines;
         _adlsFactory = adlsFactory;
         _sqlFactory = sqlFactory;
+        _jobs = jobs;
+        _tasks = tasks;
+        _dataDir = options.Value.DataDir;
     }
 
     public IReadOnlyList<Connection> List(ConnectionRole? role = null)
@@ -101,30 +113,6 @@ public sealed class ConnectionService : IConnectionService
 
         _store.SaveNew(connection);
         return SecretMasker.Mask(connection);
-    }
-
-    public Connection? Update(AuditActor actor, string id, Connection connection) =>
-        _audit.Audit(
-            actor,
-            "connection.update",
-            null,
-            () => UpdateCore(id, connection),
-            Updated(id),
-            $"No se pudo guardar la conexión {RoleLabel(connection.Role)} '{connection.Name}'",
-            failureKey: "Activity.Failed.ConnectionSave", failureArgs: [RolePart(connection.Role), connection.Name],
-            target: id);
-
-    private Connection? UpdateCore(string id, Connection connection)
-    {
-        if (!_store.Exists(id))
-        {
-            return null;
-        }
-
-        var existing = _store.GetById(id)!;
-        var merged = Merge(existing, connection);
-        _store.Save(merged);
-        return SecretMasker.Mask(merged);
     }
 
     // Si la edición cambia el tipo, la configuración anterior es de otro tipo (p. ej. la cuenta y
@@ -198,6 +186,45 @@ public sealed class ConnectionService : IConnectionService
         }
 
         var merged = Merge(existing, connection);
+
+        // Otro host, cuenta, base de datos, container o almacenamiento con un job en curso: el job
+        // seguiría en el sitio viejo y el siguiente en el nuevo. Se toma el lock de ejecución de cada
+        // pipeline que la usa (por id, siempre en el mismo orden) y se mantiene hasta guardar, copia del
+        // Parquet incluida.
+        var locks = new List<IDisposable>();
+        try
+        {
+            if (ChangedSecretTarget(existing.Config, merged.Config) is not null
+                || ParquetStorageOf(existing) != ParquetStorageOf(merged)
+                || !SameTarget(ParquetContainerOf(existing), ParquetContainerOf(merged))
+                || !SameTarget(existing.Config.GetValueOrDefault("database"), merged.Config.GetValueOrDefault("database"))
+                || !SameTarget(existing.Config.GetValueOrDefault("container"), merged.Config.GetValueOrDefault("container")))
+            {
+                foreach (var pipelineId in _pipelines.ListAll()
+                    .Where(p => p.SourceId == id || p.DestinationId == id)
+                    .Select(p => p.Id)
+                    .Order(StringComparer.Ordinal))
+                {
+                    locks.Add(await PipelineRunLock.AcquireAsync(_dataDir, pipelineId, PipelineRunLock.DefaultTimeout, cancellationToken));
+                    await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId,
+                        $"Hay un job en curso en el pipeline {pipelineId}, que usa esta conexión: espera a que termine o cancélalo antes de cambiar a dónde apunta.",
+                        cancellationToken);
+                }
+            }
+
+            return await SaveMergedAsync(existing, merged, cancellationToken);
+        }
+        finally
+        {
+            foreach (var runLock in locks)
+            {
+                runLock.Dispose();
+            }
+        }
+    }
+
+    private async Task<(Connection? Connection, int CopiedTables)> SaveMergedAsync(Connection existing, Connection merged, CancellationToken cancellationToken)
+    {
         var copied = existing.Role == ConnectionRole.Source
             && SameType(existing, merged)
             && ParquetStorageOf(existing) != ParquetStorageOf(merged)
@@ -212,6 +239,13 @@ public sealed class ConnectionService : IConnectionService
         AdlsClientFactory.KeepsParquetOnPortal(connection)
             ? AdlsClientFactory.PortalParquetStorage
             : AdlsClientFactory.AdlsParquetStorage;
+
+    // Una clave ausente y un valor vacío (lo que envía el formulario) apuntan al mismo sitio.
+    private static bool SameTarget(string? a, string? b) =>
+        string.Equals(string.IsNullOrWhiteSpace(a) ? null : a.Trim(), string.IsNullOrWhiteSpace(b) ? null : b.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private static string? ParquetContainerOf(Connection connection) =>
+        connection.Config.GetValueOrDefault("parquet_container") ?? connection.Config.GetValueOrDefault("destination_container");
 
     // En ADLS sin container de Parquet no hay nada que copiar.
     private static bool HasParquet(Connection connection) =>
