@@ -669,11 +669,13 @@ public sealed class OrchestrationService : IOrchestrationService
             ],
         };
 
+        // Divergencia "antes" desde el último reporte, para el historial de remediación (un registro
+        // por tabla, todos con el mismo JobId). Se lee antes de crear el job: si fallara después, el
+        // job quedaba en Running sin tarea hasta que el vigilante lo cerraba.
+        var latest = _reports.GetLatestReconcile(pipelineId);
+
         _jobs.Create(job);
 
-        // Divergencia "antes" desde el último reporte, para el historial de remediación (un registro
-        // por tabla, todos con el mismo JobId).
-        var latest = _reports.GetLatestReconcile(pipelineId);
         foreach (var entity in entities)
         {
             var before = latest?.Entities
