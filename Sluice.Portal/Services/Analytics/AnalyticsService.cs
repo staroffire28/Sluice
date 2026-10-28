@@ -125,11 +125,12 @@ public sealed class AnalyticsService : IAnalyticsService
         var windowDays = Math.Max(1, days);
         var cutoff = DateTimeOffset.UtcNow.AddDays(-windowDays);
 
-        // pageSize alto en vez de paginar: mismo costo de I/O (JsonFileStore.ListAll siempre
-        // relee el directorio completo), y evita reintroducir la lógica de acumulación por
-        // páginas de LoadRecentJobs para un caso que además ya filtra por pipelineId.
-        var jobsInWindow = _jobs.List(page: 1, pageSize: int.MaxValue, pipelineId: pipelineId)
-            .Where(j => j.StartedAt >= cutoff)
+        // La ventana se filtra sobre el índice: solo se leen enteros (con sus tablas) los jobs de
+        // esos días, no todos los del pipeline.
+        var jobsInWindow = _jobs.ListIndex(pipelineId)
+            .Where(e => e.StartedAt >= cutoff)
+            .Select(e => _jobs.Get(e.Id))
+            .OfType<Job>()
             .OrderBy(j => j.StartedAt)
             .ToList();
 

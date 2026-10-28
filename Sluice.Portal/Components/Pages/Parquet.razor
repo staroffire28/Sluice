@@ -410,6 +410,10 @@
                 await Reload();
             }
         }
+        catch (RestoreSnapshotsMissingException ex)
+        {
+            await NotificationService.ShowErrorToastAsync(L["Page.Parquet.RestoreSnapshotsMissing", ex.Snapshot, ex.OldestInLake ?? "—"].Value);
+        }
         catch (Exception ex)
         {
             await NotificationService.ShowErrorToastAsync(ex.Message);

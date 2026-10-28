@@ -16,6 +16,8 @@
 @inject RunQueueService RunQueue
 @inject NavigationManager Nav
 @inject ILogger<Pipelines> Logger
+@inject SettingsStore Settings
+@inject Sluice.Portal.Services.Adls.IAdlsClientFactory AdlsFactory
 @implements IAsyncDisposable
 
 @inject IStringLocalizer<SharedResource> L
@@ -139,10 +141,19 @@
     <FluentLabel Class="field-hint">@L["Page.Pipelines.ResetKeeps"]</FluentLabel>
     <FluentCheckbox @bind-Value="_truncateSql" Label="@L["Page.Pipelines.ResetTruncateSql"]" />
     <FluentLabel Class="field-hint">@L["Page.Pipelines.ResetTruncateSqlHint"]</FluentLabel>
+    @if (_resetHistoryAtRisk)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Warning">
+            @(_resetHistoryLoading ? L["Page.Pipelines.ResetHistoryChecking"]
+                : _resetOldestSnapshot is null ? L["Page.Pipelines.ResetHistoryLostUnknown"]
+                : L["Page.Pipelines.ResetHistoryLost", _resetOldestSnapshot])
+        </FluentMessageBar>
+        <FluentCheckbox @bind-Value="_resetHistoryAck" Label="@L["Page.Pipelines.ResetHistoryAck"]" data-testid="pipe-reset-ack" />
+    }
     </ChildContent>
     <Actions>
         <FluentButton OnClick="() => _showReset = false">@L["Common.Cancel"]</FluentButton>
-        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="pipe-reset-confirm" Disabled="@_resetting" Loading="@_resetting" OnClick="ResetConfirmed">@L["Page.Pipelines.Reset"]</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="pipe-reset-confirm" Disabled="@(_resetting || (_resetHistoryAtRisk && (_resetHistoryLoading || !_resetHistoryAck)))" Loading="@_resetting" OnClick="ResetConfirmed">@L["Page.Pipelines.Reset"]</FluentButton>
     </Actions>
 </InlineDialog>
 
@@ -171,6 +182,12 @@
     private string? _resetId;
     private string? _resetName;
     private bool _truncateSql;
+    // La retención de origen borra snapshots: lo anterior al más antiguo del lago solo queda en el
+    // parquet que el reset borra, y el reset no deja seguir sin marcar que se entiende.
+    private bool _resetHistoryAtRisk;
+    private bool _resetHistoryAck;
+    private bool _resetHistoryLoading;
+    private string? _resetOldestSnapshot;
     private ReconcileReport? _latestReconcile;
     private Dictionary<string, string> _connectionNames = [];
     private PageRefreshTimer? _queueTimer;
@@ -278,7 +295,7 @@
         _showEditor = true;
     }
 
-    private void SaveEditor()
+    private async Task SaveEditor()
     {
         try
         {
@@ -305,7 +322,7 @@
             else
             {
                 var existing = PipelineService.Get(_editingId)!;
-                PipelineService.Update(Audit.Current, _editingId, existing with
+                await PipelineService.UpdateAsync(Audit.Current, _editingId, existing with
                 {
                     Name = _editName,
                     SourceId = _sourceId,
@@ -317,6 +334,10 @@
             _showEditor = false;
             _ = NotificationService.ShowSuccessToastAsync(L["Common.Saved"].Value);
             Load();
+        }
+        catch (PipelineBusyException)
+        {
+            _ = NotificationService.ShowErrorToastAsync(L["Page.Pipelines.BusyRetarget"].Value);
         }
         catch (Exception ex)
         {
@@ -366,12 +387,46 @@
         Load();
     }
 
-    private void ConfirmReset(Pipeline pipeline)
+    private async Task ConfirmReset(Pipeline pipeline)
     {
         _resetId = pipeline.Id;
         _resetName = pipeline.Name;
         _truncateSql = false;
+        _resetHistoryAck = false;
+        _resetOldestSnapshot = null;
+        // Con la retención borrando de verdad (o settings.json ilegible, que no deja saberlo) puede que
+        // el lago ya no tenga los primeros snapshots: se avisa y se dice desde cuándo los conserva.
+        _resetHistoryAtRisk = !Settings.TryGet(out var settings)
+            || (settings.SourceSnapshotRetentionDays > 0 && !settings.SourceSnapshotRetentionDryRun);
+        _resetHistoryLoading = _resetHistoryAtRisk;
         _showReset = true;
+        if (!_resetHistoryAtRisk)
+        {
+            return;
+        }
+
+        string? oldest = null;
+        try
+        {
+            var adls = await AdlsFactory.CreateAsync(pipeline.SourceId);
+            oldest = (await adls.ListSnapshotFoldersAsync())
+                .Where(Sluice.Portal.Services.Adls.ExcludedEntities.IsSnapshotFolder)
+                .Min(StringComparer.Ordinal);
+        }
+        catch (Exception ex)
+        {
+            // Sin el lago, el aviso sale sin fecha.
+            Logger.LogWarning(ex, "Reset: no se pudo listar los snapshots del origen de {PipelineId}", pipeline.Id);
+        }
+
+        // Si mientras tanto se abrió el diálogo para otro pipeline, este resultado ya no le toca.
+        if (_resetId != pipeline.Id)
+        {
+            return;
+        }
+
+        _resetOldestSnapshot = oldest;
+        _resetHistoryLoading = false;
     }
 
     private async Task ResetConfirmed()
