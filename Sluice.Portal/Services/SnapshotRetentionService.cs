@@ -161,7 +161,11 @@ public sealed class SnapshotRetentionService
 
         foreach (var pipeline in _pipelines.List().Where(p => p.Enabled))
         {
-            if (runningPipelineIds.Contains(pipeline.Id))
+            var sourcePipelineIds = _pipelines.List()
+                .Where(p => p.SourceId == pipeline.SourceId)
+                .Select(p => p.Id)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (runningPipelineIds.Overlaps(sourcePipelineIds))
             {
                 totalSkipped++;
                 continue;
@@ -173,30 +177,46 @@ public sealed class SnapshotRetentionService
                 var parquetStore = await _adlsFactory.CreateParquetStoreAsync(pipeline.SourceId, cancellationToken);
                 var allSnapshots = await adls.ListSnapshotFoldersAsync(cancellationToken);
                 var currentFolder = await adls.GetSettledSnapshotAsync(cancellationToken);
-                var state = _pipelines.GetState(pipeline.Id);
+                var floor = SharedLastProcessed(_pipelines, pipeline.SourceId);
                 var selection = SnapshotSelector.Select(
                     allSnapshots,
-                    state.LastProcessedSnapshot,
+                    floor,
                     currentFolder);
 
-                var analysis = Analyze(now, settings, allSnapshots, state.LastProcessedSnapshot, selection);
+                var analysis = Analyze(now, settings, allSnapshots, floor, selection);
                 if (analysis.EligibleForPurge.Count == 0)
                 {
                     continue;
                 }
 
+                // Las carpetas son de la fuente: cada pipeline que la lee (activo o no) debe tener su
+                // parquet consolidado antes de purgar.
                 if (settings.SourceSnapshotRetentionRequireParquet)
                 {
-                    var cert = await CertifyParquetAsync(pipeline.Id, parquetStore, state, cancellationToken);
-                    if (!cert.IsComplete)
+                    var certified = true;
+                    foreach (var sourcePipelineId in sourcePipelineIds)
                     {
-                        totalSkippedCert++;
-                        _activity.LogSystem(
-                            "snapshot-retention.skip",
-                            $"Pipeline {pipeline.Id}: purga omitida — faltan parquet consolidados: " +
-                            $"{string.Join(", ", cert.MissingEntities)}.",
-                            pipeline.Id, null, "warning",
-                            "Activity.SnapshotRetention.Skip", pipeline.Id, string.Join(", ", cert.MissingEntities));
+                        var cert = await CertifyParquetAsync(
+                            sourcePipelineId,
+                            parquetStore,
+                            _pipelines.GetState(sourcePipelineId),
+                            cancellationToken);
+                        if (!cert.IsComplete)
+                        {
+                            totalSkippedCert++;
+                            _activity.LogSystem(
+                                "snapshot-retention.skip",
+                                $"Pipeline {sourcePipelineId}: purga omitida — faltan parquet consolidados: " +
+                                $"{string.Join(", ", cert.MissingEntities)}.",
+                                sourcePipelineId, null, "warning",
+                                "Activity.SnapshotRetention.Skip", sourcePipelineId, string.Join(", ", cert.MissingEntities));
+                            certified = false;
+                            break;
+                        }
+                    }
+
+                    if (!certified)
+                    {
                         continue;
                     }
                 }
@@ -204,7 +224,7 @@ public sealed class SnapshotRetentionService
                 var deleted = 0;
                 foreach (var folder in analysis.EligibleForPurge)
                 {
-                    if (_jobs.ListRunning().Any(j => j.PipelineId == pipeline.Id))
+                    if (_jobs.ListRunning().Any(j => sourcePipelineIds.Contains(j.PipelineId)))
                     {
                         _logger.LogInformation(
                             "Retención snapshots: purga interrumpida en {PipelineId} — job en ejecución.",
@@ -212,12 +232,12 @@ public sealed class SnapshotRetentionService
                         break;
                     }
 
-                    var stateNow = _pipelines.GetState(pipeline.Id);
+                    var floorNow = SharedLastProcessed(_pipelines, pipeline.SourceId);
                     var selectionNow = SnapshotSelector.Select(
                         allSnapshots,
-                        stateNow.LastProcessedSnapshot,
+                        floorNow,
                         currentFolder);
-                    if (!Analyze(now, settings, allSnapshots, stateNow.LastProcessedSnapshot, selectionNow)
+                    if (!Analyze(now, settings, allSnapshots, floorNow, selectionNow)
                         .EligibleForPurge.Contains(folder, StringComparer.Ordinal))
                     {
                         continue;
@@ -306,6 +326,28 @@ public sealed class SnapshotRetentionService
             PipelinesSkippedCertification = totalSkippedCert,
             DryRun = settings.SourceSnapshotRetentionDryRun,
         };
+    }
+
+    // Varios pipelines pueden leer la misma fuente: el suelo de la purga es el snapshot procesado
+    // más antiguo entre todos ellos (activos o no). Si alguno aún no tiene estado, null: no se purga.
+    public static string? SharedLastProcessed(IPipelineService pipelines, string sourceId)
+    {
+        string? floor = null;
+        foreach (var pipeline in pipelines.List().Where(p => p.SourceId == sourceId))
+        {
+            var last = pipelines.GetState(pipeline.Id).LastProcessedSnapshot;
+            if (string.IsNullOrWhiteSpace(last))
+            {
+                return null;
+            }
+
+            if (floor is null || string.CompareOrdinal(last, floor) < 0)
+            {
+                floor = last;
+            }
+        }
+
+        return floor;
     }
 
     public static async Task<ParquetCertificationResult> CertifyParquetAsync(

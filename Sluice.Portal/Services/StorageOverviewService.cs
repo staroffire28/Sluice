@@ -87,12 +87,13 @@ public sealed class StorageOverviewService : IStorageOverviewService
             var allSnapshots = await adls.ListSnapshotFoldersAsync(cancellationToken);
             var currentFolder = await adls.GetSettledSnapshotAsync(cancellationToken);
             var state = _pipelines.GetState(pipelineId);
-            var selection = SnapshotSelector.Select(allSnapshots, state.LastProcessedSnapshot, currentFolder);
+            var retentionFloor = SnapshotRetentionService.SharedLastProcessed(_pipelines, pipeline.SourceId);
+            var selection = SnapshotSelector.Select(allSnapshots, retentionFloor, currentFolder);
             var analysis = SnapshotRetentionService.Analyze(
                 DateTimeOffset.UtcNow,
                 _settings.Get(),
                 allSnapshots,
-                state.LastProcessedSnapshot,
+                retentionFloor,
                 selection);
 
             var parquets = await _parquet.ListAsync(pipelineId, cancellationToken);
