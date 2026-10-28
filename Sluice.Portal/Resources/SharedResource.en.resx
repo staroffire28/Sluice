@@ -58,6 +58,7 @@
   <data name="Common.Back" xml:space="preserve"><value>Back</value></data>
   <data name="Common.Saved" xml:space="preserve"><value>Saved</value></data>
   <data name="Common.NameRequired" xml:space="preserve"><value>Name is required and must contain at least one letter or number.</value></data>
+  <data name="Common.ConnectionBusyRetarget" xml:space="preserve"><value>A pipeline that uses this connection has a job running: wait for it to finish or cancel it before changing where it points.</value></data>
   <data name="Common.Deleted" xml:space="preserve"><value>{0} deleted</value></data>
   <data name="Common.DeleteFailed" xml:space="preserve"><value>Could not delete.</value></data>
   <data name="Common.CancelJobConfirm" xml:space="preserve"><value>Cancel job {0}? This stops its execution.</value></data>
@@ -234,6 +235,10 @@
   <data name="Page.Pipelines.ResetSuccess" xml:space="preserve"><value>Pipeline reset: {1} file(s) deleted in ADLS, {0} table(s) emptied in SQL.</value></data>
   <data name="Page.Pipelines.ResetKeeps" xml:space="preserve"><value>The pipeline's configuration (source and destination), paused tables and the original Synapse Link CSVs are kept. The next run will reprocess every snapshot from scratch and may take a while.</value></data>
   <data name="Page.Pipelines.ResetTruncateSqlHint" xml:space="preserve"><value>If unchecked, the next run updates the rows already in SQL with MERGE.</value></data>
+  <data name="Page.Pipelines.ResetHistoryLost" xml:space="preserve"><value>Source snapshot retention deletes snapshots from the lake, which now keeps them from {0}. The history of earlier, already deleted snapshots only exists in the parquet this reset deletes: it cannot be rebuilt afterwards.</value></data>
+  <data name="Page.Pipelines.ResetHistoryLostUnknown" xml:space="preserve"><value>Source snapshot retention deletes snapshots from the lake, and it could not be checked which ones it still keeps. The history of already deleted snapshots only exists in the parquet this reset deletes: it cannot be rebuilt afterwards.</value></data>
+  <data name="Page.Pipelines.ResetHistoryChecking" xml:space="preserve"><value>Source snapshot retention deletes snapshots from the lake. Checking which ones it still keeps…</value></data>
+  <data name="Page.Pipelines.ResetHistoryAck" xml:space="preserve"><value>I understand that history is lost</value></data>
   <data name="Page.Pipelines.ResetFailed" xml:space="preserve"><value>Couldn't empty {0} table(s) in SQL. The reset stopped without deleting anything in ADLS or the state, so no stale data is left in SQL.</value></data>
   <data name="Page.Pipelines.NewTitle" xml:space="preserve"><value>New pipeline</value></data>
   <data name="Page.Pipelines.EditTitle" xml:space="preserve"><value>Edit pipeline</value></data>
@@ -326,6 +331,7 @@
   <data name="Page.Parquet.ConfirmRestore" xml:space="preserve"><value>Go back to snapshot {0}? {1} table(s) get back the Parquet they had and {2} that did not exist yet are archived. The current copies become versions (the most recent point undoes the restore) and SQL is reloaded for the tables that go back.</value></data>
   <data name="Page.Parquet.PendingReloadNote" xml:space="preserve"><value>SQL is also reloaded for {0} table(s) from an earlier restore that did not finish.</value></data>
   <data name="Page.Parquet.Restored" xml:space="preserve"><value>Restore point of snapshot {0} restored; the tables are being reloaded in SQL.</value></data>
+  <data name="Page.Parquet.RestoreSnapshotsMissing" xml:space="preserve"><value>Cannot restore point {0}: the lake no longer keeps every later snapshot (the oldest left is {1}), so rewinding would lose their changes.</value></data>
   <data name="Page.Catalog.Title" xml:space="preserve"><value>Table catalog</value></data>
   <data name="Page.Catalog.Subtitle" xml:space="preserve"><value>Which lake tables and columns are loaded into SQL</value></data>
   <data name="Page.Catalog.Hint" xml:space="preserve"><value>An excluded table is neither ingested nor loaded; new tables that show up in the lake are loaded automatically. It is the same setting as each table's sync in Tables.</value></data>
@@ -446,6 +452,8 @@
   <data name="Page.Logs.Col.Job" xml:space="preserve"><value>Job</value></data>
   <data name="Page.Logs.Col.Actor" xml:space="preserve"><value>Actor</value></data>
   <data name="Page.Logs.Col.Host" xml:space="preserve"><value>Host</value></data>
+  <data name="Page.Logs.Col.Outcome" xml:space="preserve"><value>Outcome</value></data>
+  <data name="Page.Logs.Col.Target" xml:space="preserve"><value>Target</value></data>
   <data name="Page.Settings.Title" xml:space="preserve"><value>Settings</value></data>
   <data name="Page.Settings.Subtitle" xml:space="preserve"><value>Global operational parameters for the scheduler and reconciliation.</value></data>
   <data name="Page.Settings.Scheduler.Title" xml:space="preserve"><value>Scheduler and queue</value></data>
@@ -484,6 +492,9 @@
   <data name="Page.Dashboard.ReloadFromParquet" xml:space="preserve"><value>Reload parquet</value></data>
   <data name="Page.Dashboard.ReloadFromParquetConfirm" xml:space="preserve"><value>Reload SQL from consolidated parquet in ADLS (no CSV re-read). Continue?</value></data>
   <data name="Page.Settings.Saved" xml:space="preserve"><value>Settings saved. They apply without restart.</value></data>
+  <data name="Page.Settings.Unreadable" xml:space="preserve"><value>settings.json cannot be read: the page shows the default values, not the saved ones. Saving overwrites the file with these values and loses what it had (for example, the alert webhook).</value></data>
+  <data name="Page.Settings.Unreadable.ConfirmPrompt" xml:space="preserve"><value>settings.json cannot be read. Overwrite it with the values on this page?</value></data>
+  <data name="Page.Settings.Unreadable.Confirm" xml:space="preserve"><value>Overwrite settings.json</value></data>
   <data name="Page.Settings.Alerts.Title" xml:space="preserve"><value>Alerts</value></data>
   <data name="Page.Settings.Alerts.Hint" xml:space="preserve"><value>Sluice posts a JSON notice to this URL when a job fails, when a reconciliation exceeds the threshold, when “Compare values” finds differences, and on system problems (scheduler, possible SQL block, retention). It is usually the HTTP trigger URL of an Azure Logic App that turns each notice into an email: you can download a ready-to-deploy one below.</value></data>
   <data name="Page.Settings.Alerts.UrlRequired" xml:space="preserve"><value>Enter a webhook URL before enabling alerts.</value></data>
@@ -491,6 +502,7 @@
   <data name="Page.Settings.Validation.LeaseSeconds" xml:space="preserve"><value>The task lease must be at least 30 seconds; with less, running tasks would be treated as expired.</value></data>
   <data name="Page.Settings.Validation.Divergence" xml:space="preserve"><value>The divergence threshold must be between 0 and 100%.</value></data>
   <data name="Page.Settings.Validation.WebhookHttps" xml:space="preserve"><value>The webhook URL must be a full https:// address.</value></data>
+  <data name="Page.Settings.Validation.SourceRetentionBelowVersions" xml:space="preserve"><value>With dry-run off, source snapshot retention must be at least the parquet version days; otherwise restoring a point would need snapshots that were already deleted.</value></data>
   <data name="Page.Settings.Alerts.Enabled" xml:space="preserve"><value>Enable alerts</value></data>
   <data name="Page.Settings.PipelineLagAlertHours" xml:space="preserve"><value>Hours behind before alerting</value></data>
   <data name="Page.Settings.PipelineLagAlertHours.Hint" xml:space="preserve"><value>Alerts when a closed snapshot has waited longer than these hours on a pipeline with the scheduler on (once per episode, and again if it falls behind again). The initial load doesn't count. 0 or negative disables it.</value></data>
@@ -790,6 +802,8 @@
   <data name="Page.Sources.ParquetStorage.Adls" xml:space="preserve"><value>ADLS container</value></data>
   <data name="Page.Sources.ParquetStorage.Portal" xml:space="preserve"><value>Portal disk (DATA_DIR)</value></data>
   <data name="Page.Sources.ParquetStorageHint" xml:space="preserve"><value>On the portal disk you need no Parquet container or write access to ADLS, but it takes space on the DATA_DIR volume. When you change it, Sluice copies the consolidated Parquet to the new place without deleting the old one.</value></data>
+  <data name="Page.Pipelines.BusyRetarget" xml:space="preserve"><value>This pipeline has a job running: wait for it to finish or cancel it before changing its source or destination.</value></data>
+  <data name="Page.Pipelines.DestinationNeedsFields" xml:space="preserve"><value>Destination '{0}' used a connection string with options that are no longer supported: fill in its host, database, user and password in Destinations to run this pipeline again.</value></data>
   <data name="Page.Sources.ParquetCopied" xml:space="preserve"><value>Consolidated Parquet copied to the new place: {0} table(s).</value></data>
   <data name="Report.Generated" xml:space="preserve"><value>Generated {0}</value></data>
   <data name="Report.Overline" xml:space="preserve"><value>RECONCILIATION REPORT</value></data>
@@ -855,6 +869,8 @@
   <data name="Event.Sql.CompletedWithErrors" xml:space="preserve"><value>SQL MERGE completed with entity errors ({0:N0} row(s) merged): the job is marked Error.</value></data>
   <data name="Event.Reconcile.Started" xml:space="preserve"><value>Reconcile stage started.</value></data>
   <data name="Event.Reconcile.Completed" xml:space="preserve"><value>Reconcile completed. Max divergence: {0:N2}%.</value></data>
+  <data name="Event.Reconcile.MissingParquet" xml:space="preserve"><value>{0}: the consolidated Parquet file is missing; it is not reconciled.</value></data>
+  <data name="Event.Reconcile.EntityFailed" xml:space="preserve"><value>{0}: could not be reconciled ({1}).</value></data>
   <data name="Event.Diff.Completed" xml:space="preserve"><value>Diff completed: {0:N0} entity(ies) with differences, {1:N0} row(s) of total delta.</value></data>
   <data name="Event.Compare.NoParquet" xml:space="preserve"><value>There is no consolidated Parquet to compare. Run the pipeline before comparing values.</value></data>
   <data name="Event.Compare.Summary" xml:space="preserve"><value>Value comparison: {0:N0} table(s), {1:N0} with differences.</value></data>
@@ -868,12 +884,15 @@
   <data name="Event.Ingest.ProcessingSnapshot" xml:space="preserve"><value>Processing snapshot {0}.</value></data>
   <data name="Event.Ingest.EntityFailed" xml:space="preserve"><value>{0}: ingest failed for snapshot {1} — {2}: {3}</value></data>
   <data name="Event.Ingest.SkippedPaused" xml:space="preserve"><value>{0:N0} table(s) skipped because they are paused: {1}.</value></data>
+  <data name="Event.Ingest.Backfilling" xml:space="preserve"><value>{0}: resumed after a pause; reading the snapshots it skipped, from {1}.</value></data>
+  <data name="Event.Ingest.BackfillSnapshotsMissing" xml:space="preserve"><value>{0}: snapshot {1}, the first one it skipped while paused, is no longer in the lake; the changes from that time cannot be recovered. A pipeline reset reloads it from the snapshots that remain.</value></data>
   <data name="Event.Ingest.RowsWithoutId" xml:space="preserve"><value>{0}: {1:N0} row(s) without a valid Id discarded.</value></data>
   <data name="Event.Ingest.ConsolidatedShrank" xml:space="preserve"><value>{0}: the new consolidated file has {1:N0} rows and the previous one {2:N0}. The previous version is kept on the Parquet page in case it needs restoring.</value></data>
   <data name="Event.Ingest.SnapshotNotMarked" xml:space="preserve"><value>{0:N0} table(s) failed: snapshot {1} is not marked as processed and will be retried on the next run.</value></data>
   <data name="Event.Ingest.SettingsUnreadable" xml:space="preserve"><value>settings.json cannot be read: Parquet versions are not pruned until it is fixed.</value></data>
   <data name="Event.Ingest.PruneFailed" xml:space="preserve"><value>Could not prune the Parquet versions: {0}</value></data>
   <data name="Event.Ingest.UnreadableValues" xml:space="preserve"><value>{0}: {1:N0} CSV value(s) could not be read with their column type and were loaded as NULL — {2}.</value></data>
+  <data name="Event.Ingest.ShortRows" xml:space="preserve"><value>{0}: {1:N0} CSV row(s) have fewer columns than the schema; the missing ones were loaded as NULL.</value></data>
   <data name="Event.Ingest.CompletionWithParts" xml:space="preserve"><value>{0}{1}{2}{3}</value></data>
   <data name="Event.Ingest.Part.Failed" xml:space="preserve"><value> {0:N0} entity(ies) failed: {1}.</value></data>
   <data name="Event.Ingest.Part.PartialFailures" xml:space="preserve"><value> {0:N0} entity(ies) with partial snapshot failures (possible incomplete data): {1}.</value></data>
@@ -889,6 +908,7 @@
   <data name="Event.Sql.EntityMerged" xml:space="preserve"><value>{0}: merged {1:N0}, table count {2:N0}.</value></data>
   <data name="Event.Sql.EntityMergedDelta" xml:space="preserve"><value>{0}: merged {1:N0} (delta), table count {2:N0}.</value></data>
   <data name="Event.Sql.EntityFailed" xml:space="preserve"><value>{0}: SQL stage failed — {1}: {2}</value></data>
+  <data name="Event.Sql.MissingParquet" xml:space="preserve"><value>{0}: the consolidated Parquet file or its schema is missing from the store; the table is not loaded into SQL.</value></data>
   <data name="Event.Sql.FullMergeAfterIncomplete" xml:space="preserve"><value>The last job ({0}) did not complete the SQL stage: this Incremental merges the full consolidated file to restore anything missing.</value></data>
   <data name="Event.Sql.PossibleBlock" xml:space="preserve"><value>{0}: no progress in SQL for {1} (possible blocking). The statement is still running; check blocking on the destination (sys.dm_exec_requests, column blocking_session_id).</value></data>
   <data name="Event.Enums.NoSnapshot" xml:space="preserve"><value>Enum translation is on but no snapshot could be resolved (empty manifest, no last-processed or settled snapshot). Continuing without _$label columns.</value></data>
@@ -916,6 +936,7 @@
   <data name="Activity.Scheduler.Error" xml:space="preserve"><value>The scheduler failed on pipeline {0}: {1}</value></data>
   <data name="Activity.Pipeline.Lag" xml:space="preserve"><value>Pipeline {0} is behind: {1:N0} closed snapshot(s) not processed; the oldest ({2}) has been waiting for {3:0} h (threshold {4} h).</value></data>
   <data name="Activity.Snapshot.Incomplete" xml:space="preserve"><value>Pipeline {0} on hold: snapshot {1} has been closed but incomplete for {2} ({3}). Nothing else is processed until the Synapse Link export completes; check the export.</value></data>
+  <data name="Activity.Changelog.Blocked" xml:space="preserve"><value>Pipeline {0} on hold: the Synapse Link changelog has blocked it for {1} ({2}). Nothing is processed until the changelog names an existing folder; check the export.</value></data>
   <data name="Activity.Retention.Sweep" xml:space="preserve"><value>Retention: {0:N0} jobs, {1:N0} reports, {2:N0} tasks, {3:N0} runs, {4:N0} staging, {5:N0} activity logs deleted (age {6}d, floor {7}/pipeline).</value></data>
   <data name="Activity.Retention.Error" xml:space="preserve"><value>The retention sweep failed: {0}</value></data>
   <data name="Activity.SnapshotRetention.Error" xml:space="preserve"><value>The snapshot retention sweep failed: {0}</value></data>
@@ -928,13 +949,19 @@
   <data name="Activity.SnapshotRetention.SweepTotal" xml:space="preserve"><value>Source snapshot retention: {0:N0} folder(s) deleted (age {1}d, floor {2}).</value></data>
   <data name="Activity.Alert.DeliveryFailed" xml:space="preserve"><value>Could not deliver the {0} alert to the webhook ({1}): {2}. Alerts will not arrive until it is reported as recovered.</value></data>
   <data name="Activity.Alert.DeliveryRecovered" xml:space="preserve"><value>The alert webhook ({0}) responds again ({1} alert).</value></data>
+  <data name="Activity.Alert.DeliveryRecovered.Lost" xml:space="preserve"><value>The alert webhook ({0}) responds again ({1} alert). {2:N0} delivery attempt(s) failed while it was down: one-shot alerts from that time (job failure, Partial, divergence...) are not resent; deduplicated alerts are retried.</value></data>
   <data name="Activity.Demo.Failed" xml:space="preserve"><value>Could not prepare the demo: {0}</value></data>
   <data name="Activity.Failure" xml:space="preserve"><value>{0}: {1}</value></data>
   <data name="Activity.Connection.RoleSource" xml:space="preserve"><value>source</value></data>
   <data name="Activity.Connection.RoleDestination" xml:space="preserve"><value>destination</value></data>
   <data name="Activity.Connection.Created" xml:space="preserve"><value>Connection '{1}' ({0}) created.</value></data>
+  <data name="Activity.Connection.ConnectionStringConverted" xml:space="preserve"><value>Destination connection '{0}': its connection string was turned into fields.</value></data>
+  <data name="Activity.Connection.ConnectionStringNeedsFields" xml:space="preserve"><value>Destination connection '{0}': its connection string used options that are no longer supported ({1}) and was removed; its pipelines won't start until its fields are filled in.</value></data>
+  <data name="Activity.Connection.FieldsRequiredHold" xml:space="preserve"><value>Pipeline {0} on hold: destination connection '{1}' used a connection string with options that are no longer supported; fill in its fields again in Destinations.</value></data>
   <data name="Activity.Connection.Updated" xml:space="preserve"><value>Connection '{1}' ({0}) updated.</value></data>
   <data name="Activity.Connection.UpdatedCopied" xml:space="preserve"><value>Connection '{1}' ({0}) updated; Parquet of {2:N0} table(s) copied to the new location.</value></data>
+  <data name="Activity.Connection.UpdatedChanges" xml:space="preserve"><value>Connection '{1}' ({0}) updated: {2}.</value></data>
+  <data name="Activity.Connection.UpdatedCopiedChanges" xml:space="preserve"><value>Connection '{1}' ({0}) updated ({3}); Parquet of {2:N0} table(s) copied to the new location.</value></data>
   <data name="Activity.Connection.NotFound" xml:space="preserve"><value>Connection {0} does not exist.</value></data>
   <data name="Activity.Connection.Deleted" xml:space="preserve"><value>Connection '{0}' deleted.</value></data>
   <data name="Activity.Connection.NotDeleted" xml:space="preserve"><value>Connection '{0}' was not deleted: {1}</value></data>
@@ -945,6 +972,12 @@
   <data name="Activity.Pipeline.Run" xml:space="preserve"><value>{0} run of pipeline {1} (job {2}).</value></data>
   <data name="Activity.Pipeline.Created" xml:space="preserve"><value>Pipeline {0} created.</value></data>
   <data name="Activity.Pipeline.Updated" xml:space="preserve"><value>Pipeline {0} updated.</value></data>
+  <data name="Activity.Pipeline.UpdatedChanges" xml:space="preserve"><value>Pipeline {0} updated: {1}.</value></data>
+  <data name="Activity.Change.Secrets" xml:space="preserve"><value>changed secrets: {0}</value></data>
+  <data name="Activity.Change.Pair" xml:space="preserve"><value>{0}; {1}</value></data>
+  <data name="Activity.Parquet.Downloaded" xml:space="preserve"><value>Downloaded {0} from pipeline {1}.</value></data>
+  <data name="Activity.Parquet.DownloadNotFound" xml:space="preserve"><value>{0} was not downloaded from pipeline {1}: it does not exist or does not belong to that pipeline.</value></data>
+  <data name="Activity.Logs.Exported" xml:space="preserve"><value>Exported {0:N0} activity log entries.</value></data>
   <data name="Activity.Pipeline.NotFound" xml:space="preserve"><value>Pipeline {0} does not exist.</value></data>
   <data name="Activity.Pipeline.SchedulerChanged" xml:space="preserve"><value>Scheduler {0} in pipeline {1}.</value></data>
   <data name="Activity.Pipeline.SchedulerOn" xml:space="preserve"><value>enabled</value></data>

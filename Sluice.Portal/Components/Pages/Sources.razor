@@ -310,6 +310,11 @@
                 });
             }
         }
+        catch (PipelineBusyException)
+        {
+            _ = NotificationService.ShowErrorToastAsync(L["Common.ConnectionBusyRetarget"].Value);
+            return;
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Id duplicado o no válido, o la copia del Parquet al cambiar de sitio falló (la conexión
