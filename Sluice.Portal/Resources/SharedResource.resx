@@ -924,6 +924,7 @@
   <data name="Activity.Scheduler.Error" xml:space="preserve"><value>El scheduler falló en el pipeline {0}: {1}</value></data>
   <data name="Activity.Pipeline.Lag" xml:space="preserve"><value>Pipeline {0} atrasado: {1:N0} snapshot(s) cerrado(s) sin procesar; el más antiguo ({2}) espera desde hace {3:0} h (umbral {4} h).</value></data>
   <data name="Activity.Snapshot.Incomplete" xml:space="preserve"><value>Pipeline {0} parado: el snapshot {1} está cerrado pero incompleto desde hace {2} ({3}). No se procesa nada más hasta que el volcado de Synapse Link se complete; revisa la exportación.</value></data>
+  <data name="Activity.Changelog.Blocked" xml:space="preserve"><value>Pipeline {0} parado: el changelog de Synapse Link lo bloquea desde hace {1} ({2}). No se procesa nada hasta que el changelog nombre una carpeta existente; revisa la exportación.</value></data>
   <data name="Activity.Retention.Sweep" xml:space="preserve"><value>Retención: {0:N0} jobs, {1:N0} reportes, {2:N0} tareas, {3:N0} runs, {4:N0} staging, {5:N0} logs de actividad eliminados (antigüedad {6}d, piso {7}/pipeline).</value></data>
   <data name="Activity.Retention.Error" xml:space="preserve"><value>El barrido de retención falló: {0}</value></data>
   <data name="Activity.SnapshotRetention.Error" xml:space="preserve"><value>El barrido de retención de snapshots falló: {0}</value></data>

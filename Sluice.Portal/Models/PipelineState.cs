@@ -19,6 +19,11 @@ public sealed record PipelineState
     // scheduler: alerta tras una gracia y cada 24 h mientras siga igual. Se rearma al avanzar.
     public IncompleteSnapshot? IncompleteSnapshot { get; init; }
 
+    // Pipeline bloqueado por el changelog de Synapse Link (vacío, o nombra una carpeta que no está): no
+    // se procesa nada. Lo vigila el scheduler como IncompleteSnapshot: alerta tras una gracia y cada
+    // 24 h mientras siga bloqueado. Se rearma al desbloquearse.
+    public ChangelogBlock? ChangelogBlock { get; init; }
+
     // Restore a medias: la versión que recupera cada tabla y su estado de entonces, guardados antes de
     // mover el fichero. Mover la versión borra su sidecar, así que si el proceso cae antes de guardar el
     // TableState el reintento termina la tabla desde aquí: el plan recalculado ya no vería esa versión
@@ -47,6 +52,12 @@ public sealed record RestoreInProgress
 public sealed record IncompleteSnapshot
 {
     public required string Name { get; init; }
+    public required DateTimeOffset FirstSeenAt { get; init; }
+    public DateTimeOffset? LastAlertedAt { get; init; }
+}
+
+public sealed record ChangelogBlock
+{
     public required DateTimeOffset FirstSeenAt { get; init; }
     public DateTimeOffset? LastAlertedAt { get; init; }
 }

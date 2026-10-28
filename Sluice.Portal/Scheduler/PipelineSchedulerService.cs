@@ -30,6 +30,8 @@ public sealed class PipelineSchedulerService : BackgroundService
     // Aviso de snapshot incompleto ya registrado en el activity log (pipeline → ronda de aviso), para
     // no repetirlo en cada poll mientras el webhook no lo acepte.
     private readonly Dictionary<string, string> _incompleteLogged = new(StringComparer.OrdinalIgnoreCase);
+    // Lo mismo para el aviso de bloqueo por changelog (pipeline → ronda de aviso).
+    private readonly Dictionary<string, string> _changelogBlockLogged = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _lagAlertsNoticed = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _lagAlertsSent = new(StringComparer.OrdinalIgnoreCase);
     // Restore a medias: aviso registrado y alerta entregada, una vez por episodio. Se rearman en cuanto
@@ -208,7 +210,8 @@ public sealed class PipelineSchedulerService : BackgroundService
             {
                 // Dentro del try: un pipeline_state.json ilegible cuenta como fallo de este pipeline,
                 // no tumba el poll de los demás.
-                if (_stateStore.GetOrCreate(pipeline.Id).RestoreInProgress is null)
+                var state = _stateStore.GetOrCreate(pipeline.Id);
+                if (state.RestoreInProgress is null)
                 {
                     _restoreHoldNoticed.Remove(pipeline.Id);
                     _restoreHoldAlerted.Remove(pipeline.Id);
@@ -223,7 +226,13 @@ public sealed class PipelineSchedulerService : BackgroundService
                             "Scheduler skip {PipelineId}: {Reason}",
                             pipeline.Id,
                             catalog.BlockReason);
+                        await HoldForChangelogBlockAsync(pipeline, catalog, state, ct);
                         continue;
+                    }
+
+                    if (state.ChangelogBlock is not null)
+                    {
+                        _stateStore.Update(pipeline.Id, s => s with { ChangelogBlock = null });
                     }
 
                     if (catalog.PendingSnapshots.Count == 0)
@@ -439,6 +448,50 @@ public sealed class PipelineSchedulerService : BackgroundService
         var sent = (await send()).Success;
         _alertDeliveryFailedThisPoll = !sent;
         return sent;
+    }
+
+    public static readonly TimeSpan ChangelogBlockGrace = TimeSpan.FromMinutes(45);
+    public static readonly TimeSpan ChangelogBlockRepeat = TimeSpan.FromHours(24);
+
+    // Pipeline bloqueado por el changelog (vacío, o con una carpeta que no está): mientras siga así no
+    // se procesa nada, y antes solo quedaba un LogDebug. Como el snapshot incompleto: desde cuándo y la
+    // última alerta van en el estado del pipeline; tras la gracia se avisa como warning, y de nuevo cada
+    // 24 h. Al desbloquearse, el ciclo borra el episodio.
+    private async Task HoldForChangelogBlockAsync(Models.Pipeline pipeline, SnapshotCatalogResult catalog, PipelineState state, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var current = state.ChangelogBlock;
+        if (current is null)
+        {
+            current = new ChangelogBlock { FirstSeenAt = now };
+            _stateStore.Update(pipeline.Id, s => s with { ChangelogBlock = current });
+        }
+
+        var waiting = now - current.FirstSeenAt;
+        var due = waiting >= ChangelogBlockGrace
+            && (current.LastAlertedAt is not { } last || now - last >= ChangelogBlockRepeat);
+        if (!due)
+        {
+            return;
+        }
+
+        var waitText = FormatWait(waiting);
+        var message = $"Pipeline {pipeline.Name} parado: el changelog de Synapse Link lo bloquea desde hace {waitText} ({catalog.BlockReason}). " +
+            "No se procesa nada hasta que el changelog nombre una carpeta existente; revisa la exportación.";
+        var round = $"{current.FirstSeenAt:O}|{current.LastAlertedAt:O}";
+        if (_changelogBlockLogged.GetValueOrDefault(pipeline.Id) != round)
+        {
+            _changelogBlockLogged[pipeline.Id] = round;
+            _activity.LogSystem("changelog.blocked", message, pipeline.Id, null, "warning",
+                "Activity.Changelog.Blocked", pipeline.Name, waitText, catalog.BlockReason);
+        }
+
+        if (await TrySendPendingAlertAsync(message, ct))
+        {
+            _stateStore.Update(pipeline.Id, s => s.ChangelogBlock is { } block
+                ? s with { ChangelogBlock = block with { LastAlertedAt = now } }
+                : s);
+        }
     }
 
     public static readonly TimeSpan IncompleteSnapshotGrace = TimeSpan.FromMinutes(45);
