@@ -50,6 +50,7 @@ Windows containers and the full setup are in the [installation guide](docs/guia-
 
 - [User guide](docs/guia-usuario/README.md), also available inside the portal under **Help**.
 - [Authentication](docs/auth/README.md)
+- [Back up and restore](docs/BACKUP.md): the portal's state, its encrypted secrets and the keyring all live in one volume.
 
 ## Contributing and support
 

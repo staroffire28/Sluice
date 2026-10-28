@@ -48,6 +48,8 @@ The full authentication documentation (tutorial, how-to, reference and explanati
 - Workers do not authenticate against the portal: there is no API between them, they share the task queue on the `DATA_DIR` volume.
 - **Placeholder key** (`changeme-ui`) is rejected outside Development — set a real value in `.env` before deploy.
 - **Form login/logout** require an antiforgery token; JSON `POST /auth/login` (automation/scripts) is exempt.
+- **Scripts and other API clients** send the header `X-Sluice-Client` (any value) with every `POST`, `PUT`, `PATCH` or `DELETE` to `/api/*`. Without it, and unless the browser marks the request as coming from the portal itself (`Sec-Fetch-Site: same-origin`), the portal answers `403`. This stops another site, or a sibling subdomain, from acting with your session cookie, also with `AUTH_MODE=none`. Reads (`GET`) don't need it. See [docs/auth](../auth/howto-login-and-api-access.md).
+- **Security headers:** every response carries `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin`, and a Content Security Policy in report-only mode: the browser console lists what it would block, but nothing is blocked yet.
 - **Data Protection** encrypts connection secrets at rest; the keyring lives in `DATA_DIR/keys` on the shared volume.
 
 ## Observability and alerts
