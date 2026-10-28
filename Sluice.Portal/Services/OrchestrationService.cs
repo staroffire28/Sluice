@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
+using Sluice.Portal.Services.Adls;
 using Sluice.Portal.Services.Logging;
 using Sluice.Portal.Services.Pipeline;
 using Sluice.Portal.Services.Stores;
@@ -71,6 +72,7 @@ public sealed class OrchestrationService : IOrchestrationService
     private readonly RunQueueService? _runQueue;
     private readonly SettingsStore? _settings;
     private readonly ConnectionStore? _connections;
+    private readonly IAdlsClientFactory? _adlsFactory;
 
     public OrchestrationService(
         IOptions<AppOptions> options,
@@ -85,13 +87,15 @@ public sealed class OrchestrationService : IOrchestrationService
         PipelineStateStore? stateStore = null,
         RunQueueService? runQueue = null,
         SettingsStore? settings = null,
-        ConnectionStore? connections = null)
+        ConnectionStore? connections = null,
+        IAdlsClientFactory? adlsFactory = null)
     {
         _audit = audit;
         _connections = connections;
         _stateStore = stateStore;
         _runQueue = runQueue;
         _settings = settings;
+        _adlsFactory = adlsFactory;
         _options = options.Value;
         _pipelines = pipelines;
         _jobs = jobs;
@@ -480,7 +484,7 @@ public sealed class OrchestrationService : IOrchestrationService
 
     private async Task<Job?> RestorePointCoreAsync(AuditActor actor, string pipelineId, string snapshot, CancellationToken cancellationToken)
     {
-        _ = _pipelines.Get(pipelineId)
+        var pipeline = _pipelines.Get(pipelineId)
             ?? throw new InvalidOperationException("Pipeline not found.");
         var stateStore = _stateStore
             ?? throw new InvalidOperationException("Restoring a restore point requires the pipeline state store.");
@@ -515,6 +519,28 @@ public sealed class OrchestrationService : IOrchestrationService
         {
             throw new InvalidOperationException(
                 $"El punto {snapshot} ya no se conserva (la poda se llevó sus versiones): vuelve a abrir la lista de puntos.");
+        }
+
+        // Rebobinar es volver a leer del lago los snapshots posteriores al punto. La retención de origen
+        // borra primero los más antiguos, así que si el más antiguo que queda es posterior al punto
+        // pueden faltar algunos de los que lo siguen, y sus cambios se perderían sin aviso. Solo se mira
+        // si la retención borra de verdad (o settings.json no deja saberlo): si no, el lago los conserva y
+        // el restore no depende de que el origen responda. El restore a medias del mismo punto se deja
+        // terminar: ya rebobinó el estado.
+        if (state.RestoreInProgress?.Snapshot != snapshot
+            && _adlsFactory is not null
+            && (_settings is null
+                || !_settings.TryGet(out var retention)
+                || (retention.SourceSnapshotRetentionDays > 0 && !retention.SourceSnapshotRetentionDryRun)))
+        {
+            var adls = await _adlsFactory.CreateAsync(pipeline.SourceId, cancellationToken);
+            var oldest = (await adls.ListSnapshotFoldersAsync(cancellationToken))
+                .Where(ExcludedEntities.IsSnapshotFolder)
+                .Min(StringComparer.Ordinal);
+            if (oldest is null || string.CompareOrdinal(oldest, snapshot) > 0)
+            {
+                throw new RestoreSnapshotsMissingException(snapshot, oldest);
+            }
         }
 
         var plan = ParquetVersions.Plan(versions, state.Tables, snapshot);
