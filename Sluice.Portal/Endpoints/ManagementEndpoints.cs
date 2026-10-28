@@ -376,7 +376,7 @@ public static class ManagementEndpoints
                 foreach (var e in entries)
                 {
                     var sourceLabel = e.Source == "user" ? l["Page.Logs.Source.User"].Value : l["Page.Logs.Source.System"].Value;
-                    CsvWriter.WriteRow(writer, [CsvDate(e.Timestamp, zone), sourceLabel, e.ActorLabel, e.Level.ToLowerInvariant(), e.Action, e.Outcome?.ToString().ToLowerInvariant(), e.Target, e.Message, e.PipelineId, e.JobId, e.HostName]);
+                    CsvWriter.WriteRow(writer, [CsvDate(e.Timestamp, zone), sourceLabel, e.ActorLabel, EventLevelLabels.Get(l, e.Level), e.Action, e.Outcome?.ToString().ToLowerInvariant(), e.Target, e.Message, e.PipelineId, e.JobId, e.HostName]);
                 }
             });
         });

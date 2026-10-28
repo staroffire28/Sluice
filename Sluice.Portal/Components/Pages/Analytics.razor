@@ -80,19 +80,19 @@
                                              Items="_snapshot.QueueDepths"
                                              Name="@L["Page.Analytics.Series.Pending"]"
                                              SeriesType="SeriesType.Bar"
-                                             XValue="@(e => e.Stage)"
+                                             XValue="@(e => PipelineStageLabels.GetStageKey(L, e.Stage))"
                                              YValue="@(e => (decimal)e.Pending)" />
                             <ApexPointSeries TItem="StageQueueDepth"
                                              Items="_snapshot.QueueDepths"
                                              Name="@L["Page.Analytics.Series.Claimed"]"
                                              SeriesType="SeriesType.Bar"
-                                             XValue="@(e => e.Stage)"
+                                             XValue="@(e => PipelineStageLabels.GetStageKey(L, e.Stage))"
                                              YValue="@(e => (decimal)e.Claimed)" />
                             <ApexPointSeries TItem="StageQueueDepth"
                                              Items="_snapshot.QueueDepths"
                                              Name="@L["Page.Analytics.Series.Errors"]"
                                              SeriesType="SeriesType.Bar"
-                                             XValue="@(e => e.Stage)"
+                                             XValue="@(e => PipelineStageLabels.GetStageKey(L, e.Stage))"
                                              YValue="@(e => (decimal)e.Error)" />
                         </ApexChart>
                     }
@@ -111,7 +111,7 @@
                                              Items="_snapshot.AvgDurationByType"
                                              Name="@L["Page.Analytics.Series.Minutes"]"
                                              SeriesType="SeriesType.Bar"
-                                             XValue="@(e => e.Label)"
+                                             XValue="@(e => TypeLabel(e.Label))"
                                              YValue="@(e => (decimal)e.Value)" />
                         </ApexChart>
                     }
@@ -154,7 +154,7 @@
                                              Items="_snapshot.StatusDistribution"
                                              Name="@L["Page.Analytics.Series.Jobs"]"
                                              SeriesType="SeriesType.Donut"
-                                             XValue="@(e => e.Label)"
+                                             XValue="@(e => StatusLabel(e.Label))"
                                              YValue="@(e => (decimal)e.Value)" />
                         </ApexChart>
                     }
@@ -164,9 +164,10 @@
             <h2 class="section-panel__title analytics-section-title">@L["Page.Analytics.Section.Volume"]</h2>
             <div class="analytics-chart-grid">
 
-                @* Jobs per day (line, last 14 days) *@
+                @* Jobs per day (line, last 14 days). La zona en la @key: los días cambian cuando se
+                   conoce la del navegador. *@
                 <FluentCard>
-                    <ApexChart TItem="DailyJobCount" Title="@L["Page.Analytics.Chart.JobsPerDay"]" Options="_lineJobsOptions" Height="280" @key="_themeMode">
+                    <ApexChart TItem="DailyJobCount" Title="@L["Page.Analytics.Chart.JobsPerDay"]" Options="_lineJobsOptions" Height="280" @key="(_themeMode, Time.Zone)">
                         <ApexPointSeries TItem="DailyJobCount"
                                          Items="_snapshot.JobsPerDay"
                                          Name="@L["Page.Analytics.Series.Success"]"
@@ -228,11 +229,13 @@
         ThemeState.Changed += OnThemeChanged;
     }
 
-    // Las fechas van en la zona del navegador, que solo se conoce con el circuito conectado.
+    // Las fechas y los días van en la zona del navegador, que solo se conoce con el circuito
+    // conectado: al conocerla se vuelve a cargar.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender && await Time.InitAsync())
         {
+            Load();
             StateHasChanged();
         }
     }
@@ -242,7 +245,14 @@
 
     private void Reload() => Load();
 
-    private void Load() => _snapshot = AnalyticsSvc.GetSnapshot(_pipelineFilter);
+    private void Load() => _snapshot = AnalyticsSvc.GetSnapshot(_pipelineFilter, Time.Zone);
+
+    // El servicio da los nombres de los enums; se traducen al pintar.
+    private string StatusLabel(string status) =>
+        Enum.TryParse<JobStatus>(status, out var parsed) ? JobStatusLabels.Get(L, parsed) : status;
+
+    private string TypeLabel(string type) =>
+        Enum.TryParse<JobType>(type, out var parsed) ? JobTypeLabels.Get(L, parsed) : type;
 
     // ThemeToggle publica el modo real poco después del render inicial (y cada cambio en vivo).
     private void OnThemeChanged() => _ = InvokeAsync(() =>

@@ -99,6 +99,10 @@
   <data name="Common.Status.RetentionRetained" xml:space="preserve"><value>Retained</value></data>
   <data name="Common.Status.RetentionEligible" xml:space="preserve"><value>Eligible purge</value></data>
   <data name="Common.Status.RetentionProtected" xml:space="preserve"><value>Protected</value></data>
+  <data name="Common.Status.Processed" xml:space="preserve"><value>Processed</value></data>
+  <data name="Common.Status.Settled" xml:space="preserve"><value>Settled</value></data>
+  <data name="Common.Status.Unclosed" xml:space="preserve"><value>Unclosed</value></data>
+  <data name="Common.Status.Available" xml:space="preserve"><value>Available</value></data>
   <data name="Common.JobType.Incremental" xml:space="preserve"><value>Incremental</value></data>
   <data name="Common.JobType.Force" xml:space="preserve"><value>Force</value></data>
   <data name="Common.JobType.Reconcile" xml:space="preserve"><value>Reconcile</value></data>

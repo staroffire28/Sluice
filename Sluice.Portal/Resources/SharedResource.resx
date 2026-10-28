@@ -99,6 +99,10 @@
   <data name="Common.Status.RetentionRetained" xml:space="preserve"><value>Retenido</value></data>
   <data name="Common.Status.RetentionEligible" xml:space="preserve"><value>Elegible purga</value></data>
   <data name="Common.Status.RetentionProtected" xml:space="preserve"><value>Protegido</value></data>
+  <data name="Common.Status.Processed" xml:space="preserve"><value>Procesado</value></data>
+  <data name="Common.Status.Settled" xml:space="preserve"><value>Consolidado</value></data>
+  <data name="Common.Status.Unclosed" xml:space="preserve"><value>Sin cerrar</value></data>
+  <data name="Common.Status.Available" xml:space="preserve"><value>Disponible</value></data>
   <data name="Common.JobType.Incremental" xml:space="preserve"><value>Incremental</value></data>
   <data name="Common.JobType.Force" xml:space="preserve"><value>Forzar</value></data>
   <data name="Common.JobType.Reconcile" xml:space="preserve"><value>Reconciliar</value></data>
