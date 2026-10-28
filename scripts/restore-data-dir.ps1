@@ -9,7 +9,7 @@
 # Un backup cifrado (.age) se descifra con la clave privada -Identity. Antes de tocar el
 # volumen, el script descifra el backup y lista el tar entero: si algo falla, no borra nada.
 #
-# Uso: .\scripts\restore-data-dir.ps1 -BackupFile .\backups\pipeline-data-20260701120000.tar.gz.age -Identity .\sluice-backup.key [-VolumeName sluice_pipeline-data]
+# Uso: .\scripts\restore-data-dir.ps1 -BackupFile .\backups\pipeline-data-20260701120000.tar.gz.age -Identity $HOME\sluice-backup.key [-VolumeName sluice_pipeline-data]
 param(
     [Parameter(Mandatory = $true)]
     [string]$BackupFile,

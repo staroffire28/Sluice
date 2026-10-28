@@ -24,10 +24,11 @@ Azure Storage).
 
 El backup lleva los secretos de conexión **y** el keyring que los descifra, así que se
 guarda cifrado con [age](https://age-encryption.org) (`winget install FiloSottile.age`,
-`brew install age` o el paquete de tu distribución). Genera el par de claves una vez:
+`brew install age` o el paquete de tu distribución). Genera el par de claves una vez, en tu
+carpeta de usuario y no en la del repo, para que no acabe en un commit ni en una imagen:
 
 ```powershell
-age-keygen -o sluice-backup.key
+age-keygen -o "$HOME/sluice-backup.key"
 # Public key: age1...   <- la clave pública, para -Recipient
 ```
 
@@ -37,7 +38,7 @@ age-keygen -o sluice-backup.key
   **fuera** del host y lejos de los backups: en un gestor de contraseñas o en una caja fuerte
   de secretos, con una segunda copia en otro sitio. Quien tenga el backup y la clave privada
   tiene las credenciales ADLS/SQL; quien pierda la clave privada pierde todos los backups.
-  Borra `sluice-backup.key` del host en cuanto la hayas guardado.
+  Borra `$HOME/sluice-backup.key` del host en cuanto la hayas guardado.
 
 ## Cómo hacer un backup
 
@@ -82,7 +83,7 @@ cargas programadas), rotando/purgando backups antiguos según tu política de re
 docker compose -f docker-compose.linux.yml down
 
 # 2. Restaura con la clave privada (sobrescribe TODO el contenido actual del volumen, pide confirmación):
-.\scripts\restore-data-dir.ps1 -BackupFile .\backups\pipeline-data-20260701120000.tar.gz.age -Identity .\sluice-backup.key
+.\scripts\restore-data-dir.ps1 -BackupFile .\backups\pipeline-data-20260701120000.tar.gz.age -Identity $HOME\sluice-backup.key
 
 # 3. Levanta de nuevo y verifica:
 docker compose -f docker-compose.linux.yml up -d

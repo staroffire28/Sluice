@@ -6,6 +6,7 @@
 **/data
 **/backups
 **/*.tar.gz
+**/*.key
 **/*.user
 **/*.suo
 **/.env
