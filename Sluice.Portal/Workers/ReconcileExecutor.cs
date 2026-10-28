@@ -218,10 +218,11 @@ public sealed class ReconcileExecutor : IReconcileExecutor
         // Tablas sobre el umbral y no aceptadas: las que alertan y las que la corrección automática
         // re-sincronizaría al cerrar el job (StageRouter). Un re-sync no se corrige a sí mismo.
         var actionable = report.IsPartial ? _reconcile.ActionableEntities(report) : [];
+        string? pendingAlert = null;
         if (report.IsPartial)
         {
             var autoAttempt = job.Type == JobType.ResyncTable && AutoRemediation.IsAutomatic(task);
-            await _alerts.SendReconcileAlertAsync(new ReconcileAlert
+            pendingAlert = await SendOrDeferAlertAsync(new ReconcileAlert
             {
                 EventType = ReconcileAlert.Divergence,
                 PipelineId = task.PipelineId,
@@ -251,12 +252,27 @@ public sealed class ReconcileExecutor : IReconcileExecutor
                 ["maxDivergencePct"] = report.MaxDivergencePct,
                 ["reconcilePartial"] = report.IsPartial,
                 [AutoRemediation.SummaryKey] = string.Join(",", actionable),
+                [AutoRemediation.PendingAlertKey] = pendingAlert,
             },
         });
 
         _jobs.AppendEvent(task.JobId, EventLevel.Info,
             $"Reconcile completed. Max divergence: {report.MaxDivergencePct:F2}%.",
             null, "Event.Reconcile.Completed", report.MaxDivergencePct);
+    }
+
+    // Un aviso que la corrección automática puede resolver no sale de aquí: va al Summary del job y lo
+    // manda StageRouter al cerrarlo, después de intentar lanzarla, así dice si se lanzó o no. Devuelve
+    // ese aviso en JSON, o null si ya se mandó.
+    private async Task<string?> SendOrDeferAlertAsync(ReconcileAlert alert, CancellationToken cancellationToken)
+    {
+        if (alert.AutoFixEligible && !alert.AutoFixAttempted)
+        {
+            return JsonSerializer.Serialize(alert, JsonDefaults.Options);
+        }
+
+        await _alerts.SendReconcileAlertAsync(alert, cancellationToken);
+        return null;
     }
 
     // Comparación de valores (bajo demanda): hash por fila del parquet consolidado frente a SQL, una
@@ -292,9 +308,10 @@ public sealed class ReconcileExecutor : IReconcileExecutor
         var report = _reconcile.BuildValuesReport(task.PipelineId, task.JobId, results);
         var actionable = _reconcile.ActionableValueEntities(report);
         var failed = results.Where(r => r.Error is not null).ToList();
+        string? pendingAlert = null;
         if (actionable.Count > 0)
         {
-            await _alerts.SendReconcileAlertAsync(new ReconcileAlert
+            pendingAlert = await SendOrDeferAlertAsync(new ReconcileAlert
             {
                 EventType = ReconcileAlert.Values,
                 PipelineId = task.PipelineId,
@@ -322,6 +339,7 @@ public sealed class ReconcileExecutor : IReconcileExecutor
                 ["valueDifferences"] = results.Sum(r => r.Different + r.MissingInDestination + r.ExtraInDestination),
                 ["valuesPartial"] = actionable.Count > 0,
                 [AutoRemediation.SummaryKey] = string.Join(",", actionable),
+                [AutoRemediation.PendingAlertKey] = pendingAlert,
             },
         });
 
