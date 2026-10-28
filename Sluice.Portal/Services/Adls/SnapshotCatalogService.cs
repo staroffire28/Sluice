@@ -78,12 +78,14 @@ public sealed class SnapshotCatalogService : ISnapshotCatalogService
         var selection = SnapshotSelector.Select(allSnapshots, state.LastProcessedSnapshot, currentFolder);
         var now = DateTimeOffset.UtcNow;
         var appSettings = _settings.Get();
+        var retentionFloor = SnapshotRetentionService.SharedLastProcessed(_pipelines, pipeline.SourceId);
         var analysis = SnapshotRetentionService.Analyze(
             now,
             appSettings,
             allSnapshots,
-            state.LastProcessedSnapshot,
-            selection);
+            retentionFloor,
+            SnapshotSelector.Select(allSnapshots, retentionFloor, currentFolder),
+            SnapshotRetentionService.SharedBackfillFrom(_pipelines, pipeline.SourceId));
 
         var entries = allSnapshots
             .Select(name => new SnapshotEntry(
@@ -118,14 +120,16 @@ public sealed class SnapshotCatalogService : ISnapshotCatalogService
         var allSnapshots = await adls.ListSnapshotFoldersAsync(cancellationToken);
         var currentFolder = await adls.GetSettledSnapshotAsync(cancellationToken);
         var state = _pipelines.GetState(pipelineId);
-        var selection = SnapshotSelector.Select(allSnapshots, state.LastProcessedSnapshot, currentFolder);
+        var retentionFloor = SnapshotRetentionService.SharedLastProcessed(_pipelines, pipeline.SourceId);
+        var selection = SnapshotSelector.Select(allSnapshots, retentionFloor, currentFolder);
         var appSettings = _settings.Get();
         var analysis = SnapshotRetentionService.Analyze(
             DateTimeOffset.UtcNow,
             appSettings,
             allSnapshots,
-            state.LastProcessedSnapshot,
-            selection);
+            retentionFloor,
+            selection,
+            SnapshotRetentionService.SharedBackfillFrom(_pipelines, pipeline.SourceId));
         var cert = await SnapshotRetentionService.CertifyParquetAsync(
             pipelineId,
             parquetStore,

@@ -100,7 +100,10 @@ public static class ParquetConsolidator
             }
         }
 
-        await ParquetMaterializer.WriteStreamingAsync(destination, schema, WinningBatches(cancellationToken), cancellationToken);
+        // El recuento sin borrados, que ya se conoce aquí, va al footer: el reconcile lo lee sin
+        // recorrer la columna IsDelete (ParquetMaterializer.CountRowsAsync).
+        await ParquetMaterializer.WriteStreamingAsync(destination, schema, WinningBatches(cancellationToken), cancellationToken,
+            () => new() { [ParquetMaterializer.NonDeleteRowsKey] = (rowsWritten - deleteRows).ToString(System.Globalization.CultureInfo.InvariantCulture) });
         return new ConsolidationResult(rowsWritten, globalMax, rowsWithoutId, deleteRows);
     }
 
