@@ -75,6 +75,7 @@ A janitor caps the volume's growth. The **job is the unit of retention**: an old
 - **Knob**: `RetentionDays` in `/settings` (default 90). `0` or negative disables purging.
 - **Failed or cancelled jobs**: the job's staging is deleted when the ingest fails or is cancelled; any leftover is purged 24 h after the job finished, even within retention and even with purging disabled.
 - **Activity log**: `logs/activity-*.jsonl` files (rotated `.1` files included) are purged once their last write is older than `RetentionDays`, including those of replicas that no longer exist. The sweeping process's own active file is never deleted.
+- **Consolidated cache**: for sources that keep the Parquet in ADLS, `cache/consolidated/{pipeline}/{table}.parquet` holds a local copy of each table's consolidated Parquet (shared by the workers on the volume), so a run only downloads it when the remote ETag or size changed; the Force/Reload SQL reload still reads the remote file. It takes as much disk as those files and the retention sweep does not purge it: archiving or restoring a table drops that table's copy, and resetting or deleting the pipeline drops all of its copies. A leftover copy only costs disk (it never matches a new file), and deleting the folder only costs one download per table.
 - **Cadence**: every 6 hours, on the orchestrator only; logged as `retention.sweep`. Corrupt or locked files are skipped without breaking the sweep.
 
 ### Source snapshots (Synapse Link ADLS container)

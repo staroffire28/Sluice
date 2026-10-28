@@ -154,6 +154,8 @@ public sealed class ParquetArtifactService : IParquetArtifactService
     public async Task ArchiveCurrentAsync(string pipelineId, string entity, ParquetVersion info, CancellationToken cancellationToken = default)
     {
         EnsureEntityName(entity);
+        // La tabla se queda sin consolidado: su copia local (ConsolidatedCache) sobra.
+        new ConsolidatedCache(_options.DataDir).Remove(pipelineId, entity);
         var store = await StoreFor(pipelineId, cancellationToken);
         if (await store.ParquetExistsAsync(IngestManifestStore.GetConsolidatedBlobPath(pipelineId, entity), cancellationToken))
         {
@@ -177,6 +179,8 @@ public sealed class ParquetArtifactService : IParquetArtifactService
         string pipelineId, string entity, string versionId, ParquetVersion archiveCurrentAs, CancellationToken cancellationToken = default)
     {
         EnsureEntityName(entity);
+        // El consolidado vuelve a otro punto: la copia local (ConsolidatedCache) deja de servir.
+        new ConsolidatedCache(_options.DataDir).Remove(pipelineId, entity);
         var store = await StoreFor(pipelineId, cancellationToken);
         var version = await ParquetVersions.GetAsync(store, pipelineId, entity, versionId, cancellationToken)
             ?? throw new InvalidOperationException($"La versión '{versionId}' de {entity} no existe.");

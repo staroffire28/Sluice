@@ -38,6 +38,14 @@ public interface IParquetStore
 
         await DeleteParquetAsync(fromPath, cancellationToken);
     }
+
+    // ETag y tamaño del fichero sin bajarlo, para validar una copia local (ConsolidatedCache). null
+    // si el store no los da: entonces no se cachea. Por defecto null, para LocalParquetStore (ya es
+    // local) y los dobles de test.
+    Task<ParquetFileProperties?> GetParquetPropertiesAsync(string blobPath, CancellationToken cancellationToken = default) =>
+        Task.FromResult<ParquetFileProperties?>(null);
 }
 
 public sealed record ParquetArtifact(string Path, long SizeBytes, DateTimeOffset? LastModified);
+
+public sealed record ParquetFileProperties(string ETag, long Length);
