@@ -75,7 +75,6 @@ services:
     environment:
       EXECUTION_MODE: distributed
       DATA_DIR: C:/data
-      UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
       WORKER_STAGE: ingest
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}   # las etapas también envían alertas
@@ -101,7 +100,6 @@ services:
     environment:
       EXECUTION_MODE: distributed
       DATA_DIR: C:/data
-      UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
       WORKER_STAGE: sql
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}   # las etapas también envían alertas
@@ -125,7 +123,6 @@ services:
     environment:
       EXECUTION_MODE: distributed
       DATA_DIR: C:/data
-      UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
       WORKER_STAGE: reconcile
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}   # las etapas también envían alertas

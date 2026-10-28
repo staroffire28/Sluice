@@ -55,10 +55,10 @@ environment:
   UI_API_KEY: ${UI_API_KEY}
 ```
 
-The container healthcheck uses `/internal/health`, which is anonymous:
+A worker serves neither the UI nor `/api/*`: it only answers `/health`, which the container healthcheck uses and which is anonymous:
 
 ```bash
-curl http://localhost:58472/internal/health
+curl http://localhost:58472/health
 ```
 
 ## Rotate keys in production
