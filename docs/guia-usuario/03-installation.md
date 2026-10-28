@@ -16,7 +16,7 @@ The portal is light; the heavy systems (SQL Server, ADLS) are external. These fi
 | Minimum (PoC / low volume) | 2 | 4 GB | 20 GB |
 | Recommended (production) | 4–8 | 16 GB | 100 GB+ SSD |
 
-- **Disk** is dominated by the `pipeline-data` volume (jobs, reports, parquet staging). It is bounded by the retention setting (default 90 days). Use SSD for the queue.
+- **Disk** is dominated by the `pipeline-data` volume (jobs, reports, parquet staging). It is bounded by the retention setting (default 90 days), except the local copy of each consolidated Parquet kept in ADLS, which takes as much as those files (see *Local volume* under Retention in the reference). Use SSD for the queue.
 - **RAM** peaks during parquet consolidation (one snapshot at a time). 16 GB is comfortable for parallel pipelines.
 - SQL Server and ADLS run elsewhere and are not counted here.
 
@@ -126,6 +126,14 @@ with a `Caddyfile` such as `sluice.example.com { reverse_proxy api:58472 }`. Set
 
 **Option B, HTTPS in the portal.** Mount a `.pfx` and set `ASPNETCORE_URLS=https://+:58472;http://localhost:58471`, `ASPNETCORE_Kestrel__Certificates__Default__Path=/certs/sluice.pfx` and `ASPNETCORE_Kestrel__Certificates__Default__Password` on the `api` service. The compose healthcheck probes plain HTTP, and the workers do not start until `api` is healthy: override the `api` `healthcheck` with the same `test` as your compose file but the URL `http://localhost:58471/health` (that HTTP listener only answers inside the container). Then publish on all interfaces with `SLUICE_HTTP_BIND=0.0.0.0` in `.env`. You renew the certificate yourself.
 
+**Start it with both files.** Compose reads `docker-compose.override.yml` by itself only when the command gives no `-f`, and every command in this guide gives one. Name both files, and use the same pair in every later command (`up`, `down`, `logs`, and the update in step 2):
+
+```bash
+docker compose -f docker-compose.linux.yml -f docker-compose.override.yml up -d --build
+```
+
+On Windows, `-f docker-compose.yml -f docker-compose.override.yml`.
+
 ## First run
 
 In the portal:
@@ -142,6 +150,12 @@ Add replicas per stage when a stage is the bottleneck (usually SQL or ADLS, not 
 ```bash
 docker compose -f docker-compose.linux.yml up -d --build --scale worker-ingest=3 --scale worker-sql=2
 ```
+
+## Backups
+
+Everything the portal has lives in the `pipeline-data` volume: the connections and their secrets, the encryption keyring, the pipelines, the jobs, the queue and each pipeline's state. Losing it means setting everything up again, and losing just the keyring means typing every connection secret again. Back it up regularly, encrypted, and keep the copy off the host.
+
+With Linux containers, `scripts/backup-data-dir.ps1` and `scripts/restore-data-dir.ps1` do it with the stack stopped. [Back up and restore DATA_DIR](../BACKUP.md) has the steps: the encryption key, the backup, the restore and what to check afterwards. A restore extracts the backup next to the current data and replaces it only when the extraction has finished, so it needs free space for one more copy. With Windows containers the scripts don't work; the same page says how to copy the volume instead.
 
 ## Settings (`/settings`)
 
@@ -163,18 +177,22 @@ Edited in the portal, saved to the volume, applied without restart.
 
 ## Environment variables
 
-`UI_API_KEY` and `AUTH_MODE` go in `.env`; the rest are set by the compose files.
+`UI_API_KEY`, `AUTH_MODE` and the optional `ALERT_WEBHOOK_URL`, `DEADMAN_PING_URL`, `CHANGELOG_STALL_HOURS`, `SESSION_EXPIRY_HOURS` and `TRANSLATE_ENUMS` go in `.env`; the rest are set by the compose files.
 
 | Variable | Purpose | Default |
 |---|---|---|
 | `UI_API_KEY` | Shared key for UI + `/api/*` (login page + session cookie). Required unless `AUTH_MODE=none`. | — |
 | `AUTH_MODE` | `key` requires `UI_API_KEY`. `none` is open access on purpose: the landing offers **Enter** without a key, the API is open, the header shows **Open access** and a warning is logged at startup. Use it only on an internal network or behind an authenticating proxy. With `none` leave `UI_API_KEY` empty: both together refuse to start. | `key` |
-| `EXECUTION_MODE` | `local` or `distributed`. | set by compose |
+| `EXECUTION_MODE` | `local` or `distributed`; any other value stops startup. | set by compose |
 | `DATA_DIR` | JSON persistence root (`/data` Linux, `C:/data` Windows). | set by compose |
-| `WORKER_STAGE` | Stage a worker processes (`ingest`, `sql` or `reconcile`; any other value stops startup); absence = orchestrator. | set by compose |
+| `WORKER_STAGE` | Stage a worker processes (`ingest`, `sql` or `reconcile`; any other value stops startup); absence = orchestrator. A worker only answers `/health`: it serves neither the UI nor `/api/*`, so it does not need `UI_API_KEY`. | set by compose |
 | `KNOWN_PROXIES` / `KNOWN_NETWORKS` | Comma-separated IPs and CIDR networks of the trusted reverse proxy for `X-Forwarded-For`/`Proto`. Without them it is only trusted from loopback; behind a proxy in another container set them, or every user shares the proxy's IP in the login throttle (a warning is logged at startup). An invalid value stops startup. See *Remote access with TLS*. | empty |
 | `HEARTBEAT_MAX_FAILURES` | Heartbeat failures before releasing a task. | 3 |
 | `CHANGELOG_STALL_HOURS` | Hours without changelog update before alerting. | 16 |
+| `ALERT_WEBHOOK_URL` | Alert webhook used when the one in **Settings** is off or empty, and when `settings.json` cannot be read. The api and the workers send alerts, so the compose files pass it to all of them. | empty |
+| `DEADMAN_PING_URL` | URL the scheduler calls after every healthy cycle, for an external dead-man switch ([details](04-reference.md#observability-and-alerts)). | empty |
+| `SESSION_EXPIRY_HOURS` | Hours a sign-in session lasts. | 12 |
+| `TRANSLATE_ENUMS` | Adds a `[<col>_$label]` column with the label of each enum value (language 1033), read from the snapshot's `GlobalOptionsetMetadata.csv`. Only the SQL stage uses it. | `true` in `docker-compose.yml` and `docker-compose.linux.yml`, `false` in `docker-compose.monolith.yml` |
 | `LOCAL_SOURCE_ROOT` | Demo and tests only: enables the *Local (UAT)* source type, which reads local folders instead of ADLS. **Never used in production**; only `docker-compose.demo.yml` sets it. | — |
 | `DEMO_MODE` | Demo mode (`docker-compose.demo.yml`): generates synthetic F&O data in `LOCAL_SOURCE_ROOT` and creates the demo database, connections and pipeline. Needs `LOCAL_SOURCE_ROOT` and `DEMO_SQL_PASSWORD`. **Never in production.** | `false` |
 | `DEMO_SQL_PASSWORD` | Password of the demo SQL Server `sa` user. | — |
@@ -184,10 +202,10 @@ Alerts are configured in **Settings** (`/settings`): enable alerts and paste you
 
 ## Connections
 
-Created in `/sources` and `/destinations`. Fill the `Config` fields; secrets are encrypted at rest and shown as `***`. If you change where a connection points (the SQL `host`, or the ADLS `account`, `tenant_id` or `client_id`), type its secret again: the saved one is not sent to a different target. Changing the type of an existing connection does not carry over its previous configuration: only the fields of the new type are saved.
+Created in `/sources` and `/destinations`. Fill the `Config` fields; secrets are encrypted at rest and shown as `***`. If you change where a connection points (the SQL `host`, or the ADLS `account`, `tenant_id` or `client_id`), type its secret again: the saved one is not sent to a different target. While a pipeline that uses the connection has a job running, Sluice refuses to change where it points (also its `database`, `container`, `parquet_container` or where it keeps the Parquet). Changing the type of an existing connection does not carry over its previous configuration: only the fields of the new type are saved.
 
 - **Source ADLS:** `account`, `container`, `parquet_container`, `tenant_id`, `client_id`, `client_secret`. The account and container names must be valid Azure Storage names (lowercase letters and digits; containers may also use hyphens).
-- **Where to keep the Parquet** (per source): in an **ADLS container** (`parquet_container`, the default) or on the **portal disk** (`DATA_DIR/parquet`, the volume the portal and the workers already share). The portal disk needs no Parquet container and no write access to ADLS, but the consolidated Parquet of every table is stored there: size the `DATA_DIR` volume for it (plus its earlier versions, see *Consolidated Parquet versions* in the reference) and include it in your backups. When you change it, Sluice copies the consolidated Parquet to the new place before using it and keeps the old copy; if the copy fails, the source stays as it was. Change it with no job running.
-- **Destination SQL:** `host`, `database`, `user`, `password`, **Trust the server certificate** (`trust_server_certificate`, off by default: the server certificate is validated; tick it only for a SQL Server with a self-signed certificate you cannot replace. Destinations created before this option keep trusting it), and `sql_version` (SQL Server version, default 2022). You don't need to pick the version: **Test connection** in the form detects it from the server and sets it (without saving), and **Test** from the row fixes the saved one if it doesn't match. A full `connection_string` is used only if the connection already has one; the form has no field for it.
+- **Where to keep the Parquet** (per source): in an **ADLS container** (`parquet_container`, the default) or on the **portal disk** (`DATA_DIR/parquet`, the volume the portal and the workers already share). The portal disk needs no Parquet container and no write access to ADLS, but the consolidated Parquet of every table is stored there: size the `DATA_DIR` volume for it (plus its earlier versions, see *Consolidated Parquet versions* in the reference) and include it in your backups. When you change it, Sluice copies the consolidated Parquet to the new place before using it and keeps the old copy; if the copy fails, the source stays as it was.
+- **Destination SQL:** `host`, `database`, `user`, `password`, **Trust the server certificate** (`trust_server_certificate`, off by default: the server certificate is validated; tick it only for a SQL Server with a self-signed certificate you cannot replace. Destinations created before this option keep trusting it), and `sql_version` (SQL Server version, default 2022). You don't need to pick the version: **Test connection** in the form detects it from the server and sets it (without saving), and **Test** from the row fixes the saved one if it doesn't match. Ticking **Trust the server certificate** on a saved destination asks for its password again: the saved one is not sent to a server whose certificate is no longer checked. A full `connection_string` is no longer accepted. On the first start after the update, a destination that had one gets its fields from it (host, database, user, password and the certificate option). If it used other options (for example `Integrated Security` or `Authentication`), the string is removed, the activity log says which options blocked it, and its pipelines don't start until you fill in its fields in **Destinations**.
 
-Use **Test connection** in the form (source or destination) to validate against the real ADLS/SQL before saving, or **Test** from the row for a saved connection, before running a pipeline. For a source, the test checks the account, the container and the Synapse Link changelog. SQL statements of a pipeline have no time limit by default; a `connection_string` with its own `Command Timeout` is respected.
+Use **Test connection** in the form (source or destination) to validate against the real ADLS/SQL before saving, or **Test** from the row for a saved connection, before running a pipeline. For a source, the test checks the account, the container and the Synapse Link changelog. SQL statements of a pipeline have no time limit.

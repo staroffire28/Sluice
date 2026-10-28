@@ -29,11 +29,11 @@ Once the portal manages connection secrets, pipeline triggers, and job history, 
 
 **Workers:** Each worker container mounts the same `DATA_DIR` volume and claims tasks from the file-based queue directly. They need no portal credential.
 
-**Fail-closed production:** Outside `Development`, the app refuses to start without `UI_API_KEY` and rejects the placeholder value `changeme-ui`.
+**Fail-closed production:** Outside `Development`, the orchestrator refuses to start without `UI_API_KEY` and rejects the placeholder value `changeme-ui`.
 
 ### Why there is no worker key
 
-Earlier versions also had internal HTTP task endpoints (claim, heartbeat, complete, fail) protected by a second, worker-only secret. Nothing ever called them: workers already share the queue on the `DATA_DIR` volume. Those endpoints were removed, and with them the worker key — there was no remaining attack surface worth keeping and rotating a second secret for. Only `/internal/health` remains, as an anonymous Docker healthcheck.
+Earlier versions also had internal HTTP task endpoints (claim, heartbeat, complete, fail) protected by a second, worker-only secret. Nothing ever called them: workers already share the queue on the `DATA_DIR` volume. Those endpoints were removed, and with them the worker key — there was no remaining attack surface worth keeping and rotating a second secret for. Only the anonymous health endpoints remain (`/health` is the Docker healthcheck; see [the reference](reference-dual-auth.md#get-health)).
 
 ## Session model
 
@@ -67,7 +67,7 @@ Set `KNOWN_PROXIES` / `KNOWN_NETWORKS` to restrict which proxies may supply `X-F
 | HMAC cookie + revocation epoch | No per-session store; logout revokes stolen cookies | Any signed-in logout signs out everyone (including running scripts) |
 | Workers use the shared `DATA_DIR` queue, no HTTP API | No worker secret to rotate or leak | Workers must mount the same volume as the portal |
 | JSON login without CSRF | Easy automation | Brute force limited to 10 failures per client IP per 15 min; behind a proxy not listed in `KNOWN_PROXIES` / `KNOWN_NETWORKS`, all users share one IP and one throttle |
-| `/internal/health` exempt | Docker healthcheck without secret | Endpoint reveals process is up (no sensitive data) |
+| `/health` and `/internal/health` exempt | Docker healthcheck without secret | Endpoint reveals process is up (no sensitive data) |
 
 ## Alternatives considered
 

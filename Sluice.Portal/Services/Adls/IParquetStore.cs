@@ -11,7 +11,8 @@ public interface IParquetStore
     Task DeleteParquetAsync(string blobPath, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ParquetArtifact>> ListParquetAsync(string prefix, CancellationToken cancellationToken = default);
 
-    // Filas del parquet (metadatos del footer; con excludeDeleteRows, también la columna IsDelete).
+    // Filas del parquet (metadatos del footer; con excludeDeleteRows, el recuento sin borrados del
+    // footer o, si falta, la columna IsDelete: ParquetMaterializer.CountRowsAsync).
     // Por defecto lo lee entero; AdlsClient lo sobrescribe con lectura por rangos para no
     // descargarlo solo para contar.
     async Task<long> CountParquetRowsAsync(string blobPath, bool excludeDeleteRows = false, CancellationToken cancellationToken = default)
@@ -37,6 +38,14 @@ public interface IParquetStore
 
         await DeleteParquetAsync(fromPath, cancellationToken);
     }
+
+    // ETag y tamaño del fichero sin bajarlo, para validar una copia local (ConsolidatedCache). null
+    // si el store no los da: entonces no se cachea. Por defecto null, para LocalParquetStore (ya es
+    // local) y los dobles de test.
+    Task<ParquetFileProperties?> GetParquetPropertiesAsync(string blobPath, CancellationToken cancellationToken = default) =>
+        Task.FromResult<ParquetFileProperties?>(null);
 }
 
 public sealed record ParquetArtifact(string Path, long SizeBytes, DateTimeOffset? LastModified);
+
+public sealed record ParquetFileProperties(string ETag, long Length);

@@ -13,7 +13,8 @@ public interface IPipelineService
     PipelineModel? Get(string id);
     // Lo que muta recibe quién actúa y queda en el registro de actividad (ver AuditActor).
     PipelineModel Create(AuditActor actor, PipelineModel pipeline);
-    PipelineModel? Update(AuditActor actor, string id, PipelineModel pipeline);
+    // Cambiar el origen o el destino con un job en curso lanza PipelineBusyException.
+    Task<PipelineModel?> UpdateAsync(AuditActor actor, string id, PipelineModel pipeline, CancellationToken cancellationToken = default);
 
     // Activa o desactiva el scheduler del pipeline (null si no existe).
     PipelineModel? SetScheduler(AuditActor actor, string id, bool enabled);
@@ -80,12 +81,12 @@ public sealed class PipelineService : IPipelineService
         return pipeline;
     }
 
-    public PipelineModel? Update(AuditActor actor, string id, PipelineModel pipeline) =>
-        _audit.Audit(
+    public Task<PipelineModel?> UpdateAsync(AuditActor actor, string id, PipelineModel pipeline, CancellationToken cancellationToken = default) =>
+        _audit.AuditAsync(
             actor,
             "pipeline.update",
             id,
-            () => UpdateCore(id, pipeline),
+            () => UpdateCoreAsync(id, pipeline, cancellationToken),
             updated => updated is null
                 ? new AuditResult($"El pipeline {id} no existe.", Outcome: AuditOutcome.Rejected, MessageKey: "Activity.Pipeline.NotFound", MessageArgs: [id])
                 : new AuditResult($"Pipeline {updated.Name} actualizado.", MessageKey: "Activity.Pipeline.Updated", MessageArgs: [updated.Name]),
@@ -105,6 +106,26 @@ public sealed class PipelineService : IPipelineService
                     MessageArgs: [new EventPart(enabled ? "Activity.Pipeline.SchedulerOn" : "Activity.Pipeline.SchedulerOff"), updated.Name]),
             $"No se pudo cambiar el scheduler del pipeline {id}",
             failureKey: "Activity.Failed.PipelineScheduler", failureArgs: [id]);
+
+    // Con otro origen o destino, un job en curso acabaría entre el sitio viejo y el nuevo (p. ej. el
+    // SQL mergea solo el delta en el destino nuevo): se rechaza bajo el lock de ejecución, como el borrado.
+    private async Task<PipelineModel?> UpdateCoreAsync(string id, PipelineModel pipeline, CancellationToken cancellationToken)
+    {
+        if (_store.GetById(id) is not { } existing)
+        {
+            return null;
+        }
+
+        if (existing.SourceId == pipeline.SourceId && existing.DestinationId == pipeline.DestinationId)
+        {
+            return UpdateCore(id, pipeline);
+        }
+
+        using var runLock = await PipelineRunLock.AcquireAsync(_options.DataDir, id, PipelineRunLock.DefaultTimeout, cancellationToken);
+        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, id,
+            "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de cambiar su origen o su destino.", cancellationToken);
+        return UpdateCore(id, pipeline);
+    }
 
     private PipelineModel? UpdateCore(string id, PipelineModel pipeline)
     {
@@ -156,6 +177,9 @@ public sealed class PipelineService : IPipelineService
         {
             _stateStore.Delete(id);
         }
+
+        // Las copias locales de sus consolidados (Pipeline.ConsolidatedCache) solo ocuparían disco.
+        new Pipeline.ConsolidatedCache(_options.DataDir).RemovePipeline(id);
 
         // Sin pipeline no hay nada que ejecutar, y otro creado luego con el mismo id no debe heredarlo.
         _runQueue?.Discard(actor, id, "el pipeline se borró");
