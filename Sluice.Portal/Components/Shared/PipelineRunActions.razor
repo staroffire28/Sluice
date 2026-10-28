@@ -39,6 +39,10 @@
             await NotificationService.ShowSuccessToastAsync(string.Format(L["Page.Pipelines.JobStarted"].Value, job.Id, JobTypeLabels.Get(L, type)));
             await OnCompleted.InvokeAsync();
         }
+        catch (ConnectionFieldsRequiredException ex)
+        {
+            await NotificationService.ShowErrorToastAsync(string.Format(L["Page.Pipelines.DestinationNeedsFields"].Value, ex.ConnectionName));
+        }
         catch (Exception ex)
         {
             await NotificationService.ShowErrorToastAsync(ErrorText.Render(L, ex));

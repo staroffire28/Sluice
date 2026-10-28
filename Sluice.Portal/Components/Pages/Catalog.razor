@@ -83,7 +83,7 @@
             else
             {
                 <FluentTextInput @bind-Value="_columnSearch" Immediate="true" ImmediateDelay="250" data-testid="catalog-column-search"
-                                 Placeholder="@L["Common.Search"]" Style="width:100%;" />
+                                 Label="@L["Page.Catalog.ColumnSearch"]" Placeholder="@L["Common.Search"]" Style="width:100%;" />
                 <div class="catalog-columns">
                     @foreach (var column in _columns.Where(c => string.IsNullOrWhiteSpace(_columnSearch) || c.Name.Contains(_columnSearch.Trim(), StringComparison.OrdinalIgnoreCase)))
                     {

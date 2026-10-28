@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
 using Sluice.Portal.Services.Adls;
 using Sluice.Portal.Services.Connections;
@@ -14,10 +16,11 @@ public interface IConnectionService
     // Lo que muta o prueba contra la red del cliente recibe quién actúa y queda en el registro de
     // actividad (ver AuditActor).
     Connection Create(AuditActor actor, Connection connection);
-    Connection? Update(AuditActor actor, string id, Connection connection);
 
-    // Como Update; si un origen cambia dónde guarda el Parquet (parquet_storage), copia antes al
-    // sitio nuevo los consolidados de sus pipelines. CopiedTables: cuántos se copiaron.
+    // Si un origen cambia dónde guarda el Parquet (parquet_storage), copia antes al sitio nuevo los
+    // consolidados de sus pipelines. CopiedTables: cuántos se copiaron. Cambiar el host, la cuenta, la
+    // base de datos, el container o el almacenamiento con un job en curso en un pipeline que la usa
+    // lanza PipelineBusyException.
     Task<(Connection? Connection, int CopiedTables)> UpdateAsync(AuditActor actor, string id, Connection connection, CancellationToken cancellationToken = default);
 
     // null si se borró; si no, el motivo.
@@ -53,19 +56,28 @@ public sealed class ConnectionService : IConnectionService
     private readonly IAdlsClientFactory _adlsFactory;
     private readonly ISqlConnectionFactory _sqlFactory;
     private readonly IAuditLog _audit;
+    private readonly IJobService _jobs;
+    private readonly ITaskStore _tasks;
+    private readonly string _dataDir;
 
     public ConnectionService(
         ConnectionStore store,
         PipelineStore pipelines,
         IAdlsClientFactory adlsFactory,
         ISqlConnectionFactory sqlFactory,
-        IAuditLog audit)
+        IAuditLog audit,
+        IJobService jobs,
+        ITaskStore tasks,
+        IOptions<AppOptions> options)
     {
         _audit = audit;
         _store = store;
         _pipelines = pipelines;
         _adlsFactory = adlsFactory;
         _sqlFactory = sqlFactory;
+        _jobs = jobs;
+        _tasks = tasks;
+        _dataDir = options.Value.DataDir;
     }
 
     public IReadOnlyList<Connection> List(ConnectionRole? role = null)
@@ -99,38 +111,16 @@ public sealed class ConnectionService : IConnectionService
             throw new InvalidOperationException($"Id de conexión no válido: '{connection.Id}'.");
         }
 
+        RejectConnectionString(connection.Config);
         _store.SaveNew(connection);
         return SecretMasker.Mask(connection);
-    }
-
-    public Connection? Update(AuditActor actor, string id, Connection connection) =>
-        _audit.Audit(
-            actor,
-            "connection.update",
-            null,
-            () => UpdateCore(id, connection),
-            Updated(id),
-            $"No se pudo guardar la conexión {RoleLabel(connection.Role)} '{connection.Name}'",
-            failureKey: "Activity.Failed.ConnectionSave", failureArgs: [RolePart(connection.Role), connection.Name],
-            target: id);
-
-    private Connection? UpdateCore(string id, Connection connection)
-    {
-        if (!_store.Exists(id))
-        {
-            return null;
-        }
-
-        var existing = _store.GetById(id)!;
-        var merged = Merge(existing, connection);
-        _store.Save(merged);
-        return SecretMasker.Mask(merged);
     }
 
     // Si la edición cambia el tipo, la configuración anterior es de otro tipo (p. ej. la cuenta y
     // el client_secret de Azure en un origen que pasa a local) y no se arrastra.
     private static Connection Merge(Connection existing, Connection connection)
     {
+        RejectConnectionString(connection.Config);
         var merged = connection with
         {
             Id = existing.Id,
@@ -141,7 +131,7 @@ public sealed class ConnectionService : IConnectionService
 
         // Al guardar, un secreto que no viaja porque cambió su destino es un error explícito, no una
         // conexión que falla después sin contraseña.
-        if (SameType(existing, connection) && ChangedSecretTarget(existing.Config, connection.Config) is { } target)
+        if (SameType(existing, connection) && SecretDropReason(existing.Config, connection.Config) is { } target)
         {
             var missing = existing.Config
                 .Where(e => SecretMasker.IsSecretKey(e.Key) && !string.IsNullOrEmpty(e.Value)
@@ -155,7 +145,24 @@ public sealed class ConnectionService : IConnectionService
             }
         }
 
+        // Un destino que la migración marcó vuelve a arrancar en cuanto tiene todos sus campos.
+        if (merged.Config.ContainsKey(ConnectionMigrations.FieldsRequiredKey)
+            && new[] { "host", "database", "user", "password" }.All(key => !string.IsNullOrWhiteSpace(merged.Config.GetValueOrDefault(key))))
+        {
+            merged.Config.Remove(ConnectionMigrations.FieldsRequiredKey);
+        }
+
         return merged;
+    }
+
+    // La cadena de conexión SQL libre ya no se admite: apuntaba a cualquier servidor con cualquier
+    // autenticación. Las guardadas las pasa a campos ConnectionMigrations.
+    private static void RejectConnectionString(IReadOnlyDictionary<string, string?> config)
+    {
+        if (config.Keys.Any(key => string.Equals(key, "connection_string", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException("connection_string ya no se admite: usa host, database, user y password.");
+        }
     }
 
     private static bool SameType(Connection a, Connection b) =>
@@ -164,19 +171,42 @@ public sealed class ConnectionService : IConnectionService
     // Tras la purga de los CSV de Synapse Link, el Parquet consolidado puede ser la única copia de la
     // historia: al cambiar de sitio se copia (sin borrar el original) antes de guardar la conexión y,
     // si la copia falla, no se guarda nada. Un cambio de tipo no mueve el Parquet.
-    public Task<(Connection? Connection, int CopiedTables)> UpdateAsync(AuditActor actor, string id, Connection connection, CancellationToken cancellationToken = default) =>
-        _audit.AuditAsync(
+    // La entrada dice qué claves cambiaron; los secretos, solo que cambiaron (AuditChanges).
+    public async Task<(Connection? Connection, int CopiedTables)> UpdateAsync(AuditActor actor, string id, Connection connection, CancellationToken cancellationToken = default)
+    {
+        var result = await _audit.AuditAsync(
             actor,
             "connection.update",
             null,
             () => UpdateCoreAsync(id, connection, cancellationToken),
-            result => result.CopiedTables > 0 && result.Connection is { } updated
-                ? new AuditResult($"Conexión {RoleLabel(updated.Role)} '{updated.Name}' actualizada; Parquet de {result.CopiedTables} tabla(s) copiado al sitio nuevo.",
-                    MessageKey: "Activity.Connection.UpdatedCopied", MessageArgs: [RolePart(updated.Role), updated.Name, result.CopiedTables])
-                : Updated(id)(result.Connection),
+            result => result.Connection is not { } updated
+                ? Updated(id)(null)
+                : (result.CopiedTables > 0, result.Changes) switch
+                {
+                    (true, { } changes) => new AuditResult(
+                        $"Conexión {RoleLabel(updated.Role)} '{updated.Name}' actualizada ({changes.Text}); Parquet de {result.CopiedTables} tabla(s) copiado al sitio nuevo.",
+                        MessageKey: "Activity.Connection.UpdatedCopiedChanges", MessageArgs: [RolePart(updated.Role), updated.Name, result.CopiedTables, changes.Part]),
+                    (true, null) => new AuditResult(
+                        $"Conexión {RoleLabel(updated.Role)} '{updated.Name}' actualizada; Parquet de {result.CopiedTables} tabla(s) copiado al sitio nuevo.",
+                        MessageKey: "Activity.Connection.UpdatedCopied", MessageArgs: [RolePart(updated.Role), updated.Name, result.CopiedTables]),
+                    (false, { } changes) => new AuditResult(
+                        $"Conexión {RoleLabel(updated.Role)} '{updated.Name}' actualizada: {changes.Text}.",
+                        MessageKey: "Activity.Connection.UpdatedChanges", MessageArgs: [RolePart(updated.Role), updated.Name, changes.Part]),
+                    _ => Updated(id)(updated),
+                },
             $"No se pudo guardar la conexión {RoleLabel(connection.Role)} '{connection.Name}'",
             failureKey: "Activity.Failed.ConnectionSave", failureArgs: [RolePart(connection.Role), connection.Name],
             target: id);
+        return (result.Connection, result.CopiedTables);
+    }
+
+    // Nombre, tipo y configuración, para comparar antes y después de editar.
+    private static Dictionary<string, string?> AuditedFields(Connection connection) =>
+        new(connection.Config, StringComparer.Ordinal)
+        {
+            ["name"] = connection.Name,
+            ["type"] = connection.Type,
+        };
 
     private static Func<Connection?, AuditResult> Updated(string id) => updated => updated is null
         ? new AuditResult($"La conexión {id} no existe.", Outcome: AuditOutcome.Rejected, MessageKey: "Activity.Connection.NotFound", MessageArgs: [id])
@@ -189,15 +219,54 @@ public sealed class ConnectionService : IConnectionService
     private static EventPart RolePart(ConnectionRole role) =>
         new(role == ConnectionRole.Source ? "Activity.Connection.RoleSource" : "Activity.Connection.RoleDestination");
 
-    private async Task<(Connection? Connection, int CopiedTables)> UpdateCoreAsync(string id, Connection connection, CancellationToken cancellationToken)
+    private async Task<(Connection? Connection, int CopiedTables, AuditChanges? Changes)> UpdateCoreAsync(string id, Connection connection, CancellationToken cancellationToken)
     {
         var existing = _store.GetById(id);
         if (existing is null)
         {
-            return (null, 0);
+            return (null, 0, null);
         }
 
         var merged = Merge(existing, connection);
+
+        // Otro host, cuenta, base de datos, container o almacenamiento con un job en curso: el job
+        // seguiría en el sitio viejo y el siguiente en el nuevo. Se toma el lock de ejecución de cada
+        // pipeline que la usa (por id, siempre en el mismo orden) y se mantiene hasta guardar, copia del
+        // Parquet incluida.
+        var locks = new List<IDisposable>();
+        try
+        {
+            if (ChangedSecretTarget(existing.Config, merged.Config) is not null
+                || ParquetStorageOf(existing) != ParquetStorageOf(merged)
+                || !SameTarget(ParquetContainerOf(existing), ParquetContainerOf(merged))
+                || !SameTarget(existing.Config.GetValueOrDefault("database"), merged.Config.GetValueOrDefault("database"))
+                || !SameTarget(existing.Config.GetValueOrDefault("container"), merged.Config.GetValueOrDefault("container")))
+            {
+                foreach (var pipelineId in _pipelines.ListAll()
+                    .Where(p => p.SourceId == id || p.DestinationId == id)
+                    .Select(p => p.Id)
+                    .Order(StringComparer.Ordinal))
+                {
+                    locks.Add(await PipelineRunLock.AcquireAsync(_dataDir, pipelineId, PipelineRunLock.DefaultTimeout, cancellationToken));
+                    await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId,
+                        $"Hay un job en curso en el pipeline {pipelineId}, que usa esta conexión: espera a que termine o cancélalo antes de cambiar a dónde apunta.",
+                        "Common.ConnectionBusyRetarget", cancellationToken);
+                }
+            }
+
+            return await SaveMergedAsync(existing, merged, cancellationToken);
+        }
+        finally
+        {
+            foreach (var runLock in locks)
+            {
+                runLock.Dispose();
+            }
+        }
+    }
+
+    private async Task<(Connection? Connection, int CopiedTables, AuditChanges? Changes)> SaveMergedAsync(Connection existing, Connection merged, CancellationToken cancellationToken)
+    {
         var copied = existing.Role == ConnectionRole.Source
             && SameType(existing, merged)
             && ParquetStorageOf(existing) != ParquetStorageOf(merged)
@@ -205,13 +274,20 @@ public sealed class ConnectionService : IConnectionService
                 ? await CopyConsolidatedParquetAsync(existing, merged, cancellationToken)
                 : 0;
         _store.Save(merged);
-        return (SecretMasker.Mask(merged), copied);
+        return (SecretMasker.Mask(merged), copied, AuditChanges.Between(AuditedFields(existing), AuditedFields(merged), SecretMasker.IsSecretKey));
     }
 
     private static string ParquetStorageOf(Connection connection) =>
         AdlsClientFactory.KeepsParquetOnPortal(connection)
             ? AdlsClientFactory.PortalParquetStorage
             : AdlsClientFactory.AdlsParquetStorage;
+
+    // Una clave ausente y un valor vacío (lo que envía el formulario) apuntan al mismo sitio.
+    private static bool SameTarget(string? a, string? b) =>
+        string.Equals(string.IsNullOrWhiteSpace(a) ? null : a.Trim(), string.IsNullOrWhiteSpace(b) ? null : b.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private static string? ParquetContainerOf(Connection connection) =>
+        connection.Config.GetValueOrDefault("parquet_container") ?? connection.Config.GetValueOrDefault("destination_container");
 
     // En ADLS sin container de Parquet no hay nada que copiar.
     private static bool HasParquet(Connection connection) =>
@@ -278,11 +354,24 @@ public sealed class ConnectionService : IConnectionService
         return null;
     }
 
+    // Por qué el secreto guardado no se reutiliza: otro destino, o pasar a confiar en cualquier
+    // certificado del servidor (un MITM recibiría la contraseña guardada sin que nadie la escribiera).
+    private static string? SecretDropReason(
+        IReadOnlyDictionary<string, string?> existing,
+        IReadOnlyDictionary<string, string?> incoming)
+    {
+        static bool Trusts(IReadOnlyDictionary<string, string?> config) =>
+            bool.TryParse(config.GetValueOrDefault("trust_server_certificate"), out var trust) && trust;
+
+        return ChangedSecretTarget(existing, incoming)
+            ?? (Trusts(incoming) && !Trusts(existing) ? "trust_server_certificate" : null);
+    }
+
     private static Dictionary<string, string?> MergeConfig(
         IReadOnlyDictionary<string, string?> existing,
         IReadOnlyDictionary<string, string?> incoming)
     {
-        var keepSecrets = ChangedSecretTarget(existing, incoming) is null;
+        var keepSecrets = SecretDropReason(existing, incoming) is null;
         var merged = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         foreach (var (key, value) in existing)
         {

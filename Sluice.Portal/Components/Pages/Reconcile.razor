@@ -76,7 +76,8 @@
                                 <FluentMenu>
                                     <FluentButton slot="@FluentSlot.Trigger" Appearance="ButtonAppearance.Subtle" IconOnly="true"
                                                   IconStart="@(new Icons.Regular.Size20.MoreHorizontal())"
-                                                  Title="@L["Common.Actions"]" data-testid="@($"recon-actions-{context.Entity}")" />
+                                                  Title="@L["Common.Actions"]" aria-label="@($"{L["Common.Actions"]} {context.Entity}")"
+                                                  data-testid="@($"recon-actions-{context.Entity}")" />
                                     <FluentMenuList>
                                         <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity"
                                                            TestId="@($"recon-resync-{context.Entity}")" OnStarted="Load" />
@@ -146,7 +147,8 @@
                                     <FluentMenu>
                                         <FluentButton slot="@FluentSlot.Trigger" Appearance="ButtonAppearance.Subtle" IconOnly="true"
                                                       IconStart="@(new Icons.Regular.Size20.MoreHorizontal())"
-                                                      Title="@L["Common.Actions"]" data-testid="@($"values-actions-{context.Entity}")" />
+                                                      Title="@L["Common.Actions"]" aria-label="@($"{L["Common.Actions"]} {context.Entity}")"
+                                                      data-testid="@($"values-actions-{context.Entity}")" />
                                         <FluentMenuList>
                                             @if (context.Error is null)
                                             {

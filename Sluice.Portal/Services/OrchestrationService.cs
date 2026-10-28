@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
+using Sluice.Portal.Services.Adls;
 using Sluice.Portal.Services.Logging;
 using Sluice.Portal.Services.Pipeline;
 using Sluice.Portal.Services.Stores;
@@ -70,6 +71,8 @@ public sealed class OrchestrationService : IOrchestrationService
     private readonly PipelineStateStore? _stateStore;
     private readonly RunQueueService? _runQueue;
     private readonly SettingsStore? _settings;
+    private readonly ConnectionStore? _connections;
+    private readonly IAdlsClientFactory? _adlsFactory;
 
     public OrchestrationService(
         IOptions<AppOptions> options,
@@ -83,12 +86,16 @@ public sealed class OrchestrationService : IOrchestrationService
         IAuditLog audit,
         PipelineStateStore? stateStore = null,
         RunQueueService? runQueue = null,
-        SettingsStore? settings = null)
+        SettingsStore? settings = null,
+        ConnectionStore? connections = null,
+        IAdlsClientFactory? adlsFactory = null)
     {
         _audit = audit;
+        _connections = connections;
         _stateStore = stateStore;
         _runQueue = runQueue;
         _settings = settings;
+        _adlsFactory = adlsFactory;
         _options = options.Value;
         _pipelines = pipelines;
         _jobs = jobs;
@@ -273,8 +280,15 @@ public sealed class OrchestrationService : IOrchestrationService
 
     private async Task<Job> StartAsync(AuditActor actor, string pipelineId, JobType type, string? entity, CancellationToken cancellationToken)
     {
-        _ = _pipelines.Get(pipelineId)
+        var pipeline = _pipelines.Get(pipelineId)
             ?? throw new LocalizedException("Pipeline not found.", "Error.PipelineNotFound");
+
+        // Un destino al que la migración le quitó la connection_string sin poder pasarla a campos no
+        // arranca nada (ni Force): antes de que el Ingest escriba nada que SQL no podría cargar.
+        if (_connections?.GetById(pipeline.DestinationId) is { } destination)
+        {
+            ConnectionFieldsRequiredException.ThrowIfMarked(destination);
+        }
 
         // Nota: Pipeline.Enabled significa "scheduler activo", NO "ejecutable". El Run manual
         // siempre se permite (crear pipeline → correr a mano → activar scheduler al validar).
@@ -475,7 +489,7 @@ public sealed class OrchestrationService : IOrchestrationService
 
     private async Task<Job?> RestorePointCoreAsync(AuditActor actor, string pipelineId, string snapshot, CancellationToken cancellationToken)
     {
-        _ = _pipelines.Get(pipelineId)
+        var pipeline = _pipelines.Get(pipelineId)
             ?? throw new LocalizedException("Pipeline not found.", "Error.PipelineNotFound");
         var stateStore = _stateStore
             ?? throw new InvalidOperationException("Restoring a restore point requires the pipeline state store.");
@@ -512,6 +526,28 @@ public sealed class OrchestrationService : IOrchestrationService
             throw new LocalizedException(
                 $"El punto {snapshot} ya no se conserva (la poda se llevó sus versiones): vuelve a abrir la lista de puntos.",
                 "Error.RestorePointPruned", snapshot);
+        }
+
+        // Rebobinar es volver a leer del lago los snapshots posteriores al punto. La retención de origen
+        // borra primero los más antiguos, así que si el más antiguo que queda es posterior al punto
+        // pueden faltar algunos de los que lo siguen, y sus cambios se perderían sin aviso. Solo se mira
+        // si la retención borra de verdad (o settings.json no deja saberlo): si no, el lago los conserva y
+        // el restore no depende de que el origen responda. El restore a medias del mismo punto se deja
+        // terminar: ya rebobinó el estado.
+        if (state.RestoreInProgress?.Snapshot != snapshot
+            && _adlsFactory is not null
+            && (_settings is null
+                || !_settings.TryGet(out var retention)
+                || (retention.SourceSnapshotRetentionDays > 0 && !retention.SourceSnapshotRetentionDryRun)))
+        {
+            var adls = await _adlsFactory.CreateAsync(pipeline.SourceId, cancellationToken);
+            var oldest = (await adls.ListSnapshotFoldersAsync(cancellationToken))
+                .Where(ExcludedEntities.IsSnapshotFolder)
+                .Min(StringComparer.Ordinal);
+            if (oldest is null || string.CompareOrdinal(oldest, snapshot) > 0)
+            {
+                throw new RestoreSnapshotsMissingException(snapshot, oldest);
+            }
         }
 
         var plan = ParquetVersions.Plan(versions, state.Tables, snapshot);
@@ -666,11 +702,13 @@ public sealed class OrchestrationService : IOrchestrationService
             ],
         };
 
+        // Divergencia "antes" desde el último reporte, para el historial de remediación (un registro
+        // por tabla, todos con el mismo JobId). Se lee antes de crear el job: si fallara después, el
+        // job quedaba en Running sin tarea hasta que el vigilante lo cerraba.
+        var latest = _reports.GetLatestReconcile(pipelineId);
+
         _jobs.Create(job);
 
-        // Divergencia "antes" desde el último reporte, para el historial de remediación (un registro
-        // por tabla, todos con el mismo JobId).
-        var latest = _reports.GetLatestReconcile(pipelineId);
         foreach (var entity in entities)
         {
             var before = latest?.Entities

@@ -17,6 +17,7 @@
 @inject IDialogService DialogService
 @inject IJSRuntime Js
 @inject NavigationManager Nav
+@inject BrowserTime Time
 
 @inject IStringLocalizer<SharedResource> L
 
@@ -65,10 +66,11 @@
             <TemplateColumn Title="@L["Common.Status"]">
                 <StatusBadge Status="@context.Status.ToString().ToLowerInvariant()" />
             </TemplateColumn>
-            <PropertyColumn Property="@(j => j.StartedAt)" Title="@L["Page.Jobs.ColumnStarted"]" Format="g" Class="cell-nowrap" />
+            <PropertyColumn Property="@(j => Time.Format(j.StartedAt))" Title="@L["Page.Jobs.ColumnStarted"]" Class="cell-nowrap" />
             <TemplateColumn Title="@L["Common.Actions"]">
                 <FluentMenu>
-                    <FluentMenuButton Appearance="ButtonAppearance.Outline" data-testid="@($"job-actions-{context.Id}")" Label="@L["Common.Actions"]" />
+                    <FluentMenuButton Appearance="ButtonAppearance.Outline" data-testid="@($"job-actions-{context.Id}")" Label="@L["Common.Actions"]"
+                                      aria-label="@($"{L["Common.Actions"]} {JobIdLabels.Short(context.Id)}")" />
                     <FluentMenuList>
                         <FluentMenuItem data-testid="@($"job-details-{context.Id}")" OnClick="@(() => Nav.NavigateTo($"/jobs/{context.Id}"))">@L["Common.Details"]</FluentMenuItem>
                         <FluentMenuItem data-testid="@($"job-report-{context.Id}")" OnClick="@(() => GenerateReportAsync(context.Id))">@L["Page.Jobs.Report"]</FluentMenuItem>
@@ -104,13 +106,25 @@
 
     protected override void OnInitialized() => Load();
 
+    // Las fechas y los días del filtro van en la zona del navegador, que solo se conoce con el
+    // circuito conectado: al conocerla se vuelve a cargar.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && await Time.InitAsync())
+        {
+            Load();
+            StateHasChanged();
+        }
+    }
+
     private void Load()
     {
         var status = ParseStatus(_statusFilter);
+        var range = _range with { Zone = Time.Zone };
         _totalCount = JobService.Count(
             string.IsNullOrWhiteSpace(_pipelineFilter) ? null : _pipelineFilter,
             status,
-            _range);
+            range);
         _totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
         if (_page > _totalPages)
         {
@@ -122,20 +136,22 @@
             PageSize,
             string.IsNullOrWhiteSpace(_pipelineFilter) ? null : _pipelineFilter,
             status,
-            _range).ToList();
+            range).ToList();
         _pipelineNames = PipelineService.List().ToDictionary(p => p.Id, p => p.Name);
     }
 
     // Un pipeline borrado ya no tiene nombre: se muestra su id.
     private string PipelineName(string id) => _pipelineNames.GetValueOrDefault(id) ?? id;
 
-    // Mismos filtros que la tabla, en la query de /api/jobs/export.
+    // Mismos filtros que la tabla, en la query de /api/jobs/export, y la misma zona: el CSV filtra
+    // los días y escribe las horas como la tabla.
     private string ExportUrl => QueryHelpers.AddQueryString("/api/jobs/export", new Dictionary<string, string?>
     {
         ["pipelineId"] = string.IsNullOrWhiteSpace(_pipelineFilter) ? null : _pipelineFilter,
         ["status"] = string.IsNullOrWhiteSpace(_statusFilter) ? null : _statusFilter,
         ["from"] = _range.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         ["to"] = _range.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        ["tz"] = Time.Zone.Id,
     });
 
     private void OnPageChanged(int page)

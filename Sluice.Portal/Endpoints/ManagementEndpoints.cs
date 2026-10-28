@@ -57,6 +57,10 @@ public static class ManagementEndpoints
             {
                 return (await svc.UpdateAsync(AuditActor.FromHttp(http), id, connection, ct)).Connection is { } c ? Results.Ok(c) : Results.NotFound();
             }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
+            }
             catch (InvalidOperationException ex)
             {
                 return Results.BadRequest(new { error = ex.Message });
@@ -97,11 +101,15 @@ public static class ManagementEndpoints
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid pipeline.");
             }
         });
-        api.MapPut("/pipelines/{id}", (string id, PipelineModel pipeline, HttpContext http, IPipelineService svc) =>
+        api.MapPut("/pipelines/{id}", async (string id, PipelineModel pipeline, HttpContext http, IPipelineService svc, CancellationToken ct) =>
         {
             try
             {
-                return svc.Update(AuditActor.FromHttp(http), id, pipeline) is { } p ? Results.Ok(p) : Results.NotFound();
+                return await svc.UpdateAsync(AuditActor.FromHttp(http), id, pipeline, ct) is { } p ? Results.Ok(p) : Results.NotFound();
+            }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
             }
             catch (InvalidOperationException ex)
             {
@@ -133,6 +141,10 @@ public static class ManagementEndpoints
             {
                 var result = await svc.ResetAsync(AuditActor.FromHttp(http), id, truncateSql, ct);
                 return Results.Ok(result);
+            }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
             }
             catch (InvalidOperationException ex)
             {
@@ -174,6 +186,10 @@ public static class ManagementEndpoints
                 var job = await o.ReloadFromParquetAsync(AuditActor.FromHttp(http), id, ct);
                 return Results.Accepted($"/api/jobs/{job.Id}", job);
             }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
+            }
             catch (InvalidOperationException ex)
             {
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid operation.");
@@ -195,6 +211,10 @@ public static class ManagementEndpoints
                     return Results.Accepted(uri: null, o.QueueRun(AuditActor.FromHttp(http), id, type ?? JobType.Incremental));
                 }
             }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
+            }
             catch (InvalidOperationException ex)
             {
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid operation.");
@@ -212,6 +232,10 @@ public static class ManagementEndpoints
                 var job = await o.RunPipelineAsync(AuditActor.FromHttp(http), id, JobType.Reconcile, ct);
                 return Results.Accepted($"/api/jobs/{job.Id}", job);
             }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
+            }
             catch (InvalidOperationException ex)
             {
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid operation.");
@@ -223,6 +247,10 @@ public static class ManagementEndpoints
             {
                 var job = await o.RunPipelineAsync(AuditActor.FromHttp(http), id, JobType.Diff, ct);
                 return Results.Accepted($"/api/jobs/{job.Id}", job);
+            }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
             }
             catch (InvalidOperationException ex)
             {
@@ -236,6 +264,10 @@ public static class ManagementEndpoints
             {
                 var job = await o.CompareValuesAsync(AuditActor.FromHttp(http), id, entity, ct);
                 return Results.Accepted($"/api/jobs/{job.Id}", job);
+            }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
             }
             catch (InvalidOperationException ex)
             {
@@ -252,17 +284,39 @@ public static class ManagementEndpoints
         // Gestión del parquet durable en ADLS (Approach B): listar / descargar / borrar.
         api.MapGet("/pipelines/{id}/parquet", async (string id, IParquetArtifactService parquet, CancellationToken ct) =>
             Results.Ok(await parquet.ListAsync(id, ct)));
-        api.MapGet("/pipelines/{id}/parquet/download", async (string id, string path, IParquetArtifactService parquet, CancellationToken ct) =>
+        // La descarga queda en el registro: el parquet trae los datos del cliente.
+        api.MapGet("/pipelines/{id}/parquet/download", async (string id, string path, HttpContext http, IParquetArtifactService parquet, IAuditLog audit, CancellationToken ct) =>
         {
             var stream = await parquet.OpenAsync(id, path, ct);
-            return stream is null
-                ? Results.NotFound()
-                : Results.Stream(stream, "application/octet-stream", path.Split('/').Last());
+            if (stream is null)
+            {
+                audit.Record(AuditActor.FromHttp(http), "parquet.download", AuditOutcome.Rejected, id, null, path,
+                    $"No se descargó {path} del pipeline {id}: no existe o no es de ese pipeline.", null, "Activity.Parquet.DownloadNotFound", path, id);
+                return Results.NotFound();
+            }
+
+            audit.Record(AuditActor.FromHttp(http), "parquet.download", AuditOutcome.Ok, id, null, path,
+                $"Descargó {path} del pipeline {id}.", null, "Activity.Parquet.Downloaded", path, id);
+            return Results.Stream(stream, "application/octet-stream", path.Split('/').Last());
         });
         api.MapDelete("/pipelines/{id}/parquet", async (string id, string path, HttpContext http, IParquetArtifactService parquet, CancellationToken ct) =>
-            await parquet.DeleteAsync(AuditActor.FromHttp(http), id, path, ct)
-                ? Results.NoContent()
-                : Results.BadRequest(new { error = "Ruta de parquet inválida para este pipeline." }));
+        {
+            try
+            {
+                return await parquet.DeleteAsync(AuditActor.FromHttp(http), id, path, ct)
+                    ? Results.NoContent()
+                    : Results.BadRequest(new { error = "Ruta de parquet inválida para este pipeline." });
+            }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                // El consolidado de una tabla que sigue en el pipeline.
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
 
         api.MapGet("/jobs", (int? page, int? pageSize, string? pipelineId, JobStatus? status, IJobService svc) =>
         {
@@ -305,33 +359,39 @@ public static class ManagementEndpoints
 
         // Exportaciones CSV de Logs y Jobs: todos los registros que cumplen los filtros de la página,
         // no solo la página visible.
-        // tz: la zona del navegador que usa la tabla de Logs (sin ella o si no se reconoce, la del
-        // servidor), para que el CSV filtre los días y escriba las horas igual que la tabla.
-        api.MapGet("/logs/export", (string? source, string? level, string? search, DateOnly? from, DateOnly? to, string? tz, IActivityLog log, IStringLocalizer<SharedResource> l) =>
+        // tz: la zona del navegador que usa la tabla de Logs o de Jobs (sin ella o si no se reconoce,
+        // la del servidor), para que el CSV filtre los días y escriba las horas igual que la tabla.
+        api.MapGet("/logs/export", (string? source, string? level, string? search, DateOnly? from, DateOnly? to, string? tz, HttpContext http, IActivityLog log, IAuditLog audit, IStringLocalizer<SharedResource> l, IPipelineService pipelines) =>
         {
             var zone = !string.IsNullOrWhiteSpace(tz) && TimeZoneInfo.TryFindSystemTimeZoneById(tz, out var found) ? found : null;
-            // La búsqueda encuentra también por el texto pintado en el idioma de la petición, como
-            // la tabla; la columna del mensaje es el texto guardado.
-            var entries = log.Query(new ActivityLogFilter(NullIfBlank(source), NullIfBlank(level), NullIfBlank(search), new DateRange(from, to), zone, e => EventText.Render(l, e)));
+            // La búsqueda encuentra también por el texto pintado en el idioma de la petición y con el
+            // nombre del pipeline, como la tabla; la columna del mensaje es el texto guardado.
+            var pipelineNames = pipelines.List().ToDictionary(p => p.Id, p => p.Name);
+            var entries = log.Query(new ActivityLogFilter(NullIfBlank(source), NullIfBlank(level), NullIfBlank(search), new DateRange(from, to), zone, e => EventText.Render(l, e, pipelineNames)));
+            // Después de la consulta, para que la propia exportación no salga en el CSV.
+            audit.Record(AuditActor.FromHttp(http), "logs.export", AuditOutcome.Ok, null, null, null,
+                $"Exportó {entries.Count} entrada(s) del registro de actividad.", null, "Activity.Logs.Exported", entries.Count);
             return Csv("logs", writer =>
             {
-                CsvWriter.WriteRow(writer, [l["Page.Logs.Col.Date"].Value, l["Page.Logs.Col.Source"].Value, l["Page.Logs.Col.Actor"].Value, l["Page.Logs.Col.Level"].Value, l["Page.Logs.Col.Action"].Value, l["Page.Logs.Col.Message"].Value, l["Page.Logs.Col.Pipeline"].Value, l["Page.Logs.Col.Job"].Value, l["Page.Logs.Col.Host"].Value]);
+                CsvWriter.WriteRow(writer, [l["Page.Logs.Col.Date"].Value, l["Page.Logs.Col.Source"].Value, l["Page.Logs.Col.Actor"].Value, l["Page.Logs.Col.Level"].Value, l["Page.Logs.Col.Action"].Value, l["Page.Logs.Col.Outcome"].Value, l["Page.Logs.Col.Target"].Value, l["Page.Logs.Col.Message"].Value, l["Page.Logs.Col.Pipeline"].Value, l["Page.Logs.Col.Job"].Value, l["Page.Logs.Col.Host"].Value]);
                 foreach (var e in entries)
                 {
                     var sourceLabel = e.Source == "user" ? l["Page.Logs.Source.User"].Value : l["Page.Logs.Source.System"].Value;
-                    CsvWriter.WriteRow(writer, [CsvDate(e.Timestamp, zone), sourceLabel, e.ActorLabel, e.Level.ToLowerInvariant(), e.Action, e.Message, e.PipelineId, e.JobId, e.HostName]);
+                    CsvWriter.WriteRow(writer, [CsvDate(e.Timestamp, zone), sourceLabel, e.ActorLabel, EventLevelLabels.Get(l, e.Level), e.Action, e.Outcome?.ToString().ToLowerInvariant(), e.Target, e.Message, e.PipelineId, e.JobId, e.HostName]);
                 }
             });
         });
-        api.MapGet("/jobs/export", (string? pipelineId, JobStatus? status, DateOnly? from, DateOnly? to, IJobService svc, IStringLocalizer<SharedResource> l) =>
+        api.MapGet("/jobs/export", (string? pipelineId, JobStatus? status, DateOnly? from, DateOnly? to, string? tz, IJobService svc, IStringLocalizer<SharedResource> l) =>
         {
-            var jobs = svc.List(1, int.MaxValue, NullIfBlank(pipelineId), status, new DateRange(from, to));
+            var zone = !string.IsNullOrWhiteSpace(tz) && TimeZoneInfo.TryFindSystemTimeZoneById(tz, out var found) ? found : null;
+            // Del índice: el CSV no necesita los eventos ni las tablas de cada job.
+            var jobs = svc.ListIndex(NullIfBlank(pipelineId), status, new DateRange(from, to, zone));
             return Csv("jobs", writer =>
             {
                 CsvWriter.WriteRow(writer, [l["Page.Jobs.ColumnJob"].Value, l["Common.Pipeline"].Value, l["Page.Jobs.ColumnType"].Value, l["Common.Status"].Value, l["Page.Jobs.ColumnStarted"].Value, l["Page.Jobs.ColumnFinished"].Value]);
                 foreach (var j in jobs)
                 {
-                    CsvWriter.WriteRow(writer, [j.Id, j.PipelineId, JobTypeLabels.Get(l, j.Type), JobStatusLabels.Get(l, j.Status), CsvDate(j.StartedAt), j.FinishedAt is { } f ? CsvDate(f) : null]);
+                    CsvWriter.WriteRow(writer, [j.Id, j.PipelineId, JobTypeLabels.Get(l, j.Type), JobStatusLabels.Get(l, j.Status), CsvDate(j.StartedAt, zone), j.FinishedAt is { } f ? CsvDate(f, zone) : null]);
                 }
             });
         });
@@ -370,6 +430,10 @@ public static class ManagementEndpoints
             {
                 var job = await o.RetryJobAsync(AuditActor.FromHttp(http), id, ct);
                 return Results.Accepted($"/api/jobs/{job.Id}", job);
+            }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
             }
             catch (InvalidOperationException ex)
             {

@@ -614,7 +614,8 @@
     private string Plural(string key, int count) =>
         count == 1 ? L[key + "One"].Value : L[key, count.ToString("N0")].Value;
 
-    // Resumen del grupo desde el paso principal de la etapa ("202 snapshots procesados").
+    // Resumen del grupo desde el paso principal de la etapa ("202 snapshots procesados", "1
+    // snapshot procesado").
     private string? GroupSummary(string key)
     {
         var (stepKey, resource) = key switch
@@ -625,7 +626,7 @@
             _ => ("", ""),
         };
         var step = _flow!.Steps.FirstOrDefault(s => s.Key == stepKey);
-        return step is { Done: > 0 } ? L[resource, step.Done.ToString("N0")].Value : null;
+        return step is { Done: > 0 } ? Plural(resource, step.Done) : null;
     }
 
     // ---- Acciones ----

@@ -184,6 +184,7 @@ public sealed class PipelineResetService : IPipelineResetService
         deleted += await _parquet.DeleteVersionsAsync(pipelineId, cancellationToken);
 
         _stateStore.Save(new PipelineState { PipelineId = pipelineId });
+        new ConsolidatedCache(_options.DataDir).RemovePipeline(pipelineId);
 
         // Lo pedido antes del reset contaba con el estado que se acaba de descartar. Solo aquí: un
         // reset que falla al truncar no descarta nada y conserva lo encolado.

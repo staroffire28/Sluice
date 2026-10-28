@@ -71,6 +71,11 @@
     gap: 12px;
 }
 
+/* Sin la cifra de almacenamiento de ADLS (origen local): tres columnas. */
+.dash-stats--no-storage {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .dash-stat {
     display: flex;
     flex-direction: column;

@@ -16,15 +16,16 @@
     <section class="landing__hero">
         @* Animación de las compuertas (wwwroot/sluice-flow.js), detrás del texto del panel. *@
         <canvas class="landing__flow" data-sluice-flow aria-hidden="true"></canvas>
+        @* El modo va junto a la marca, arriba: abajo quedaba encima de las barras de la animación. *@
         <div class="landing__brand">
             <img src="logo.svg" alt="" width="40" height="40" />
             <span>@L["App.Title"]</span>
+            <p class="landing__meta">@(Options.Value.IsDistributed ? L["Login.Mode.Distributed"] : L["Login.Mode.Local"])</p>
         </div>
         <div class="landing__pitch">
             <h1>@L["Login.Hero.Title"]</h1>
             <p>@L["Login.Hero.Text"]</p>
         </div>
-        <p class="landing__meta">@(Options.Value.IsDistributed ? L["Login.Mode.Distributed"] : L["Login.Mode.Local"])</p>
     </section>
 
     <section class="landing__panel">

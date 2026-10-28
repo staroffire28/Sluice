@@ -14,6 +14,20 @@ public static class EventText
 
     public static string Render(IStringLocalizer l, ActivityLogEntry e) => Render(l, e.MessageKey, e.MessageArgs, e.Message);
 
+    // El mensaje de un registro con el nombre del pipeline en vez de su id: se sustituyen los
+    // argumentos que son exactamente el id (no el texto, que lo lleva también dentro del id del
+    // job). Lo usan la tabla de Logs y la búsqueda de su CSV, para que encuentren por el mismo texto.
+    public static string Render(IStringLocalizer l, ActivityLogEntry e, IReadOnlyDictionary<string, string> pipelineNames)
+    {
+        if (e.PipelineId is not { } id || e.MessageArgs is not { } args || !pipelineNames.TryGetValue(id, out var name))
+        {
+            return Render(l, e);
+        }
+
+        var named = args.Select(a => IsText(a, id) ? name : a).ToArray();
+        return Render(l, e.MessageKey, named, e.Message);
+    }
+
     public static string Render(IStringLocalizer l, string? key, object?[]? args, string fallback) =>
         key is null ? fallback : TryRender(l, key, args) ?? fallback;
 
@@ -83,6 +97,13 @@ public static class EventText
         };
         return true;
     }
+
+    private static bool IsText(object? arg, string value) => arg switch
+    {
+        string s => s == value,
+        JsonElement { ValueKind: JsonValueKind.String } json => json.GetString() == value,
+        _ => false,
+    };
 }
 
 // Un trozo de un texto compuesto (p. ej. las partes opcionales del cierre del ingest): se guarda
