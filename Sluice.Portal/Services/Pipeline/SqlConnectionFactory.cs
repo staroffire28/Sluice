@@ -49,15 +49,9 @@ public sealed class SqlConnectionFactory : ISqlConnectionFactory
     // Las sentencias del pipeline corren sin límite de tiempo (los comandos heredan el
     // CommandTimeout de la conexión): un MERGE, un borrado de huérfanas o un índice sobre una tabla
     // grande pasan de los 30 s por defecto. Un posible bloqueo no se corta: lo avisa SqlStallWatch.
-    // Una connection_string con su propio Command Timeout se respeta.
     internal static string ForPipeline(string connectionString)
     {
-        var builder = new SqlConnectionStringBuilder(connectionString);
-        if (!builder.ShouldSerialize("Command Timeout"))
-        {
-            builder.CommandTimeout = 0;
-        }
-
+        var builder = new SqlConnectionStringBuilder(connectionString) { CommandTimeout = 0 };
         return builder.ConnectionString;
     }
 

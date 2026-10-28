@@ -41,13 +41,15 @@ public sealed class SnapshotRetentionService
         _logger = logger;
     }
 
-    // Lógica pura: clasifica cada snapshot y decide elegibles para purga.
+    // Lógica pura: clasifica cada snapshot y decide elegibles para purga. protectFrom: el primer
+    // snapshot que aún tiene que releer una tabla reanudada (SharedBackfillFrom); desde él, protegidos.
     public static SnapshotRetentionAnalysis Analyze(
         DateTimeOffset now,
         AppSettings settings,
         IReadOnlyList<string> allSnapshots,
         string? lastProcessed,
-        SnapshotSelector.SelectionResult selection)
+        SnapshotSelector.SelectionResult selection,
+        string? protectFrom = null)
     {
         var dispositions = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var name in allSnapshots.Where(ExcludedEntities.IsSnapshotFolder))
@@ -112,10 +114,17 @@ public sealed class SnapshotRetentionService
                 continue;
             }
 
+            // Pendiente de releer por una tabla reanudada: cuenta en el piso, pero no se purga.
+            if (protectFrom is not null && string.CompareOrdinal(snapshot, protectFrom) >= 0)
+            {
+                dispositions[snapshot] = DispositionProtected;
+                continue;
+            }
+
+            // Sin fecha legible no se puede saber su antigüedad: se conserva.
             if (!SnapshotFolderTime.TryParse(snapshot, out var timestamp))
             {
-                dispositions[snapshot] = DispositionEligible;
-                eligible.Add(snapshot);
+                dispositions[snapshot] = DispositionRetained;
                 continue;
             }
 
@@ -158,10 +167,22 @@ public sealed class SnapshotRetentionService
         var totalWouldDelete = 0;
         var totalSkipped = 0;
         var totalSkippedCert = 0;
+        var sweptSourceIds = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var pipeline in _pipelines.List().Where(p => p.Enabled))
         {
-            if (runningPipelineIds.Contains(pipeline.Id))
+            // La purga es por fuente: una sola pasada por fuente aunque la lean varios pipelines,
+            // también si se omitió por job en ejecución o certificación incompleta.
+            if (!sweptSourceIds.Add(pipeline.SourceId))
+            {
+                continue;
+            }
+
+            var sourcePipelineIds = _pipelines.List()
+                .Where(p => p.SourceId == pipeline.SourceId)
+                .Select(p => p.Id)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (runningPipelineIds.Overlaps(sourcePipelineIds))
             {
                 totalSkipped++;
                 continue;
@@ -173,30 +194,46 @@ public sealed class SnapshotRetentionService
                 var parquetStore = await _adlsFactory.CreateParquetStoreAsync(pipeline.SourceId, cancellationToken);
                 var allSnapshots = await adls.ListSnapshotFoldersAsync(cancellationToken);
                 var currentFolder = await adls.GetSettledSnapshotAsync(cancellationToken);
-                var state = _pipelines.GetState(pipeline.Id);
+                var floor = SharedLastProcessed(_pipelines, pipeline.SourceId);
                 var selection = SnapshotSelector.Select(
                     allSnapshots,
-                    state.LastProcessedSnapshot,
+                    floor,
                     currentFolder);
 
-                var analysis = Analyze(now, settings, allSnapshots, state.LastProcessedSnapshot, selection);
+                var analysis = Analyze(now, settings, allSnapshots, floor, selection, SharedBackfillFrom(_pipelines, pipeline.SourceId));
                 if (analysis.EligibleForPurge.Count == 0)
                 {
                     continue;
                 }
 
+                // Las carpetas son de la fuente: cada pipeline que la lee (activo o no) debe tener su
+                // parquet consolidado antes de purgar.
                 if (settings.SourceSnapshotRetentionRequireParquet)
                 {
-                    var cert = await CertifyParquetAsync(pipeline.Id, parquetStore, state, cancellationToken);
-                    if (!cert.IsComplete)
+                    var certified = true;
+                    foreach (var sourcePipelineId in sourcePipelineIds)
                     {
-                        totalSkippedCert++;
-                        _activity.LogSystem(
-                            "snapshot-retention.skip",
-                            $"Pipeline {pipeline.Id}: purga omitida — faltan parquet consolidados: " +
-                            $"{string.Join(", ", cert.MissingEntities)}.",
-                            pipeline.Id, null, "warning",
-                            "Activity.SnapshotRetention.Skip", pipeline.Id, string.Join(", ", cert.MissingEntities));
+                        var cert = await CertifyParquetAsync(
+                            sourcePipelineId,
+                            parquetStore,
+                            _pipelines.GetState(sourcePipelineId),
+                            cancellationToken);
+                        if (!cert.IsComplete)
+                        {
+                            totalSkippedCert++;
+                            _activity.LogSystem(
+                                "snapshot-retention.skip",
+                                $"Pipeline {sourcePipelineId}: purga omitida — faltan parquet consolidados: " +
+                                $"{string.Join(", ", cert.MissingEntities)}.",
+                                sourcePipelineId, null, "warning",
+                                "Activity.SnapshotRetention.Skip", sourcePipelineId, string.Join(", ", cert.MissingEntities));
+                            certified = false;
+                            break;
+                        }
+                    }
+
+                    if (!certified)
+                    {
                         continue;
                     }
                 }
@@ -204,7 +241,7 @@ public sealed class SnapshotRetentionService
                 var deleted = 0;
                 foreach (var folder in analysis.EligibleForPurge)
                 {
-                    if (_jobs.ListRunning().Any(j => j.PipelineId == pipeline.Id))
+                    if (_jobs.ListRunning().Any(j => sourcePipelineIds.Contains(j.PipelineId)))
                     {
                         _logger.LogInformation(
                             "Retención snapshots: purga interrumpida en {PipelineId} — job en ejecución.",
@@ -212,12 +249,12 @@ public sealed class SnapshotRetentionService
                         break;
                     }
 
-                    var stateNow = _pipelines.GetState(pipeline.Id);
+                    var floorNow = SharedLastProcessed(_pipelines, pipeline.SourceId);
                     var selectionNow = SnapshotSelector.Select(
                         allSnapshots,
-                        stateNow.LastProcessedSnapshot,
+                        floorNow,
                         currentFolder);
-                    if (!Analyze(now, settings, allSnapshots, stateNow.LastProcessedSnapshot, selectionNow)
+                    if (!Analyze(now, settings, allSnapshots, floorNow, selectionNow, SharedBackfillFrom(_pipelines, pipeline.SourceId))
                         .EligibleForPurge.Contains(folder, StringComparer.Ordinal))
                     {
                         continue;
@@ -308,6 +345,47 @@ public sealed class SnapshotRetentionService
         };
     }
 
+    // Varios pipelines pueden leer la misma fuente: el suelo de la purga es el snapshot procesado
+    // más antiguo entre todos ellos (activos o no). Si alguno aún no tiene estado, null: no se purga.
+    public static string? SharedLastProcessed(IPipelineService pipelines, string sourceId)
+    {
+        string? floor = null;
+        foreach (var pipeline in pipelines.List().Where(p => p.SourceId == sourceId))
+        {
+            var last = pipelines.GetState(pipeline.Id).LastProcessedSnapshot;
+            if (string.IsNullOrWhiteSpace(last))
+            {
+                return null;
+            }
+
+            if (floor is null || string.CompareOrdinal(last, floor) < 0)
+            {
+                floor = last;
+            }
+        }
+
+        return floor;
+    }
+
+    // Segundo suelo: una tabla reanudada relee desde el primer snapshot que se saltó en pausa
+    // (PendingBackfill). El más antiguo de los pipelines que leen la fuente, o null si no hay ninguno.
+    public static string? SharedBackfillFrom(IPipelineService pipelines, string sourceId)
+    {
+        string? from = null;
+        foreach (var pipeline in pipelines.List().Where(p => p.SourceId == sourceId))
+        {
+            foreach (var snapshot in pipelines.GetState(pipeline.Id).PendingBackfill.Values)
+            {
+                if (from is null || string.CompareOrdinal(snapshot, from) < 0)
+                {
+                    from = snapshot;
+                }
+            }
+        }
+
+        return from;
+    }
+
     public static async Task<ParquetCertificationResult> CertifyParquetAsync(
         string pipelineId,
         IParquetStore parquetStore,
@@ -318,13 +396,7 @@ public sealed class SnapshotRetentionService
         if (entities.Count == 0)
         {
             var listed = await parquetStore.ListParquetAsync($"{pipelineId}/", cancellationToken);
-            entities = listed
-                .Select(a => a.Path)
-                .Where(p => p.Count(c => c == '/') == 1 && p.EndsWith(".parquet", StringComparison.OrdinalIgnoreCase))
-                .Select(p => Path.GetFileNameWithoutExtension(p.Split('/').Last()))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(e => e, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            entities = ConsolidatedEntities(listed);
         }
 
         var missing = new List<string>();
@@ -339,6 +411,33 @@ public sealed class SnapshotRetentionService
 
         return new ParquetCertificationResult(missing.Count == 0, missing);
     }
+
+    // Para quien ya tiene el listado del pipeline (el Panel): diferencia de conjuntos contra ese
+    // listado en vez de un Exists por tabla.
+    public static ParquetCertificationResult CertifyParquet(
+        string pipelineId,
+        PipelineState state,
+        IReadOnlyList<ParquetArtifact> listed)
+    {
+        var existing = listed.Select(a => a.Path).ToHashSet(StringComparer.Ordinal);
+        var entities = state.Tables.Count == 0
+            ? ConsolidatedEntities(listed)
+            : state.Tables.Keys.OrderBy(e => e, StringComparer.OrdinalIgnoreCase).ToList();
+        var missing = entities
+            .Where(e => !existing.Contains(IngestManifestStore.GetConsolidatedBlobPath(pipelineId, e)))
+            .ToList();
+
+        return new ParquetCertificationResult(missing.Count == 0, missing);
+    }
+
+    private static List<string> ConsolidatedEntities(IReadOnlyList<ParquetArtifact> listed) =>
+        listed
+            .Select(a => a.Path)
+            .Where(p => p.Count(c => c == '/') == 1 && p.EndsWith(".parquet", StringComparison.OrdinalIgnoreCase))
+            .Select(p => Path.GetFileNameWithoutExtension(p.Split('/').Last()))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(e => e, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 }
 
 public sealed record SnapshotRetentionAnalysis(

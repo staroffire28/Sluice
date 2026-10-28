@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 
@@ -9,11 +10,16 @@ public abstract class JsonFileStore<T>
     private readonly AppOptions _options;
     private readonly string _subDirectory;
     private readonly object _lock = new();
+    private readonly ILogger _logger;
+    // Ficheros ilegibles ya avisados, con la fecha de modificación que tenían: un aviso por versión
+    // del fichero, no en cada listado.
+    private readonly Dictionary<string, DateTime> _unreadableWarned = new(StringComparer.OrdinalIgnoreCase);
 
-    protected JsonFileStore(IOptions<AppOptions> options, string subDirectory)
+    protected JsonFileStore(IOptions<AppOptions> options, string subDirectory, ILogger? logger = null)
     {
         _options = options.Value;
         _subDirectory = subDirectory;
+        _logger = logger ?? NullLogger.Instance;
         Directory.CreateDirectory(GetDirectory());
     }
 
@@ -45,8 +51,9 @@ public abstract class JsonFileStore<T>
 
     // Un archivo corrupto (o a medio escribir por otro proceso) se omite en vez de tumbar la
     // lista entera: sin esto, un solo JSON malo dejaba sin lista de jobs, scheduler incluido.
-    // Otros errores (p. ej. secretos que no se pueden descifrar) se siguen propagando.
-    private static T? TryDeserialize(string path, Func<string, T?> deserialize)
+    // Otros errores (p. ej. secretos que no se pueden descifrar) se siguen propagando. El omitido
+    // deja un aviso en el log, para que no desaparezca de los listados sin rastro.
+    private T? TryDeserialize(string path, Func<string, T?> deserialize)
     {
         try
         {
@@ -54,8 +61,25 @@ public abstract class JsonFileStore<T>
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
+            WarnUnreadable(path, ex);
             return default;
         }
+    }
+
+    protected void WarnUnreadable(string path, Exception ex)
+    {
+        var modified = File.GetLastWriteTimeUtc(path);
+        lock (_unreadableWarned)
+        {
+            if (_unreadableWarned.TryGetValue(path, out var warned) && warned == modified)
+            {
+                return;
+            }
+
+            _unreadableWarned[path] = modified;
+        }
+
+        _logger.LogWarning(ex, "Fichero ilegible omitido del listado: {Path}", path);
     }
 
     public T? Get(string id)
