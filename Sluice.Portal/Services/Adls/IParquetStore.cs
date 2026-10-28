@@ -11,7 +11,8 @@ public interface IParquetStore
     Task DeleteParquetAsync(string blobPath, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ParquetArtifact>> ListParquetAsync(string prefix, CancellationToken cancellationToken = default);
 
-    // Filas del parquet (metadatos del footer; con excludeDeleteRows, también la columna IsDelete).
+    // Filas del parquet (metadatos del footer; con excludeDeleteRows, el recuento sin borrados del
+    // footer o, si falta, la columna IsDelete: ParquetMaterializer.CountRowsAsync).
     // Por defecto lo lee entero; AdlsClient lo sobrescribe con lectura por rangos para no
     // descargarlo solo para contar.
     async Task<long> CountParquetRowsAsync(string blobPath, bool excludeDeleteRows = false, CancellationToken cancellationToken = default)
