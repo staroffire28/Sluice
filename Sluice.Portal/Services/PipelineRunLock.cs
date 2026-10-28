@@ -24,7 +24,7 @@ public static class PipelineRunLock
         }
         catch (TimeoutException)
         {
-            throw new PipelineBusyException("El pipeline está ocupado (arranque o reset en curso).");
+            throw new PipelineBusyException("El pipeline está ocupado (arranque o reset en curso).", "Error.PipelineLocked");
         }
     }
 }

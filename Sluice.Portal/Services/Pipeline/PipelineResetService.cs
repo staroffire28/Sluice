@@ -106,7 +106,7 @@ public sealed class PipelineResetService : IPipelineResetService
         var pipeline = _pipelines.Get(pipelineId)
             ?? throw new InvalidOperationException($"Pipeline '{pipelineId}' not found.");
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId,
-            "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de resetear.", cancellationToken);
+            "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de resetear.", "Error.PipelineBusyReset", cancellationToken);
 
         // Entidades a truncar: las que el pipeline ya llegó a cargar (PipelineState.Tables),
         // tomadas ANTES de tocar nada — si truncar falla a medio camino, el estado sigue

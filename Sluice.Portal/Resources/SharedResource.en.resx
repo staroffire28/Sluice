@@ -1007,4 +1007,23 @@
   <data name="Activity.Failed.DivergenceUnaccept" xml:space="preserve"><value>Could not remove the acceptance of {0}</value></data>
   <data name="Activity.Failed.Report" xml:space="preserve"><value>Could not generate the PDF report of job {0}</value></data>
   <data name="Activity.Failed.Settings" xml:space="preserve"><value>Could not save the settings</value></data>
+  <data name="Error.PipelineNotFound" xml:space="preserve"><value>Pipeline not found.</value></data>
+  <data name="Error.JobNotFound" xml:space="preserve"><value>Job not found.</value></data>
+  <data name="Error.JobStillRunning" xml:space="preserve"><value>The job is still running: wait for it to finish or cancel it before retrying.</value></data>
+  <data name="Error.RetryNotAllowed" xml:space="preserve"><value>Only jobs in Error, Partial or Blocked can be retried.</value></data>
+  <data name="Error.QueueNotAllowed" xml:space="preserve"><value>{0} cannot be queued.</value></data>
+  <data name="Error.AlreadyQueued" xml:space="preserve"><value>{0} is already queued for this pipeline.</value></data>
+  <data name="Error.OtherQueued" xml:space="preserve"><value>{0} is already queued for this pipeline: remove it from the queue before queueing {1}.</value></data>
+  <data name="Error.EntityRequired" xml:space="preserve"><value>Choose at least one table.</value></data>
+  <data name="Error.AlreadyAtRestorePoint" xml:space="preserve"><value>The pipeline is already at point {0}.</value></data>
+  <data name="Error.NoConsolidatedParquet" xml:space="preserve"><value>There is no consolidated parquet for this pipeline.</value></data>
+  <data name="Error.PipelineRunning" xml:space="preserve"><value>A job is already running for this pipeline.</value></data>
+  <data name="Error.PipelineStopping" xml:space="preserve"><value>Job {0} is stopping after being cancelled; wait a few seconds and try again.</value></data>
+  <data name="Error.PipelineLocked" xml:space="preserve"><value>The pipeline is busy (a start or reset is in progress).</value></data>
+  <data name="Error.PipelineBusyDelete" xml:space="preserve"><value>A job is running for this pipeline: wait for it to finish or cancel it before deleting the pipeline.</value></data>
+  <data name="Error.PipelineBusyReset" xml:space="preserve"><value>A job is running for this pipeline: wait for it to finish or cancel it before resetting.</value></data>
+  <data name="Error.RestorePending" xml:space="preserve"><value>A restore is half done on this pipeline: restore point {0} again to finish it.</value></data>
+  <data name="Error.InvalidPipelineId" xml:space="preserve"><value>Invalid pipeline id: '{0}'.</value></data>
+  <data name="Error.SourceNotFound" xml:space="preserve"><value>Source connection not found.</value></data>
+  <data name="Error.DestinationNotFound" xml:space="preserve"><value>Destination connection not found.</value></data>
 </root>

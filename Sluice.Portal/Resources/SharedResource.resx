@@ -1006,4 +1006,23 @@
   <data name="Activity.Failed.DivergenceUnaccept" xml:space="preserve"><value>No se pudo quitar la aceptación de {0}</value></data>
   <data name="Activity.Failed.Report" xml:space="preserve"><value>No se pudo generar el reporte PDF del job {0}</value></data>
   <data name="Activity.Failed.Settings" xml:space="preserve"><value>No se pudieron guardar los ajustes</value></data>
+  <data name="Error.PipelineNotFound" xml:space="preserve"><value>No se encuentra el pipeline.</value></data>
+  <data name="Error.JobNotFound" xml:space="preserve"><value>No se encuentra el job.</value></data>
+  <data name="Error.JobStillRunning" xml:space="preserve"><value>El job sigue en curso: espera a que termine o cancélalo antes de reintentarlo.</value></data>
+  <data name="Error.RetryNotAllowed" xml:space="preserve"><value>Solo se pueden reintentar jobs en estado Error, Parcial o Bloqueado.</value></data>
+  <data name="Error.QueueNotAllowed" xml:space="preserve"><value>{0} no se puede dejar en cola.</value></data>
+  <data name="Error.AlreadyQueued" xml:space="preserve"><value>{0} ya está en cola para este pipeline.</value></data>
+  <data name="Error.OtherQueued" xml:space="preserve"><value>Ya hay {0} en cola para este pipeline: quítalo de la cola antes de encolar {1}.</value></data>
+  <data name="Error.EntityRequired" xml:space="preserve"><value>Indica al menos una tabla.</value></data>
+  <data name="Error.AlreadyAtRestorePoint" xml:space="preserve"><value>El pipeline ya está en el punto {0}.</value></data>
+  <data name="Error.NoConsolidatedParquet" xml:space="preserve"><value>No hay parquet consolidado para este pipeline.</value></data>
+  <data name="Error.PipelineRunning" xml:space="preserve"><value>Ya hay un job en ejecución para este pipeline.</value></data>
+  <data name="Error.PipelineStopping" xml:space="preserve"><value>El job {0} se está deteniendo tras la cancelación; espera unos segundos y vuelve a intentarlo.</value></data>
+  <data name="Error.PipelineLocked" xml:space="preserve"><value>El pipeline está ocupado (arranque o reset en curso).</value></data>
+  <data name="Error.PipelineBusyDelete" xml:space="preserve"><value>Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de borrarlo.</value></data>
+  <data name="Error.PipelineBusyReset" xml:space="preserve"><value>Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de resetear.</value></data>
+  <data name="Error.RestorePending" xml:space="preserve"><value>Hay un restore a medias en este pipeline: vuelve a restaurar el punto {0} para terminarlo.</value></data>
+  <data name="Error.InvalidPipelineId" xml:space="preserve"><value>Id de pipeline no válido: '{0}'.</value></data>
+  <data name="Error.SourceNotFound" xml:space="preserve"><value>No se encuentra la conexión de origen.</value></data>
+  <data name="Error.DestinationNotFound" xml:space="preserve"><value>No se encuentra la conexión de destino.</value></data>
 </root>

@@ -304,7 +304,7 @@
         {
             // Id duplicado o no válido, o la copia del Parquet al cambiar de sitio falló (la conexión
             // vuelve a como estaba): avisar sin tumbar el circuito.
-            _ = NotificationService.ShowErrorToastAsync(ex.Message);
+            _ = NotificationService.ShowErrorToastAsync(ErrorText.Render(L, ex));
             return;
         }
 
