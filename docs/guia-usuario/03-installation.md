@@ -126,6 +126,14 @@ with a `Caddyfile` such as `sluice.example.com { reverse_proxy api:58472 }`. Set
 
 **Option B, HTTPS in the portal.** Mount a `.pfx` and set `ASPNETCORE_URLS=https://+:58472;http://localhost:58471`, `ASPNETCORE_Kestrel__Certificates__Default__Path=/certs/sluice.pfx` and `ASPNETCORE_Kestrel__Certificates__Default__Password` on the `api` service. The compose healthcheck probes plain HTTP, and the workers do not start until `api` is healthy: override the `api` `healthcheck` with the same `test` as your compose file but the URL `http://localhost:58471/health` (that HTTP listener only answers inside the container). Then publish on all interfaces with `SLUICE_HTTP_BIND=0.0.0.0` in `.env`. You renew the certificate yourself.
 
+**Start it with both files.** Compose reads `docker-compose.override.yml` by itself only when the command gives no `-f`, and every command in this guide gives one. Name both files, and use the same pair in every later command (`up`, `down`, `logs`, and the update in step 2):
+
+```bash
+docker compose -f docker-compose.linux.yml -f docker-compose.override.yml up -d --build
+```
+
+On Windows, `-f docker-compose.yml -f docker-compose.override.yml`.
+
 ## First run
 
 In the portal:
@@ -142,6 +150,12 @@ Add replicas per stage when a stage is the bottleneck (usually SQL or ADLS, not 
 ```bash
 docker compose -f docker-compose.linux.yml up -d --build --scale worker-ingest=3 --scale worker-sql=2
 ```
+
+## Backups
+
+Everything the portal has lives in the `pipeline-data` volume: the connections and their secrets, the encryption keyring, the pipelines, the jobs, the queue and each pipeline's state. Losing it means setting everything up again, and losing just the keyring means typing every connection secret again. Back it up regularly, encrypted, and keep the copy off the host.
+
+With Linux containers, `scripts/backup-data-dir.ps1` and `scripts/restore-data-dir.ps1` do it with the stack stopped. [Back up and restore DATA_DIR](../BACKUP.md) has the steps: the encryption key, the backup, the restore and what to check afterwards. A restore extracts the backup next to the current data and replaces it only when the extraction has finished, so it needs free space for one more copy. With Windows containers the scripts don't work; the same page says how to copy the volume instead.
 
 ## Settings (`/settings`)
 
@@ -169,7 +183,7 @@ Edited in the portal, saved to the volume, applied without restart.
 |---|---|---|
 | `UI_API_KEY` | Shared key for UI + `/api/*` (login page + session cookie). Required unless `AUTH_MODE=none`. | — |
 | `AUTH_MODE` | `key` requires `UI_API_KEY`. `none` is open access on purpose: the landing offers **Enter** without a key, the API is open, the header shows **Open access** and a warning is logged at startup. Use it only on an internal network or behind an authenticating proxy. With `none` leave `UI_API_KEY` empty: both together refuse to start. | `key` |
-| `EXECUTION_MODE` | `local` or `distributed`. | set by compose |
+| `EXECUTION_MODE` | `local` or `distributed`; any other value stops startup. | set by compose |
 | `DATA_DIR` | JSON persistence root (`/data` Linux, `C:/data` Windows). | set by compose |
 | `WORKER_STAGE` | Stage a worker processes (`ingest`, `sql` or `reconcile`; any other value stops startup); absence = orchestrator. | set by compose |
 | `KNOWN_PROXIES` / `KNOWN_NETWORKS` | Comma-separated IPs and CIDR networks of the trusted reverse proxy for `X-Forwarded-For`/`Proto`. Without them it is only trusted from loopback; behind a proxy in another container set them, or every user shares the proxy's IP in the login throttle (a warning is logged at startup). An invalid value stops startup. See *Remote access with TLS*. | empty |
