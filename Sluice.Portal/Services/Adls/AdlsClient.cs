@@ -96,6 +96,13 @@ public sealed class AdlsClient : IAdlsClient, IParquetStore
         return (await file.ExistsAsync(cancellationToken)).Value;
     }
 
+    // Una sola petición de metadatos (HEAD): valida la copia local del consolidado sin bajarlo.
+    public async Task<ParquetFileProperties?> GetParquetPropertiesAsync(string blobPath, CancellationToken cancellationToken = default)
+    {
+        var properties = (await ParquetFileSystem().GetFileClient(blobPath).GetPropertiesAsync(cancellationToken: cancellationToken)).Value;
+        return new ParquetFileProperties(properties.ETag.ToString(), properties.ContentLength);
+    }
+
     public async Task DeleteParquetAsync(string blobPath, CancellationToken cancellationToken = default)
     {
         var file = ParquetFileSystem().GetFileClient(blobPath);

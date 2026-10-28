@@ -9,6 +9,7 @@
 @implements IDisposable
 
 @inject IStringLocalizer<SharedResource> L
+@inject BrowserTime Time
 
 <PageTitle>@L["Nav.Snapshots"]</PageTitle>
 
@@ -49,7 +50,7 @@
                     </FluentCard>
                     <FluentCard Class="kpi-card">
                         <FluentLabel><strong>@L["Page.Snapshots.Changelog"]</strong></FluentLabel>
-                        <div class="kpi-value kpi-value--sm">@(_catalog.ChangelogLastModified?.ToString("g") ?? "—")</div>
+                        <div class="kpi-value kpi-value--sm">@(_catalog.ChangelogLastModified is { } changelog ? Time.Format(changelog) : "—")</div>
                     </FluentCard>
                 </div>
 
@@ -70,7 +71,7 @@
                 @if (_catalog.Blocked)
                 {
                     <FluentMessageBar Intent="MessageBarIntent.Error" Style="margin-bottom:0.75rem;">
-                        @_catalog.BlockReason
+                        @EventText.Render(L, _catalog.BlockReasonKey, _catalog.BlockReasonArgs, _catalog.BlockReason ?? "")
                     </FluentMessageBar>
                 }
 
@@ -148,6 +149,15 @@
         }
 
         await Load();
+    }
+
+    // La hora del Changelog va en la zona del navegador, que solo se conoce con el circuito conectado.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && await Time.InitAsync())
+        {
+            StateHasChanged();
+        }
     }
 
     private static bool ShowRetentionBadge(string? disposition) =>

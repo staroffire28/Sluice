@@ -40,6 +40,57 @@ html, body {
     color: #0b3a33;
 }
 
+/* Cabecera: los botones de idioma, tema y cerrar sesión no se encogen ni salen de la pantalla, y
+   la insignia de estado no se encoge ni parte su texto. En un móvil (<=600px) se ocultan el
+   nombre de la app (queda el logo) y la insignia "Demo" para que quepan el estado y "Acceso
+   abierto", que es un aviso de seguridad; en el ancho de reflow de WCAG (320px) se oculta también
+   el logo. Si el estado es largo ("Comprobando…", "Sin conexión"), "Acceso abierto" se recorta
+   con puntos suspensivos (el texto completo sigue en su title) en vez de invadir los botones. */
+.app-header__start {
+    min-width: 0;
+}
+
+.app-header__start .open-access-badge {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.app-header__end {
+    flex: none;
+}
+
+/* Los botones sutiles pintan el icono con colorNeutralForeground2 (#424242 en claro: 1,9:1 sobre
+   la cabecera de marca). Dentro de la cabecera usan los colores de la hamburguesa de Fluent: el
+   texto sobre marca y, al pasar el ratón, el fondo de marca más oscuro. */
+.app-header__end fluent-button {
+    --colorNeutralForeground2: var(--colorNeutralForegroundOnBrand);
+    --colorNeutralForeground2Hover: var(--colorNeutralForegroundOnBrand);
+    --colorNeutralForeground2Pressed: var(--colorNeutralForegroundOnBrand);
+    --colorNeutralForeground2BrandHover: var(--colorNeutralForegroundOnBrand);
+    --colorNeutralForeground2BrandPressed: var(--colorNeutralForegroundOnBrand);
+    --colorSubtleBackgroundHover: var(--colorBrandBackgroundHover);
+    --colorSubtleBackgroundPressed: var(--colorBrandBackgroundPressed);
+}
+
+#health-pill {
+    flex: none;
+    white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+    .app-header__title,
+    .demo-badge {
+        display: none;
+    }
+}
+
+@media (max-width: 360px) {
+    .app-header__logo {
+        display: none;
+    }
+}
+
 #blazor-error-ui {
     background: var(--colorStatusWarningBackground1, #fff4ce);
     border-top: 1px solid var(--colorStatusWarningBorder1, #fde7a0);

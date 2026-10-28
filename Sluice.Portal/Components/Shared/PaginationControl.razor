@@ -5,7 +5,11 @@
 
 <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center" Style="margin-top:0.75rem;">
     <FluentButton Disabled="@(Page <= 1)" data-testid="page-prev" OnClick="@(() => ChangePage(Page - 1))">@L["Common.Previous"]</FluentButton>
-    <FluentLabel>@L["Common.Pagination", Page, TotalPages, TotalCount]</FluentLabel>
+    @* role="status": el lector de pantalla anuncia la página nueva. Si el botón pulsado queda
+       deshabilitado (primera o última página), el foco pasa aquí en vez de perderse. *@
+    <span role="status" tabindex="-1" data-testid="page-status" @ref="_status">
+        <FluentLabel>@L["Common.Pagination", Page, TotalPages, TotalCount]</FluentLabel>
+    </span>
     <FluentButton Disabled="@(Page >= TotalPages)" data-testid="page-next" OnClick="@(() => ChangePage(Page + 1))">@L["Common.Next"]</FluentButton>
 </FluentStack>
 
@@ -15,5 +19,21 @@
     [Parameter, EditorRequired] public int TotalCount { get; set; }
     [Parameter] public EventCallback<int> PageChanged { get; set; }
 
-    private Task ChangePage(int page) => PageChanged.InvokeAsync(page);
+    private ElementReference _status;
+    private bool _focusStatus;
+
+    private Task ChangePage(int page)
+    {
+        _focusStatus = page <= 1 || page >= TotalPages;
+        return PageChanged.InvokeAsync(page);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusStatus)
+        {
+            _focusStatus = false;
+            await _status.FocusAsync();
+        }
+    }
 }

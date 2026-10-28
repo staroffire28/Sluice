@@ -10,6 +10,7 @@
 @inject Sluice.Portal.Services.Logging.CircuitAuditActor Audit
 
 @inject IStringLocalizer<SharedResource> L
+@inject BrowserTime Time
 
 <PageTitle>@L["Nav.Destinations"]</PageTitle>
 
@@ -28,11 +29,11 @@
         <ListContent>
             <FluentDataGrid Class="data-panel" MultiLine="true" Items="@_items.AsQueryable()" TGridItem="Connection">
                 <PropertyColumn Property="@(c => c.Name)" Title="@L["Common.Name"]" />
-                <PropertyColumn Property="@(c => c.Type)" Title="@L["Common.Type"]" />
+                <PropertyColumn Property="@(c => ConnectionTypeLabels.Get(L, c.Type))" Title="@L["Common.Type"]" />
                 <TemplateColumn Title="@L["Page.Destinations.SqlVersion"]">
                     @FormatSqlVersion(context)
                 </TemplateColumn>
-                <PropertyColumn Property="@(c => c.CreatedAt)" Title="@L["Page.Destinations.Created"]" Format="g" Class="cell-nowrap" />
+                <PropertyColumn Property="@(c => Time.Format(c.CreatedAt))" Title="@L["Page.Destinations.Created"]" Class="cell-nowrap" />
                 <TemplateColumn Title="@L["Common.Actions"]">
                     @if (_testingId == context.Id)
                     {
@@ -44,7 +45,8 @@
                     else
                     {
                         <FluentMenu>
-                            <FluentMenuButton Appearance="ButtonAppearance.Outline" data-testid="@($"dst-actions-{context.Id}")" Label="@L["Common.Actions"]" />
+                            <FluentMenuButton Appearance="ButtonAppearance.Outline" data-testid="@($"dst-actions-{context.Id}")" Label="@L["Common.Actions"]"
+                                              aria-label="@($"{L["Common.Actions"]} {context.Name}")" />
                             <FluentMenuList>
                                 <FluentMenuItem data-testid="@($"dst-test-{context.Id}")" OnClick="@(() => Test(context.Id))">@L["Common.Test"]</FluentMenuItem>
                                 <FluentMenuItem data-testid="@($"dst-edit-{context.Id}")" OnClick="@(() => Edit(context))">@L["Common.Edit"]</FluentMenuItem>
@@ -146,6 +148,15 @@
     private Guid _versionKey = Guid.NewGuid();
 
     protected override void OnInitialized() => Load();
+
+    // La fecha de alta va en la zona del navegador, que solo se conoce con el circuito conectado.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && await Time.InitAsync())
+        {
+            StateHasChanged();
+        }
+    }
 
     // Prueba la conexión del formulario sin guardarla y ajusta la versión a la detectada.
     private async Task DetectVersionAsync()
@@ -249,7 +260,7 @@
         _showEditor = true;
     }
 
-    private void Save()
+    private async Task Save()
     {
         var config = new Dictionary<string, string?>
         {
@@ -284,13 +295,18 @@
             else
             {
                 var existing = Connections.Get(_editingId)!;
-                Connections.Update(Audit.Current, _editingId, existing with
+                await Connections.UpdateAsync(Audit.Current, _editingId, existing with
                 {
                     Name = _name,
                     Type = _type,
                     Config = config,
                 });
             }
+        }
+        catch (PipelineBusyException)
+        {
+            _ = NotificationService.ShowErrorToastAsync(L["Common.ConnectionBusyRetarget"].Value);
+            return;
         }
         catch (InvalidOperationException ex)
         {
