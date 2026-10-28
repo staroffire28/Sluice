@@ -70,6 +70,7 @@ public sealed class OrchestrationService : IOrchestrationService
     private readonly PipelineStateStore? _stateStore;
     private readonly RunQueueService? _runQueue;
     private readonly SettingsStore? _settings;
+    private readonly ConnectionStore? _connections;
 
     public OrchestrationService(
         IOptions<AppOptions> options,
@@ -83,9 +84,11 @@ public sealed class OrchestrationService : IOrchestrationService
         IAuditLog audit,
         PipelineStateStore? stateStore = null,
         RunQueueService? runQueue = null,
-        SettingsStore? settings = null)
+        SettingsStore? settings = null,
+        ConnectionStore? connections = null)
     {
         _audit = audit;
+        _connections = connections;
         _stateStore = stateStore;
         _runQueue = runQueue;
         _settings = settings;
@@ -268,8 +271,15 @@ public sealed class OrchestrationService : IOrchestrationService
 
     private async Task<Job> StartAsync(AuditActor actor, string pipelineId, JobType type, string? entity, CancellationToken cancellationToken)
     {
-        _ = _pipelines.Get(pipelineId)
+        var pipeline = _pipelines.Get(pipelineId)
             ?? throw new InvalidOperationException("Pipeline not found.");
+
+        // Un destino al que la migración le quitó la connection_string sin poder pasarla a campos no
+        // arranca nada (ni Force): antes de que el Ingest escriba nada que SQL no podría cargar.
+        if (_connections?.GetById(pipeline.DestinationId) is { } destination)
+        {
+            ConnectionFieldsRequiredException.ThrowIfMarked(destination);
+        }
 
         // Nota: Pipeline.Enabled significa "scheduler activo", NO "ejecutable". El Run manual
         // siempre se permite (crear pipeline → correr a mano → activar scheduler al validar).

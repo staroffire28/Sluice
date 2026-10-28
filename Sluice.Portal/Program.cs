@@ -248,6 +248,17 @@ if (!app.Environment.IsDevelopment())
 Sluice.Portal.Services.Connections.ConnectionMigrations.PinTrustServerCertificate(
     app.Services.GetRequiredService<ConnectionStore>(), appOptions.DataDir);
 
+// Una vez, solo en el orquestador (los workers arrancan cuando el api ya está sano): las
+// connection_string de SQL pasan a campos o quedan marcadas (ver ConnectionMigrations).
+if (appOptions.IsOrchestrator)
+{
+    Sluice.Portal.Services.Connections.ConnectionMigrations.RemoveSqlConnectionStrings(
+        app.Services.GetRequiredService<ConnectionStore>(),
+        app.Services.GetRequiredService<Sluice.Portal.Services.Connections.IConnectionResolver>(),
+        app.Services.GetRequiredService<Sluice.Portal.Services.Logging.IAuditLog>(),
+        appOptions.DataDir);
+}
+
 app.UseRequestLocalization();
 app.UseSecurityHeaders();
 app.UseStaticFiles();
