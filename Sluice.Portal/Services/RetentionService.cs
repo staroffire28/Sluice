@@ -73,7 +73,7 @@ public sealed class RetentionService
                 var job = ordered[i];
                 // Conservar: jobs en curso, los K más recientes del pipeline, y los
                 // más nuevos que el cutoff. Todo lo demás se purga.
-                var keep = JobProgressHelper.IsActive(job)
+                var keep = JobProgressHelper.IsActive(job.Status, job.FinishedAt)
                     || i < KeepLastPerPipeline
                     || (job.FinishedAt ?? job.StartedAt) >= cutoff;
 
@@ -132,21 +132,23 @@ public sealed class RetentionService
 
     private string JobsDir => Path.Combine(_options.DataDir, "jobs");
 
-    private (List<Job> Jobs, List<string> UnreadableIds) LoadJobs()
+    // Solo los campos del índice (JobIndexEntry): los eventos y las tablas de cada job no se cargan,
+    // así que el barrido no llena la memoria del api con todos los job.json completos.
+    private (List<JobIndexEntry> Jobs, List<string> UnreadableIds) LoadJobs()
     {
         if (!Directory.Exists(JobsDir))
         {
             return ([], []);
         }
 
-        var jobs = new List<Job>();
+        var jobs = new List<JobIndexEntry>();
         var unreadable = new List<string>();
         foreach (var file in Directory.GetFiles(JobsDir, "*.json"))
         {
             try
             {
                 using var stream = File.OpenRead(file);
-                var job = JsonSerializer.Deserialize<Job>(stream, JsonDefaults.Options);
+                var job = JsonSerializer.Deserialize<JobIndexEntry>(stream, JsonDefaults.Options);
                 if (job is not null)
                 {
                     jobs.Add(job);
@@ -226,7 +228,7 @@ public sealed class RetentionService
     }
 
     // Jobs terminados en Error o Cancelled hace más de FailedStagingRetention: su staging sobra.
-    private static HashSet<string> FailedJobIds(List<Job> jobs, DateTimeOffset now) =>
+    private static HashSet<string> FailedJobIds(List<JobIndexEntry> jobs, DateTimeOffset now) =>
         jobs.Where(j => j.Status is JobStatus.Error or JobStatus.Cancelled
                 && (j.FinishedAt ?? j.StartedAt) <= now - FailedStagingRetention)
             .Select(j => j.Id)

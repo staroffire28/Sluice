@@ -58,6 +58,7 @@
   <data name="Common.Back" xml:space="preserve"><value>Volver</value></data>
   <data name="Common.Saved" xml:space="preserve"><value>Guardado</value></data>
   <data name="Common.NameRequired" xml:space="preserve"><value>El nombre es obligatorio y debe contener al menos una letra o un número.</value></data>
+  <data name="Common.ConnectionBusyRetarget" xml:space="preserve"><value>Un pipeline que usa esta conexión tiene un job en curso: espera a que termine o cancélalo antes de cambiar a dónde apunta.</value></data>
   <data name="Common.Deleted" xml:space="preserve"><value>{0} eliminado</value></data>
   <data name="Common.DeleteFailed" xml:space="preserve"><value>No se pudo eliminar.</value></data>
   <data name="Common.CancelJobConfirm" xml:space="preserve"><value>¿Cancelar el job {0}? Esta acción detiene su ejecución.</value></data>
@@ -789,6 +790,8 @@
   <data name="Page.Sources.ParquetStorage.Adls" xml:space="preserve"><value>Contenedor de ADLS</value></data>
   <data name="Page.Sources.ParquetStorage.Portal" xml:space="preserve"><value>Disco del portal (DATA_DIR)</value></data>
   <data name="Page.Sources.ParquetStorageHint" xml:space="preserve"><value>En el disco del portal no hace falta un contenedor de Parquet ni permiso de escritura en ADLS, pero ocupa espacio en el volumen de DATA_DIR. Al cambiarlo, Sluice copia los Parquet consolidados al sitio nuevo sin borrar los anteriores.</value></data>
+  <data name="Page.Pipelines.BusyRetarget" xml:space="preserve"><value>Este pipeline tiene un job en curso: espera a que termine o cancélalo antes de cambiar su origen o su destino.</value></data>
+  <data name="Page.Pipelines.DestinationNeedsFields" xml:space="preserve"><value>El destino '{0}' usaba una cadena de conexión con opciones que ya no se admiten: escribe su host, base de datos, usuario y contraseña en Destinos para volver a ejecutar este pipeline.</value></data>
   <data name="Page.Sources.ParquetCopied" xml:space="preserve"><value>Parquet consolidado copiado al sitio nuevo: {0} tabla(s).</value></data>
   <data name="Report.Generated" xml:space="preserve"><value>Generado {0}</value></data>
   <data name="Report.Overline" xml:space="preserve"><value>INFORME DE CONCILIACIÓN</value></data>
@@ -854,6 +857,8 @@
   <data name="Event.Sql.CompletedWithErrors" xml:space="preserve"><value>SQL MERGE completado con errores en entidades ({0:N0} fila(s) fusionadas): el job queda en Error.</value></data>
   <data name="Event.Reconcile.Started" xml:space="preserve"><value>Etapa de conciliación iniciada.</value></data>
   <data name="Event.Reconcile.Completed" xml:space="preserve"><value>Conciliación completada. Divergencia máxima: {0:N2} %.</value></data>
+  <data name="Event.Reconcile.MissingParquet" xml:space="preserve"><value>{0}: falta el parquet consolidado; no se concilia.</value></data>
+  <data name="Event.Reconcile.EntityFailed" xml:space="preserve"><value>{0}: no se pudo conciliar ({1}).</value></data>
   <data name="Event.Diff.Completed" xml:space="preserve"><value>Diff completado: {0:N0} entidad(es) con diferencias, {1:N0} fila(s) de delta total.</value></data>
   <data name="Event.Compare.NoParquet" xml:space="preserve"><value>No hay ningún Parquet consolidado que comparar. Ejecuta el pipeline antes de comparar valores.</value></data>
   <data name="Event.Compare.Summary" xml:space="preserve"><value>Comparación de valores: {0:N0} tabla(s), {1:N0} con diferencias.</value></data>
@@ -867,12 +872,15 @@
   <data name="Event.Ingest.ProcessingSnapshot" xml:space="preserve"><value>Procesando el snapshot {0}.</value></data>
   <data name="Event.Ingest.EntityFailed" xml:space="preserve"><value>{0}: falló la ingesta del snapshot {1} — {2}: {3}</value></data>
   <data name="Event.Ingest.SkippedPaused" xml:space="preserve"><value>{0:N0} tabla(s) omitida(s) por pausa: {1}.</value></data>
+  <data name="Event.Ingest.Backfilling" xml:space="preserve"><value>{0}: reanudada tras una pausa; se leen los snapshots que se saltó, desde {1}.</value></data>
+  <data name="Event.Ingest.BackfillSnapshotsMissing" xml:space="preserve"><value>{0}: el snapshot {1}, el primero que se saltó en pausa, ya no está en el lago; los cambios de ese tiempo no se recuperan. Un reset del pipeline la recarga con los snapshots que queden.</value></data>
   <data name="Event.Ingest.RowsWithoutId" xml:space="preserve"><value>{0}: {1:N0} fila(s) sin Id válido descartada(s).</value></data>
   <data name="Event.Ingest.ConsolidatedShrank" xml:space="preserve"><value>{0}: el consolidado nuevo tiene {1:N0} filas y el anterior {2:N0}. La versión anterior queda guardada en la página Parquet por si hay que restaurarla.</value></data>
   <data name="Event.Ingest.SnapshotNotMarked" xml:space="preserve"><value>{0:N0} tabla(s) con fallos: el snapshot {1} no se marca como procesado y se reintentará en el próximo run.</value></data>
   <data name="Event.Ingest.SettingsUnreadable" xml:space="preserve"><value>settings.json no se puede leer: no se podan las versiones del parquet hasta que se corrija.</value></data>
   <data name="Event.Ingest.PruneFailed" xml:space="preserve"><value>No se pudieron podar las versiones del parquet: {0}</value></data>
   <data name="Event.Ingest.UnreadableValues" xml:space="preserve"><value>{0}: {1:N0} valor(es) del CSV no se pudieron leer con el tipo de su columna y se cargaron como NULL — {2}.</value></data>
+  <data name="Event.Ingest.ShortRows" xml:space="preserve"><value>{0}: {1:N0} fila(s) del CSV traen menos columnas que el esquema; las que faltan se cargaron como NULL.</value></data>
   <data name="Event.Ingest.CompletionWithParts" xml:space="preserve"><value>{0}{1}{2}{3}</value></data>
   <data name="Event.Ingest.Part.Failed" xml:space="preserve"><value> {0:N0} entidad(es) fallaron: {1}.</value></data>
   <data name="Event.Ingest.Part.PartialFailures" xml:space="preserve"><value> {0:N0} entidad(es) con fallos parciales de snapshots (posibles datos incompletos): {1}.</value></data>
@@ -888,6 +896,7 @@
   <data name="Event.Sql.EntityMerged" xml:space="preserve"><value>{0}: {1:N0} fila(s) mergeadas; la tabla tiene {2:N0}.</value></data>
   <data name="Event.Sql.EntityMergedDelta" xml:space="preserve"><value>{0}: {1:N0} fila(s) mergeadas (delta); la tabla tiene {2:N0}.</value></data>
   <data name="Event.Sql.EntityFailed" xml:space="preserve"><value>{0}: falló la etapa SQL — {1}: {2}</value></data>
+  <data name="Event.Sql.MissingParquet" xml:space="preserve"><value>{0}: falta el parquet consolidado o su schema en el almacén; la tabla no se carga en SQL.</value></data>
   <data name="Event.Sql.FullMergeAfterIncomplete" xml:space="preserve"><value>El último job ({0}) no completó la etapa SQL: este Incremental mergea el consolidado completo para reponer lo que faltara.</value></data>
   <data name="Event.Sql.PossibleBlock" xml:space="preserve"><value>{0}: lleva {1} sin avanzar en SQL (posible bloqueo). La sentencia sigue en curso; revisa los bloqueos en el destino (sys.dm_exec_requests, columna blocking_session_id).</value></data>
   <data name="Event.Enums.NoSnapshot" xml:space="preserve"><value>Traducción de enums activa pero no se pudo resolver snapshot (manifest vacío, sin last-processed ni settled). Se continúa sin columnas _$label.</value></data>
@@ -933,6 +942,9 @@
   <data name="Activity.Connection.RoleSource" xml:space="preserve"><value>de origen</value></data>
   <data name="Activity.Connection.RoleDestination" xml:space="preserve"><value>de destino</value></data>
   <data name="Activity.Connection.Created" xml:space="preserve"><value>Conexión {0} '{1}' creada.</value></data>
+  <data name="Activity.Connection.ConnectionStringConverted" xml:space="preserve"><value>Conexión de destino '{0}': la cadena de conexión pasa a campos.</value></data>
+  <data name="Activity.Connection.ConnectionStringNeedsFields" xml:space="preserve"><value>Conexión de destino '{0}': su cadena de conexión usaba opciones que ya no se admiten ({1}) y se ha quitado; sus pipelines no arrancan hasta que se escriban sus campos.</value></data>
+  <data name="Activity.Connection.FieldsRequiredHold" xml:space="preserve"><value>Pipeline {0} parado: la conexión de destino '{1}' usaba una cadena de conexión con opciones que ya no se admiten; vuelve a escribir sus campos en Destinos.</value></data>
   <data name="Activity.Connection.Updated" xml:space="preserve"><value>Conexión {0} '{1}' actualizada.</value></data>
   <data name="Activity.Connection.UpdatedCopied" xml:space="preserve"><value>Conexión {0} '{1}' actualizada; Parquet de {2:N0} tabla(s) copiado al sitio nuevo.</value></data>
   <data name="Activity.Connection.NotFound" xml:space="preserve"><value>La conexión {0} no existe.</value></data>

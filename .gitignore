@@ -24,6 +24,9 @@ data/
 backups/
 *.tar.gz
 
+# Clave privada de age de los backups (docs/BACKUP.md): descifra el keyring y las credenciales
+*.key
+
 # Material de referencia/análisis: pipeline de Microsoft y datos de la instancia
 # F&O (model.json, GlobalOptionsetMetadata.csv). No es código del proyecto.
 references/
