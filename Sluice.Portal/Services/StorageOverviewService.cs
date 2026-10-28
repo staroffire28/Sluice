@@ -94,7 +94,8 @@ public sealed class StorageOverviewService : IStorageOverviewService
                 _settings.Get(),
                 allSnapshots,
                 retentionFloor,
-                selection);
+                selection,
+                SnapshotRetentionService.SharedBackfillFrom(_pipelines, pipeline.SourceId));
 
             var parquets = await _parquet.ListAsync(pipelineId, cancellationToken);
             var consolidated = parquets

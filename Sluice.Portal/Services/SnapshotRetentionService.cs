@@ -41,13 +41,15 @@ public sealed class SnapshotRetentionService
         _logger = logger;
     }
 
-    // Lógica pura: clasifica cada snapshot y decide elegibles para purga.
+    // Lógica pura: clasifica cada snapshot y decide elegibles para purga. protectFrom: el primer
+    // snapshot que aún tiene que releer una tabla reanudada (SharedBackfillFrom); desde él, protegidos.
     public static SnapshotRetentionAnalysis Analyze(
         DateTimeOffset now,
         AppSettings settings,
         IReadOnlyList<string> allSnapshots,
         string? lastProcessed,
-        SnapshotSelector.SelectionResult selection)
+        SnapshotSelector.SelectionResult selection,
+        string? protectFrom = null)
     {
         var dispositions = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var name in allSnapshots.Where(ExcludedEntities.IsSnapshotFolder))
@@ -112,6 +114,13 @@ public sealed class SnapshotRetentionService
                 continue;
             }
 
+            // Pendiente de releer por una tabla reanudada: cuenta en el piso, pero no se purga.
+            if (protectFrom is not null && string.CompareOrdinal(snapshot, protectFrom) >= 0)
+            {
+                dispositions[snapshot] = DispositionProtected;
+                continue;
+            }
+
             // Sin fecha legible no se puede saber su antigüedad: se conserva.
             if (!SnapshotFolderTime.TryParse(snapshot, out var timestamp))
             {
@@ -158,9 +167,17 @@ public sealed class SnapshotRetentionService
         var totalWouldDelete = 0;
         var totalSkipped = 0;
         var totalSkippedCert = 0;
+        var sweptSourceIds = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var pipeline in _pipelines.List().Where(p => p.Enabled))
         {
+            // La purga es por fuente: una sola pasada por fuente aunque la lean varios pipelines,
+            // también si se omitió por job en ejecución o certificación incompleta.
+            if (!sweptSourceIds.Add(pipeline.SourceId))
+            {
+                continue;
+            }
+
             var sourcePipelineIds = _pipelines.List()
                 .Where(p => p.SourceId == pipeline.SourceId)
                 .Select(p => p.Id)
@@ -183,7 +200,7 @@ public sealed class SnapshotRetentionService
                     floor,
                     currentFolder);
 
-                var analysis = Analyze(now, settings, allSnapshots, floor, selection);
+                var analysis = Analyze(now, settings, allSnapshots, floor, selection, SharedBackfillFrom(_pipelines, pipeline.SourceId));
                 if (analysis.EligibleForPurge.Count == 0)
                 {
                     continue;
@@ -237,7 +254,7 @@ public sealed class SnapshotRetentionService
                         allSnapshots,
                         floorNow,
                         currentFolder);
-                    if (!Analyze(now, settings, allSnapshots, floorNow, selectionNow)
+                    if (!Analyze(now, settings, allSnapshots, floorNow, selectionNow, SharedBackfillFrom(_pipelines, pipeline.SourceId))
                         .EligibleForPurge.Contains(folder, StringComparer.Ordinal))
                     {
                         continue;
@@ -348,6 +365,25 @@ public sealed class SnapshotRetentionService
         }
 
         return floor;
+    }
+
+    // Segundo suelo: una tabla reanudada relee desde el primer snapshot que se saltó en pausa
+    // (PendingBackfill). El más antiguo de los pipelines que leen la fuente, o null si no hay ninguno.
+    public static string? SharedBackfillFrom(IPipelineService pipelines, string sourceId)
+    {
+        string? from = null;
+        foreach (var pipeline in pipelines.List().Where(p => p.SourceId == sourceId))
+        {
+            foreach (var snapshot in pipelines.GetState(pipeline.Id).PendingBackfill.Values)
+            {
+                if (from is null || string.CompareOrdinal(snapshot, from) < 0)
+                {
+                    from = snapshot;
+                }
+            }
+        }
+
+        return from;
     }
 
     public static async Task<ParquetCertificationResult> CertifyParquetAsync(
