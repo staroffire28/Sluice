@@ -142,6 +142,10 @@ public static class ManagementEndpoints
                 var result = await svc.ResetAsync(AuditActor.FromHttp(http), id, truncateSql, ct);
                 return Results.Ok(result);
             }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
+            }
             catch (InvalidOperationException ex)
             {
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid operation.");
@@ -182,6 +186,10 @@ public static class ManagementEndpoints
                 var job = await o.ReloadFromParquetAsync(AuditActor.FromHttp(http), id, ct);
                 return Results.Accepted($"/api/jobs/{job.Id}", job);
             }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
+            }
             catch (InvalidOperationException ex)
             {
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid operation.");
@@ -203,6 +211,10 @@ public static class ManagementEndpoints
                     return Results.Accepted(uri: null, o.QueueRun(AuditActor.FromHttp(http), id, type ?? JobType.Incremental));
                 }
             }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
+            }
             catch (InvalidOperationException ex)
             {
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid operation.");
@@ -220,6 +232,10 @@ public static class ManagementEndpoints
                 var job = await o.RunPipelineAsync(AuditActor.FromHttp(http), id, JobType.Reconcile, ct);
                 return Results.Accepted($"/api/jobs/{job.Id}", job);
             }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
+            }
             catch (InvalidOperationException ex)
             {
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Invalid operation.");
@@ -231,6 +247,10 @@ public static class ManagementEndpoints
             {
                 var job = await o.RunPipelineAsync(AuditActor.FromHttp(http), id, JobType.Diff, ct);
                 return Results.Accepted($"/api/jobs/{job.Id}", job);
+            }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
             }
             catch (InvalidOperationException ex)
             {
@@ -244,6 +264,10 @@ public static class ManagementEndpoints
             {
                 var job = await o.CompareValuesAsync(AuditActor.FromHttp(http), id, entity, ct);
                 return Results.Accepted($"/api/jobs/{job.Id}", job);
+            }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
             }
             catch (InvalidOperationException ex)
             {
@@ -276,9 +300,23 @@ public static class ManagementEndpoints
             return Results.Stream(stream, "application/octet-stream", path.Split('/').Last());
         });
         api.MapDelete("/pipelines/{id}/parquet", async (string id, string path, HttpContext http, IParquetArtifactService parquet, CancellationToken ct) =>
-            await parquet.DeleteAsync(AuditActor.FromHttp(http), id, path, ct)
-                ? Results.NoContent()
-                : Results.BadRequest(new { error = "Ruta de parquet inválida para este pipeline." }));
+        {
+            try
+            {
+                return await parquet.DeleteAsync(AuditActor.FromHttp(http), id, path, ct)
+                    ? Results.NoContent()
+                    : Results.BadRequest(new { error = "Ruta de parquet inválida para este pipeline." });
+            }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                // El consolidado de una tabla que sigue en el pipeline.
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
 
         api.MapGet("/jobs", (int? page, int? pageSize, string? pipelineId, JobStatus? status, IJobService svc) =>
         {
@@ -344,7 +382,8 @@ public static class ManagementEndpoints
         });
         api.MapGet("/jobs/export", (string? pipelineId, JobStatus? status, DateOnly? from, DateOnly? to, IJobService svc, IStringLocalizer<SharedResource> l) =>
         {
-            var jobs = svc.List(1, int.MaxValue, NullIfBlank(pipelineId), status, new DateRange(from, to));
+            // Del índice: el CSV no necesita los eventos ni las tablas de cada job.
+            var jobs = svc.ListIndex(NullIfBlank(pipelineId), status, new DateRange(from, to));
             return Csv("jobs", writer =>
             {
                 CsvWriter.WriteRow(writer, [l["Page.Jobs.ColumnJob"].Value, l["Common.Pipeline"].Value, l["Page.Jobs.ColumnType"].Value, l["Common.Status"].Value, l["Page.Jobs.ColumnStarted"].Value, l["Page.Jobs.ColumnFinished"].Value]);
@@ -389,6 +428,10 @@ public static class ManagementEndpoints
             {
                 var job = await o.RetryJobAsync(AuditActor.FromHttp(http), id, ct);
                 return Results.Accepted($"/api/jobs/{job.Id}", job);
+            }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
             }
             catch (InvalidOperationException ex)
             {

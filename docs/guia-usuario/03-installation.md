@@ -16,7 +16,7 @@ The portal is light; the heavy systems (SQL Server, ADLS) are external. These fi
 | Minimum (PoC / low volume) | 2 | 4 GB | 20 GB |
 | Recommended (production) | 4–8 | 16 GB | 100 GB+ SSD |
 
-- **Disk** is dominated by the `pipeline-data` volume (jobs, reports, parquet staging). It is bounded by the retention setting (default 90 days). Use SSD for the queue.
+- **Disk** is dominated by the `pipeline-data` volume (jobs, reports, parquet staging). It is bounded by the retention setting (default 90 days), except the local copy of each consolidated Parquet kept in ADLS, which takes as much as those files (see *Local volume* under Retention in the reference). Use SSD for the queue.
 - **RAM** peaks during parquet consolidation (one snapshot at a time). 16 GB is comfortable for parallel pipelines.
 - SQL Server and ADLS run elsewhere and are not counted here.
 
@@ -126,6 +126,14 @@ with a `Caddyfile` such as `sluice.example.com { reverse_proxy api:58472 }`. Set
 
 **Option B, HTTPS in the portal.** Mount a `.pfx` and set `ASPNETCORE_URLS=https://+:58472;http://localhost:58471`, `ASPNETCORE_Kestrel__Certificates__Default__Path=/certs/sluice.pfx` and `ASPNETCORE_Kestrel__Certificates__Default__Password` on the `api` service. The compose healthcheck probes plain HTTP, and the workers do not start until `api` is healthy: override the `api` `healthcheck` with the same `test` as your compose file but the URL `http://localhost:58471/health` (that HTTP listener only answers inside the container). Then publish on all interfaces with `SLUICE_HTTP_BIND=0.0.0.0` in `.env`. You renew the certificate yourself.
 
+**Start it with both files.** Compose reads `docker-compose.override.yml` by itself only when the command gives no `-f`, and every command in this guide gives one. Name both files, and use the same pair in every later command (`up`, `down`, `logs`, and the update in step 2):
+
+```bash
+docker compose -f docker-compose.linux.yml -f docker-compose.override.yml up -d --build
+```
+
+On Windows, `-f docker-compose.yml -f docker-compose.override.yml`.
+
 ## First run
 
 In the portal:
@@ -143,9 +151,15 @@ Add replicas per stage when a stage is the bottleneck (usually SQL or ADLS, not 
 docker compose -f docker-compose.linux.yml up -d --build --scale worker-ingest=3 --scale worker-sql=2
 ```
 
+## Backups
+
+Everything the portal has lives in the `pipeline-data` volume: the connections and their secrets, the encryption keyring, the pipelines, the jobs, the queue and each pipeline's state. Losing it means setting everything up again, and losing just the keyring means typing every connection secret again. Back it up regularly, encrypted, and keep the copy off the host.
+
+With Linux containers, `scripts/backup-data-dir.ps1` and `scripts/restore-data-dir.ps1` do it with the stack stopped. [Back up and restore DATA_DIR](../BACKUP.md) has the steps: the encryption key, the backup, the restore and what to check afterwards. A restore extracts the backup next to the current data and replaces it only when the extraction has finished, so it needs free space for one more copy. With Windows containers the scripts don't work; the same page says how to copy the volume instead.
+
 ## Settings (`/settings`)
 
-Edited in the portal, saved to the volume, applied without restart.
+Edited in the portal, saved to the volume, applied without restart. If `settings.json` can't be read, the page warns that it shows the default values, and saving asks for confirmation before overwriting the file (which would lose what it had, such as the webhook).
 
 | Setting | Controls | Default |
 |---|---|---|
@@ -157,24 +171,28 @@ Edited in the portal, saved to the volume, applied without restart.
 | Days without data to flag a table | In **Tables**, *Last data* is highlighted when the last load with rows is older (for example, a table removed from the Synapse Link profile). `0` disables it. | 7 |
 | Source snapshot retention (days) | Age past which already-processed CSV folders in the Synapse Link container are purged. `0` disables it. | 30 |
 | Snapshot purge dry run | Logs what would be deleted without deleting anything. | On |
-| Require Parquet before purging | Skips the snapshot purge if any consolidated Parquet of the pipeline is missing. | On |
+| Require Parquet before purging | Skips the snapshot purge if any consolidated Parquet of a pipeline reading that source is missing. | On |
 | Alerts | Enable and webhook URL (e.g. an Azure Logic App); **Send test** checks the URL. | Off |
 | Hours behind before alerting | Alerts when a closed snapshot has waited longer than this on a pipeline with the scheduler on ([details](04-reference.md#observability-and-alerts)). `0` disables it. | 6 |
 
 ## Environment variables
 
-`UI_API_KEY` and `AUTH_MODE` go in `.env`; the rest are set by the compose files.
+`UI_API_KEY`, `AUTH_MODE` and the optional `ALERT_WEBHOOK_URL`, `DEADMAN_PING_URL`, `CHANGELOG_STALL_HOURS`, `SESSION_EXPIRY_HOURS` and `TRANSLATE_ENUMS` go in `.env`; the rest are set by the compose files.
 
 | Variable | Purpose | Default |
 |---|---|---|
 | `UI_API_KEY` | Shared key for UI + `/api/*` (login page + session cookie). Required unless `AUTH_MODE=none`. | — |
 | `AUTH_MODE` | `key` requires `UI_API_KEY`. `none` is open access on purpose: the landing offers **Enter** without a key, the API is open, the header shows **Open access** and a warning is logged at startup. Use it only on an internal network or behind an authenticating proxy. With `none` leave `UI_API_KEY` empty: both together refuse to start. | `key` |
-| `EXECUTION_MODE` | `local` or `distributed`. | set by compose |
+| `EXECUTION_MODE` | `local` or `distributed`; any other value stops startup. | set by compose |
 | `DATA_DIR` | JSON persistence root (`/data` Linux, `C:/data` Windows). | set by compose |
-| `WORKER_STAGE` | Stage a worker processes (`ingest`, `sql` or `reconcile`; any other value stops startup); absence = orchestrator. | set by compose |
+| `WORKER_STAGE` | Stage a worker processes (`ingest`, `sql` or `reconcile`; any other value stops startup); absence = orchestrator. A worker only answers `/health`: it serves neither the UI nor `/api/*`, so it does not need `UI_API_KEY`. | set by compose |
 | `KNOWN_PROXIES` / `KNOWN_NETWORKS` | Comma-separated IPs and CIDR networks of the trusted reverse proxy for `X-Forwarded-For`/`Proto`. Without them it is only trusted from loopback; behind a proxy in another container set them, or every user shares the proxy's IP in the login throttle (a warning is logged at startup). An invalid value stops startup. See *Remote access with TLS*. | empty |
 | `HEARTBEAT_MAX_FAILURES` | Heartbeat failures before releasing a task. | 3 |
 | `CHANGELOG_STALL_HOURS` | Hours without changelog update before alerting. | 16 |
+| `ALERT_WEBHOOK_URL` | Alert webhook used when the one in **Settings** is off or empty, and when `settings.json` cannot be read. The api and the workers send alerts, so the compose files pass it to all of them. | empty |
+| `DEADMAN_PING_URL` | URL the scheduler calls after every healthy cycle, for an external dead-man switch ([details](04-reference.md#observability-and-alerts)). | empty |
+| `SESSION_EXPIRY_HOURS` | Hours a sign-in session lasts. | 12 |
+| `TRANSLATE_ENUMS` | Adds a `[<col>_$label]` column with the label of each enum value (language 1033), read from the snapshot's `GlobalOptionsetMetadata.csv`. Only the SQL stage uses it. | `true` in `docker-compose.yml` and `docker-compose.linux.yml`, `false` in `docker-compose.monolith.yml` |
 | `LOCAL_SOURCE_ROOT` | Demo and tests only: enables the *Local (UAT)* source type, which reads local folders instead of ADLS. **Never used in production**; only `docker-compose.demo.yml` sets it. | — |
 | `DEMO_MODE` | Demo mode (`docker-compose.demo.yml`): generates synthetic F&O data in `LOCAL_SOURCE_ROOT` and creates the demo database, connections and pipeline. Needs `LOCAL_SOURCE_ROOT` and `DEMO_SQL_PASSWORD`. **Never in production.** | `false` |
 | `DEMO_SQL_PASSWORD` | Password of the demo SQL Server `sa` user. | — |

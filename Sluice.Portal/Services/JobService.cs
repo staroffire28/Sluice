@@ -18,6 +18,13 @@ public interface IJobService
             .Select(j => new JobIndexEntry(j.Id, j.PipelineId, j.Type, j.Status, j.StartedAt, j.FinishedAt))
             .ToList();
 
+    // Las entradas que List devolvería con los mismos filtros, todas y sin leer los job.json (la
+    // exportación CSV). Por defecto se derivan de List, para los dobles de test.
+    IReadOnlyList<JobIndexEntry> ListIndex(string? pipelineId, JobStatus? status, DateRange? range) =>
+        List(pageSize: int.MaxValue, pipelineId: pipelineId, status: status, range: range)
+            .Select(j => new JobIndexEntry(j.Id, j.PipelineId, j.Type, j.Status, j.StartedAt, j.FinishedAt))
+            .ToList();
+
     Job? Get(string id);
     Job Create(Job job);
     Job? Update(string id, Job job);
@@ -85,6 +92,9 @@ public sealed class JobService : IJobService
             .ToList();
 
     public IReadOnlyList<JobIndexEntry> ListIndex(string pipelineId) => Filter(pipelineId, null, null).ToList();
+
+    public IReadOnlyList<JobIndexEntry> ListIndex(string? pipelineId, JobStatus? status, DateRange? range) =>
+        Filter(pipelineId, status, range).ToList();
 
     public Job? Get(string id) => _store.GetById(id);
 

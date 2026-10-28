@@ -125,11 +125,12 @@ public sealed class AlertService
             return AlertDeliveryResult.NotConfigured;
         }
 
-        // off = corrección automática desactivada; scheduled = se lanzará al cerrar el job;
-        // unresolved = este job ya era la corrección y no bastó; none = no aplica (p. ej. re-sync manual).
+        // scheduled = la corrección se lanzó al cerrar el job; failed = no se pudo lanzar (el motivo va en
+        // el mensaje); off = desactivada; unresolved = este job ya era la corrección y no bastó;
+        // none = no aplica (p. ej. re-sync manual).
         var autoRemediation = alert.AutoFixAttempted ? "unresolved"
             : !alert.AutoFixEligible ? "none"
-            : _settings.Get().AutoRemediate ? "scheduled" : "off";
+            : alert.AutoFixLaunched switch { true => "scheduled", false => "failed", null => "off" };
 
         return await DeliverAsync(url, alert.EventType, new
         {
@@ -237,9 +238,11 @@ public sealed class AlertService
             }
             else if (result.Success && previous is { LastSucceeded: false })
             {
+                // Un estado escrito por una versión sin recuento cuenta al menos el último fallo.
+                var failed = Math.Max(1, previous.FailedSinceLastSuccess);
                 _activity?.LogSystem("alert.delivery.recovered",
-                    $"El webhook de alertas ({host}) vuelve a responder (alerta {eventType}).",
-                    null, null, "info", "Activity.Alert.DeliveryRecovered", host, eventType);
+                    $"El webhook de alertas ({host}) vuelve a responder (alerta {eventType}). Mientras estaba caído fallaron {failed} intento(s) de entrega: las alertas de un solo disparo de ese periodo (fallo de job, Partial, divergencia...) no se reenvían; las deduplicadas se reintentan.",
+                    null, null, "info", "Activity.Alert.DeliveryRecovered.Lost", host, eventType, failed);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

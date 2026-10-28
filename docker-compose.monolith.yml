@@ -29,6 +29,13 @@ services:
       DATA_DIR: C:/data
       UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
+      # Alertas, deadman y sesión (opcionales, desde .env; ver .env.example). Vacías, no se usan.
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      DEADMAN_PING_URL: ${DEADMAN_PING_URL:-}
+      CHANGELOG_STALL_HOURS: ${CHANGELOG_STALL_HOURS:-}
+      SESSION_EXPIRY_HOURS: ${SESSION_EXPIRY_HOURS:-}
+      # Optionsets traducidos ([<col>_$label]): apagado aquí; TRANSLATE_ENUMS=true en .env lo activa.
+      TRANSLATE_ENUMS: ${TRANSLATE_ENUMS:-false}
     volumes:
       - pipeline-data:C:/data
     healthcheck:

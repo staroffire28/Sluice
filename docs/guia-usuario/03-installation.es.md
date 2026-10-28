@@ -16,7 +16,7 @@ El portal es liviano; los sistemas pesados (SQL Server, ADLS) son externos. Esta
 | Mínimo (PoC / bajo volumen) | 2 | 4 GB | 20 GB |
 | Recomendado (producción) | 4–8 | 16 GB | 100 GB+ SSD |
 
-- El **disco** lo domina el volumen `pipeline-data` (jobs, reportes, staging de parquet). Está acotado por la retención (90 días por defecto). Usa SSD para la cola.
+- El **disco** lo domina el volumen `pipeline-data` (jobs, reportes, staging de parquet). Está acotado por la retención (90 días por defecto), salvo la copia local de cada Parquet consolidado guardado en ADLS, que ocupa lo mismo que esos ficheros (ver *Volumen local* en Retención de la referencia). Usa SSD para la cola.
 - La **RAM** tiene su pico en la consolidación de parquet (un snapshot a la vez). 16 GB es cómodo para varios pipelines en paralelo.
 - SQL Server y ADLS corren en otra parte y no se cuentan aquí.
 
@@ -91,7 +91,7 @@ Luego abre `http://localhost:58472/login`, inicia sesión con tu `UI_API_KEY` (c
 > **Nombre de proyecto `sluice`:** los compose fijan `name: sluice`, así que el volumen es siempre `sluice_pipeline-data`, sea cual sea la carpeta desde la que los ejecutes. Antes, Compose tomaba el nombre del proyecto de la carpeta: si desplegaste desde una carpeta que no se llama `Sluice`, tus datos están en `<proyecto>_pipeline-data`, donde `<proyecto>` es el nombre de esa carpeta en minúsculas (compruébalo con `docker volume ls`), y la actualización arrancaría el stack con un volumen nuevo y vacío. Antes del paso 2, elige una opción:
 >
 > - **Mantener el nombre anterior:** añade `COMPOSE_PROJECT_NAME=<proyecto>` a `.env` (tiene prioridad sobre `name:`).
-> - **Pasar los datos a `sluice_pipeline-data`** (solo con contenedores Linux: los scripts usan un contenedor auxiliar `alpine`; con contenedores Windows, `docker-compose.yml` o `docker-compose.monolith.yml`, usa la primera opción), con el stack anterior parado (`docker compose -p <proyecto> -f <fichero compose> down`), con los [scripts de backup](../BACKUP.md):
+> - **Pasar los datos a `sluice_pipeline-data`** (solo con contenedores Linux: los scripts usan un contenedor auxiliar `alpine`; con contenedores Windows, `docker-compose.yml` o `docker-compose.monolith.yml`, usa la primera opción), con el stack anterior parado (`docker compose -p <proyecto> -f <fichero compose> down`), con los [scripts de backup](../BACKUP.es.md):
 >
 >   ```powershell
 >   .\scripts\backup-data-dir.ps1 -VolumeName <proyecto>_pipeline-data -NoEncrypt
@@ -126,6 +126,14 @@ con un `Caddyfile` como `sluice.example.com { reverse_proxy api:58472 }`. Pon `K
 
 **Opción B, HTTPS en el portal.** Monta un `.pfx` y pon `ASPNETCORE_URLS=https://+:58472;http://localhost:58471`, `ASPNETCORE_Kestrel__Certificates__Default__Path=/certs/sluice.pfx` y `ASPNETCORE_Kestrel__Certificates__Default__Password` en el servicio `api`. El healthcheck del compose sondea HTTP plano, y los workers no arrancan hasta que `api` está sano: sobrescribe el `healthcheck` de `api` con el mismo `test` de tu compose pero con la URL `http://localhost:58471/health` (ese listener HTTP solo responde dentro del contenedor). Después publica en todas las interfaces con `SLUICE_HTTP_BIND=0.0.0.0` en `.env`. La renovación del certificado corre de tu cuenta.
 
+**Arráncalo con los dos ficheros.** Compose solo lee `docker-compose.override.yml` por su cuenta cuando el comando no lleva `-f`, y todos los comandos de esta guía lo llevan. Nombra los dos ficheros, y usa la misma pareja en todos los comandos posteriores (`up`, `down`, `logs` y la actualización del paso 2):
+
+```bash
+docker compose -f docker-compose.linux.yml -f docker-compose.override.yml up -d --build
+```
+
+En Windows, `-f docker-compose.yml -f docker-compose.override.yml`.
+
 ## Primer arranque
 
 En el portal:
@@ -143,9 +151,15 @@ Añade réplicas por etapa cuando una etapa sea el cuello de botella (normalment
 docker compose -f docker-compose.linux.yml up -d --build --scale worker-ingest=3 --scale worker-sql=2
 ```
 
+## Backups
+
+Todo lo que tiene el portal vive en el volumen `pipeline-data`: las conexiones y sus secretos, el keyring de cifrado, los pipelines, los jobs, la cola y el estado de cada pipeline. Perderlo obliga a configurarlo todo de nuevo, y perder solo el keyring, a volver a escribir el secreto de cada conexión. Haz copias con regularidad, cifradas, y guárdalas fuera del host.
+
+Con contenedores Linux, `scripts/backup-data-dir.ps1` y `scripts/restore-data-dir.ps1` lo hacen con el stack parado. [Backup y recuperación de DATA_DIR](../BACKUP.es.md) tiene los pasos: la clave de cifrado, el backup, el restore y qué comprobar después. Un restore extrae el backup junto a los datos actuales y solo los reemplaza cuando la extracción ha terminado, así que necesita espacio libre para una copia más. Con contenedores Windows los scripts no funcionan; la misma página explica cómo copiar el volumen.
+
 ## Ajustes (`/settings`)
 
-Se editan en el portal, se guardan en el volumen y aplican sin reiniciar.
+Se editan en el portal, se guardan en el volumen y aplican sin reiniciar. Si `settings.json` no se puede leer, la página avisa de que muestra los valores por defecto, y guardar pide confirmación antes de sobrescribir el fichero (se perdería lo que tenía, como el webhook).
 
 | Ajuste | Controla | Default |
 |---|---|---|
@@ -157,24 +171,28 @@ Se editan en el portal, se guardan en el volumen y aplican sin reiniciar.
 | Días sin datos para resaltar una tabla | En **Tablas**, *Último dato* se resalta cuando la última carga con filas es más antigua (por ejemplo, una tabla quitada del perfil de Synapse Link). `0` lo desactiva. | 7 |
 | Retención de snapshots origen (días) | Antigüedad a partir de la cual se purgan las carpetas CSV ya procesadas del container de Synapse Link. `0` la desactiva. | 30 |
 | Simulación de la purga de snapshots | Registra qué se borraría sin borrar nada. | Activada |
-| Exigir Parquet antes de purgar | No purga snapshots si falta algún Parquet consolidado del pipeline. | Activada |
+| Exigir Parquet antes de purgar | No purga snapshots si falta algún Parquet consolidado de un pipeline que lea esa fuente. | Activada |
 | Alertas | Activar y URL del webhook (p. ej. una Azure Logic App); **Enviar prueba** comprueba la URL. | Desactivadas |
 | Horas de atraso para alertar | Alerta cuando un snapshot cerrado lleva más de estas horas sin procesarse en un pipeline con scheduler ([detalles](04-reference.es.md#observabilidad-y-alertas)). `0` la desactiva. | 6 |
 
 ## Variables de entorno
 
-`UI_API_KEY` y `AUTH_MODE` van en `.env`; el resto las fijan los archivos compose.
+`UI_API_KEY`, `AUTH_MODE` y las opcionales `ALERT_WEBHOOK_URL`, `DEADMAN_PING_URL`, `CHANGELOG_STALL_HOURS`, `SESSION_EXPIRY_HOURS` y `TRANSLATE_ENUMS` van en `.env`; el resto las fijan los archivos compose.
 
 | Variable | Propósito | Default |
 |---|---|---|
 | `UI_API_KEY` | Clave compartida para UI + `/api/*` (página `/login` + cookie de sesión). Obligatoria salvo con `AUTH_MODE=none`. | — |
 | `AUTH_MODE` | `key` exige `UI_API_KEY`. `none` es acceso abierto a propósito: la landing ofrece **Entrar** sin clave, la API queda abierta, la cabecera muestra **Acceso abierto** y se avisa en el log al arrancar. Úsalo solo en una red interna o detrás de un proxy que ya autentique. Con `none` deja `UI_API_KEY` vacía: las dos juntas no arrancan. | `key` |
-| `EXECUTION_MODE` | `local` o `distributed`. | lo fija compose |
+| `EXECUTION_MODE` | `local` o `distributed`; otro valor impide arrancar. | lo fija compose |
 | `DATA_DIR` | Raíz de persistencia JSON (`/data` Linux, `C:/data` Windows). | lo fija compose |
-| `WORKER_STAGE` | Etapa que procesa un worker (`ingest`, `sql` o `reconcile`; otro valor impide arrancar); ausencia = orquestador. | lo fija compose |
+| `WORKER_STAGE` | Etapa que procesa un worker (`ingest`, `sql` o `reconcile`; otro valor impide arrancar); ausencia = orquestador. Un worker solo responde `/health`: no sirve la UI ni `/api/*`, así que no necesita `UI_API_KEY`. | lo fija compose |
 | `KNOWN_PROXIES` / `KNOWN_NETWORKS` | IPs y redes CIDR (separadas por comas) del proxy inverso de confianza para `X-Forwarded-For`/`Proto`. Sin ellas solo se acepta desde loopback; detrás de un proxy en otro contenedor configúralas, o todos los usuarios comparten la IP del proxy en el límite de intentos de login (se avisa al arrancar). Un valor inválido impide arrancar. Ver *Acceso remoto con TLS*. | vacío |
 | `HEARTBEAT_MAX_FAILURES` | Fallos de heartbeat antes de liberar una tarea. | 3 |
 | `CHANGELOG_STALL_HOURS` | Horas sin actualizar el changelog antes de alertar. | 16 |
+| `ALERT_WEBHOOK_URL` | Webhook de alertas que se usa cuando el de **Ajustes** está apagado o vacío, y cuando `settings.json` no se puede leer. El api y los workers envían alertas, así que los compose se la pasan a todos. | vacío |
+| `DEADMAN_PING_URL` | URL a la que llama el scheduler al final de cada ciclo sano, para un dead-man switch externo ([detalle](04-reference.es.md#observabilidad-y-alertas)). | vacío |
+| `SESSION_EXPIRY_HOURS` | Horas que dura una sesión iniciada. | 12 |
+| `TRANSLATE_ENUMS` | Añade una columna `[<col>_$label]` con la etiqueta de cada valor de enum (idioma 1033), leída del `GlobalOptionsetMetadata.csv` del snapshot. Solo la usa la etapa SQL. | `true` en `docker-compose.yml` y `docker-compose.linux.yml`, `false` en `docker-compose.monolith.yml` |
 | `LOCAL_SOURCE_ROOT` | Solo para la demo y las pruebas: habilita el tipo de origen *Local (UAT)*, que lee carpetas locales en vez de ADLS. **Nunca se usa en producción**; solo lo define `docker-compose.demo.yml`. | — |
 | `DEMO_MODE` | Modo demo (`docker-compose.demo.yml`): genera datos sintéticos de F&O en `LOCAL_SOURCE_ROOT` y crea la base, las conexiones y el pipeline de la demo. Necesita `LOCAL_SOURCE_ROOT` y `DEMO_SQL_PASSWORD`. **Nunca en producción.** | `false` |
 | `DEMO_SQL_PASSWORD` | Contraseña del usuario `sa` del SQL Server de la demo. | — |

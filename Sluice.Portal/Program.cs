@@ -68,8 +68,9 @@ if (appOptions.DemoMode && (!appOptions.IsLocalSourceEnabled || string.IsNullOrW
 }
 
 // Fail-closed fuera de desarrollo: sin claves, el portal quedaría abierto. Solo un AUTH_MODE=none
-// explícito lo permite (acceso abierto a propósito, se avisa abajo). En desarrollo se permite.
-if (!builder.Environment.IsDevelopment() && !appOptions.IsOpenAccess)
+// explícito lo permite (acceso abierto a propósito, se avisa abajo). En desarrollo se permite. Un
+// worker no sirve la UI ni /api (ver más abajo), así que no necesita la clave.
+if (!builder.Environment.IsDevelopment() && !appOptions.IsOpenAccess && appOptions.IsOrchestrator)
 {
     if (!appOptions.IsUiAuthEnabled)
     {
@@ -197,6 +198,16 @@ DataDirectoryInitializer.EnsureLayout(appOptions);
 
 var app = builder.Build();
 
+// Un worker (WORKER_STAGE en distribuido) solo procesa su cola: sin UI ni /api, que con su propia
+// sesión en memoria no se revocaba al cerrar sesión en el api y multiplicaba el límite de intentos
+// de login. Solo responde el healthcheck.
+if (!appOptions.IsOrchestrator)
+{
+    app.MapLivenessEndpoint();
+    app.Run();
+    return;
+}
+
 if (appOptions.IsOpenAccess)
 {
     app.Logger.LogWarning(
@@ -221,11 +232,15 @@ if (appOptions.IsUiAuthEnabled && appOptions.UiApiKey!.Length < AuthConstants.Re
         AuthConstants.RecommendedKeyLength);
 }
 
+// Primero: lo que viene detrás (HSTS, el límite de intentos de login) ve el esquema y la IP del cliente.
+app.UseForwardedHeaders();
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // El portal va detrás de un proxy con TLS: HSTS obliga al navegador a usar siempre https
-    // (solo se envía en respuestas https, que UseForwardedHeaders reconoce vía X-Forwarded-Proto).
+    // El portal va detrás de un proxy con TLS: HSTS obliga al navegador a usar siempre https.
+    // Solo se envía en respuestas https, que se reconocen vía X-Forwarded-Proto porque
+    // UseForwardedHeaders va antes.
     app.UseHsts();
 }
 
@@ -244,9 +259,10 @@ if (appOptions.IsOrchestrator)
         appOptions.DataDir);
 }
 
-app.UseForwardedHeaders();
 app.UseRequestLocalization();
+app.UseSecurityHeaders();
 app.UseStaticFiles();
+app.UseApiCrossSiteGuard();
 app.UseDualAuth();
 app.UseAntiforgery();
 
