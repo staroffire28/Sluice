@@ -311,7 +311,7 @@
         catch (InvalidOperationException ex)
         {
             // Id duplicado (otro nombre que normaliza igual) o no válido: avisar sin tumbar el circuito.
-            _ = NotificationService.ShowErrorToastAsync(ex.Message);
+            _ = NotificationService.ShowErrorToastAsync(ErrorText.Render(L, ex));
             return;
         }
 

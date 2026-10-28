@@ -109,7 +109,7 @@ public sealed class ParquetArtifactService : IParquetArtifactService
         }
 
         using var runLock = await PipelineRunLock.AcquireAsync(_options.DataDir, pipelineId, PipelineRunLock.DefaultTimeout, cancellationToken);
-        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
+        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", "Error.PipelineRunning", cancellationToken);
         // Solo se borra una ruta tal cual la lista el store: cualquier otra forma de nombrar el mismo
         // fichero (alias de ruta, streams, nombres cortos) se trata como ruta inválida.
         var store = await StoreFor(pipelineId, cancellationToken);

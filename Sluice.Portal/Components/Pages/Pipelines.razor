@@ -342,7 +342,7 @@
         }
         catch (Exception ex)
         {
-            _ = NotificationService.ShowErrorToastAsync(ex.Message);
+            _ = NotificationService.ShowErrorToastAsync(ErrorText.Render(L, ex));
         }
     }
 
@@ -379,7 +379,7 @@
         }
         catch (PipelineBusyException ex)
         {
-            _ = NotificationService.ShowErrorToastAsync(ex.Message);
+            _ = NotificationService.ShowErrorToastAsync(ErrorText.Render(L, ex));
             return;
         }
 
@@ -454,7 +454,7 @@
         }
         catch (Exception ex)
         {
-            await NotificationService.ShowErrorToastAsync(ex.Message);
+            await NotificationService.ShowErrorToastAsync(ErrorText.Render(L, ex));
         }
         finally
         {

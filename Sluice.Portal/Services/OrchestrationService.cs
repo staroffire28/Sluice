@@ -196,7 +196,7 @@ public sealed class OrchestrationService : IOrchestrationService
     {
         try
         {
-            await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "", cancellationToken);
+            await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "", "Error.PipelineRunning", cancellationToken);
             return false;
         }
         catch (PipelineBusyException)
@@ -223,21 +223,26 @@ public sealed class OrchestrationService : IOrchestrationService
         var queue = _runQueue
             ?? throw new InvalidOperationException("Queueing a run requires the run queue.");
         _ = _pipelines.Get(pipelineId)
-            ?? throw new InvalidOperationException("Pipeline not found.");
+            ?? throw new LocalizedException("Pipeline not found.", "Error.PipelineNotFound");
         if (!PipelineRunQueue.QueueableTypes.Contains(type))
         {
-            throw new InvalidOperationException($"{type} no se puede dejar en cola.");
+            throw new LocalizedException($"{type} no se puede dejar en cola.", "Error.QueueNotAllowed", JobTypePart(type));
         }
 
         var run = new QueuedRun(type, DateTimeOffset.UtcNow, actor);
         return queue.TryEnqueue(pipelineId, run) switch
         {
             null => run,
-            { } queued when queued.Type == type => throw new InvalidOperationException($"{type} ya está en cola para este pipeline."),
-            { } queued => throw new InvalidOperationException(
-                $"Ya hay {queued.Type} en cola para este pipeline: quítalo de la cola antes de encolar {type}."),
+            { } queued when queued.Type == type => throw new LocalizedException(
+                $"{type} ya está en cola para este pipeline.", "Error.AlreadyQueued", JobTypePart(type)),
+            { } queued => throw new LocalizedException(
+                $"Ya hay {queued.Type} en cola para este pipeline: quítalo de la cola antes de encolar {type}.",
+                "Error.OtherQueued", JobTypePart(queued.Type), JobTypePart(type)),
         };
     }
+
+    // El tipo de job como parte traducible del mensaje (Common.JobType.*).
+    private static EventPart JobTypePart(JobType type) => new($"Common.JobType.{type}");
 
     public QueuedRun? DequeueRun(AuditActor actor, string pipelineId) =>
         (_runQueue ?? throw new InvalidOperationException("Dequeueing a run requires the run queue."))
@@ -276,7 +281,7 @@ public sealed class OrchestrationService : IOrchestrationService
     private async Task<Job> StartAsync(AuditActor actor, string pipelineId, JobType type, string? entity, CancellationToken cancellationToken)
     {
         var pipeline = _pipelines.Get(pipelineId)
-            ?? throw new InvalidOperationException("Pipeline not found.");
+            ?? throw new LocalizedException("Pipeline not found.", "Error.PipelineNotFound");
 
         // Un destino al que la migración le quitó la connection_string sin poder pasarla a campos no
         // arranca nada (ni Force): antes de que el Ingest escriba nada que SQL no podría cargar.
@@ -299,8 +304,8 @@ public sealed class OrchestrationService : IOrchestrationService
         // El lock hace atómico "comprobar + crear" frente a otros Run simultáneos.
         using var runLock = await AcquireRunLockAsync(pipelineId, cancellationToken);
         _ = _pipelines.Get(pipelineId)
-            ?? throw new InvalidOperationException("Pipeline not found.");
-        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
+            ?? throw new LocalizedException("Pipeline not found.", "Error.PipelineNotFound");
+        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", "Error.PipelineRunning", cancellationToken);
         ThrowIfRestorePending(pipelineId);
 
         // Reconcile y Diff solo comparan conteos (parquet consolidado vs SQL) y CompareValues compara
@@ -367,18 +372,18 @@ public sealed class OrchestrationService : IOrchestrationService
     private async Task<Job> RetryCoreAsync(AuditActor actor, string jobId, CancellationToken cancellationToken)
     {
         var job = _jobs.Get(jobId)
-            ?? throw new InvalidOperationException("Job not found.");
+            ?? throw new LocalizedException("Job not found.", "Error.JobNotFound");
 
         // Un Partial sin FinishedAt sigue corriendo (ingest parcial que continúa con SQL).
         if (JobProgressHelper.IsActive(job))
         {
-            throw new InvalidOperationException("El job sigue en curso: espera a que termine o cancélalo antes de reintentarlo.");
+            throw new LocalizedException("El job sigue en curso: espera a que termine o cancélalo antes de reintentarlo.", "Error.JobStillRunning");
         }
 
         // Solo son reintentables los estados terminales con fallo. Running/Ok/Cancelled no.
         if (job.Status is not (JobStatus.Error or JobStatus.Partial or JobStatus.Blocked))
         {
-            throw new InvalidOperationException("Solo se pueden reintentar jobs en estado Error, Parcial o Bloqueado.");
+            throw new LocalizedException("Solo se pueden reintentar jobs en estado Error, Parcial o Bloqueado.", "Error.RetryNotAllowed");
         }
 
         if (job.Type is JobType.ReloadFromParquet or JobType.Force)
@@ -438,19 +443,19 @@ public sealed class OrchestrationService : IOrchestrationService
     private async Task<Job> ResyncTablesCoreAsync(AuditActor actor, string pipelineId, IReadOnlyList<string> entities, ResyncMode mode, CancellationToken cancellationToken)
     {
         _ = _pipelines.Get(pipelineId)
-            ?? throw new InvalidOperationException("Pipeline not found.");
+            ?? throw new LocalizedException("Pipeline not found.", "Error.PipelineNotFound");
 
         entities = entities.Where(e => !string.IsNullOrWhiteSpace(e)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (entities.Count == 0)
         {
-            throw new InvalidOperationException("Entity is required.");
+            throw new LocalizedException("Entity is required.", "Error.EntityRequired");
         }
 
         // Misma guardia anti-doble-run que el Run completo: un solo job activo por pipeline.
         using var runLock = await AcquireRunLockAsync(pipelineId, cancellationToken);
         _ = _pipelines.Get(pipelineId)
-            ?? throw new InvalidOperationException("Pipeline not found.");
-        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
+            ?? throw new LocalizedException("Pipeline not found.", "Error.PipelineNotFound");
+        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", "Error.PipelineRunning", cancellationToken);
         ThrowIfRestorePending(pipelineId);
 
         return await EnqueueResyncAsync(actor, pipelineId, entities, mode, cancellationToken);
@@ -485,20 +490,21 @@ public sealed class OrchestrationService : IOrchestrationService
     private async Task<Job?> RestorePointCoreAsync(AuditActor actor, string pipelineId, string snapshot, CancellationToken cancellationToken)
     {
         var pipeline = _pipelines.Get(pipelineId)
-            ?? throw new InvalidOperationException("Pipeline not found.");
+            ?? throw new LocalizedException("Pipeline not found.", "Error.PipelineNotFound");
         var stateStore = _stateStore
             ?? throw new InvalidOperationException("Restoring a restore point requires the pipeline state store.");
 
         using var runLock = await AcquireRunLockAsync(pipelineId, cancellationToken);
         _ = _pipelines.Get(pipelineId)
-            ?? throw new InvalidOperationException("Pipeline not found.");
-        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
+            ?? throw new LocalizedException("Pipeline not found.", "Error.PipelineNotFound");
+        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", "Error.PipelineRunning", cancellationToken);
 
         var state = stateStore.GetOrCreate(pipelineId);
         if (state.RestoreInProgress is { } halfDone && halfDone.Snapshot != snapshot)
         {
-            throw new InvalidOperationException(
-                $"El restore al punto {halfDone.Snapshot} quedó a medias: termínalo restaurando ese mismo punto antes de elegir otro.");
+            throw new LocalizedException(
+                $"El restore al punto {halfDone.Snapshot} quedó a medias: termínalo restaurando ese mismo punto antes de elegir otro.",
+                "Error.RestoreHalfDone", halfDone.Snapshot);
         }
 
         var from = state.RestoreInProgress is { } inProgress ? inProgress.FromSnapshot : state.LastProcessedSnapshot;
@@ -517,8 +523,9 @@ public sealed class OrchestrationService : IOrchestrationService
             && _settings.TryGet(out var settings)
             && !ParquetVersions.KeptPoints(versions, settings.ParquetVersionDays, DateTimeOffset.UtcNow, state.RetiredSnapshots).Any(p => p.Snapshot == snapshot))
         {
-            throw new InvalidOperationException(
-                $"El punto {snapshot} ya no se conserva (la poda se llevó sus versiones): vuelve a abrir la lista de puntos.");
+            throw new LocalizedException(
+                $"El punto {snapshot} ya no se conserva (la poda se llevó sus versiones): vuelve a abrir la lista de puntos.",
+                "Error.RestorePointPruned", snapshot);
         }
 
         // Rebobinar es volver a leer del lago los snapshots posteriores al punto. La retención de origen
@@ -552,7 +559,7 @@ public sealed class OrchestrationService : IOrchestrationService
                 return null;
             }
 
-            throw new InvalidOperationException($"El pipeline ya está en el punto {snapshot}.");
+            throw new LocalizedException($"El pipeline ya está en el punto {snapshot}.", "Error.AlreadyAtRestorePoint", snapshot);
         }
 
         // Cada tabla queda pendiente de recarga y marcada (versión y estado de entonces) antes de
@@ -782,12 +789,12 @@ public sealed class OrchestrationService : IOrchestrationService
         }
 
         _ = _pipelines.Get(pipelineId)
-            ?? throw new InvalidOperationException("Pipeline not found.");
+            ?? throw new LocalizedException("Pipeline not found.", "Error.PipelineNotFound");
 
         using var runLock = await AcquireRunLockAsync(pipelineId, cancellationToken);
         _ = _pipelines.Get(pipelineId)
-            ?? throw new InvalidOperationException("Pipeline not found.");
-        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", cancellationToken);
+            ?? throw new LocalizedException("Pipeline not found.", "Error.PipelineNotFound");
+        await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId, "Ya hay un job en ejecución para este pipeline.", "Error.PipelineRunning", cancellationToken);
         ThrowIfRestorePending(pipelineId);
 
         var artifacts = await _parquet.ListAsync(pipelineId, cancellationToken);
@@ -800,7 +807,7 @@ public sealed class OrchestrationService : IOrchestrationService
 
         if (entities.Count == 0)
         {
-            throw new InvalidOperationException("No hay parquet consolidado en ADLS para este pipeline.");
+            throw new LocalizedException("No hay parquet consolidado en ADLS para este pipeline.", "Error.NoConsolidatedParquet");
         }
 
         var suffix = jobType == JobType.Force ? "force" : "reload";

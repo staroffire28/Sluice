@@ -250,7 +250,7 @@ public sealed class ConnectionService : IConnectionService
                     locks.Add(await PipelineRunLock.AcquireAsync(_dataDir, pipelineId, PipelineRunLock.DefaultTimeout, cancellationToken));
                     await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, pipelineId,
                         $"Hay un job en curso en el pipeline {pipelineId}, que usa esta conexión: espera a que termine o cancélalo antes de cambiar a dónde apunta.",
-                        cancellationToken);
+                        "Common.ConnectionBusyRetarget", cancellationToken);
                 }
             }
 

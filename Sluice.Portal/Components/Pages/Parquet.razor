@@ -387,7 +387,7 @@
         }
         catch (Exception ex)
         {
-            await NotificationService.ShowErrorToastAsync(ex.Message);
+            await NotificationService.ShowErrorToastAsync(ErrorText.Render(L, ex));
         }
         finally
         {
@@ -418,7 +418,7 @@
         }
         catch (Exception ex)
         {
-            await NotificationService.ShowErrorToastAsync(ex.Message);
+            await NotificationService.ShowErrorToastAsync(ErrorText.Render(L, ex));
         }
         finally
         {

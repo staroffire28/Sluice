@@ -57,7 +57,7 @@ public sealed class PipelineRunQueue
             }
         }
 
-        throw new InvalidOperationException("La cola del pipeline está ocupada; inténtalo de nuevo.");
+        throw new LocalizedException("La cola del pipeline está ocupada; inténtalo de nuevo.", "Error.QueueBusy");
     }
 
     // Solo lo que sigue en cola: lo reservado para arrancar ya no se puede quitar.

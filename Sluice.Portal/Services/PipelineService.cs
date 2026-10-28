@@ -66,7 +66,7 @@ public sealed class PipelineService : IPipelineService
     {
         if (!EntityIds.IsValid(pipeline.Id))
         {
-            throw new InvalidOperationException($"Id de pipeline no válido: '{pipeline.Id}'.");
+            throw new LocalizedException($"Id de pipeline no válido: '{pipeline.Id}'.", "Error.InvalidPipelineId", pipeline.Id);
         }
 
         if (EntityIds.IsReservedPipelineId(pipeline.Id))
@@ -126,7 +126,8 @@ public sealed class PipelineService : IPipelineService
 
         using var runLock = await PipelineRunLock.AcquireAsync(_options.DataDir, id, PipelineRunLock.DefaultTimeout, cancellationToken);
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, id,
-            "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de cambiar su origen o su destino.", cancellationToken);
+            "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de cambiar su origen o su destino.",
+            "Page.Pipelines.BusyRetarget", cancellationToken);
         return UpdateCore(id, pipeline) is { } moved ? (existing, moved) : null;
     }
 
@@ -169,7 +170,7 @@ public sealed class PipelineService : IPipelineService
         // evita además borrarlo a mitad de un arranque o de un reset.
         using var runLock = await PipelineRunLock.AcquireAsync(_options.DataDir, id, PipelineRunLock.DefaultTimeout, cancellationToken);
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, id,
-            "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de borrarlo.", cancellationToken);
+            "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de borrarlo.", "Error.PipelineBusyDelete", cancellationToken);
 
         if (!_store.Delete(id))
         {
@@ -209,12 +210,12 @@ public sealed class PipelineService : IPipelineService
     {
         if (_connections.GetById(pipeline.SourceId) is null)
         {
-            throw new InvalidOperationException("Source connection not found.");
+            throw new LocalizedException("Source connection not found.", "Error.SourceNotFound");
         }
 
         if (_connections.GetById(pipeline.DestinationId) is null)
         {
-            throw new InvalidOperationException("Destination connection not found.");
+            throw new LocalizedException("Destination connection not found.", "Error.DestinationNotFound");
         }
     }
 }
