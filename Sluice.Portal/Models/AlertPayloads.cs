@@ -45,8 +45,9 @@ public sealed record ReconcileAlert
 
 public sealed record AlertDeliveryResult(bool Success, string? Detail, int? StatusCode)
 {
-    // Sin webhook configurado la alerta solo va al log: cuenta como atendida, no hay nada que reintentar.
-    public static readonly AlertDeliveryResult NotConfigured = new(true, "No webhook configured.", null);
+    // Sin webhook configurado la alerta solo va al log: no cuenta como entregada, así que un aviso de
+    // episodio sigue pendiente y llega si después se configura el webhook.
+    public static readonly AlertDeliveryResult NotConfigured = new(false, "No webhook configured.", null);
 }
 
 // Última entrega al webhook (DATA_DIR/alerts/status.json), compartida por la api y los workers.
@@ -59,4 +60,9 @@ public sealed record AlertDeliveryStatus
     public int? LastStatusCode { get; init; }
     public DateTimeOffset? LastSuccessAt { get; init; }
     public DateTimeOffset? LastFailureAt { get; init; }
+
+    // Intentos de entrega fallidos desde la última entrega correcta, incluidos los reintentos de
+    // las alertas deduplicadas en cada poll. El aviso de recuperación los cita y recuerda que las
+    // de un solo disparo (fallo, Partial, divergencia...) no se reenvían.
+    public int FailedSinceLastSuccess { get; init; }
 }
