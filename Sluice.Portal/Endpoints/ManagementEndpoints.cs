@@ -292,9 +292,23 @@ public static class ManagementEndpoints
                 : Results.Stream(stream, "application/octet-stream", path.Split('/').Last());
         });
         api.MapDelete("/pipelines/{id}/parquet", async (string id, string path, HttpContext http, IParquetArtifactService parquet, CancellationToken ct) =>
-            await parquet.DeleteAsync(AuditActor.FromHttp(http), id, path, ct)
-                ? Results.NoContent()
-                : Results.BadRequest(new { error = "Ruta de parquet inválida para este pipeline." }));
+        {
+            try
+            {
+                return await parquet.DeleteAsync(AuditActor.FromHttp(http), id, path, ct)
+                    ? Results.NoContent()
+                    : Results.BadRequest(new { error = "Ruta de parquet inválida para este pipeline." });
+            }
+            catch (PipelineBusyException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                // El consolidado de una tabla que sigue en el pipeline.
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
 
         api.MapGet("/jobs", (int? page, int? pageSize, string? pipelineId, JobStatus? status, IJobService svc) =>
         {
