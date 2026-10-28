@@ -19,6 +19,7 @@ public sealed record AuditActor(string Source, string Channel, string? Client)
     public static readonly AuditActor Retention = System("retention");
     public static readonly AuditActor Worker = System("worker");
     public static readonly AuditActor Demo = System("demo");
+    public static readonly AuditActor Migration = System("migration");
 
     // Canal y cliente, como la columna Actor de Logs. Se guarda dentro de Job y QueuedRun: no se serializa.
     [JsonIgnore]

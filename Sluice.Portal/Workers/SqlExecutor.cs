@@ -140,15 +140,22 @@ public sealed class SqlExecutor : ISqlExecutor
                     ? null
                     : await parquetStore.ReadTextAsync(entry.SchemaPath, cancellationToken);
 
+                // El ingest dejó la tabla en el manifest, así que su consolidado debería estar: sin él la
+                // tabla no se carga, y es un fallo de la entidad (antes contaba como "skipped" y el job
+                // cerraba Ok).
                 if (schemaJson is null || !await parquetStore.ParquetExistsAsync(entry.ParquetPath, cancellationToken))
                 {
+                    failedEntities++;
                     entityResults.Add(new JobEntityResult
                     {
                         Entity = entry.Entity,
                         CsvRows = entry.CsvRows,
-                        Status = "skipped",
+                        Status = "error",
                         Message = "Missing parquet or schema in ADLS.",
                     });
+                    _jobs.AppendEvent(task.JobId, EventLevel.Error,
+                        $"{entry.Entity}: falta el parquet consolidado o su schema en el almacén; la tabla no se carga en SQL.",
+                        null, "Event.Sql.MissingParquet", entry.Entity);
                     continue;
                 }
 
@@ -187,11 +194,11 @@ public sealed class SqlExecutor : ISqlExecutor
                 // Origen y modo: el delta (solo lo nuevo, sin reescribir lo igual) si la tabla ya
                 // tiene datos; si está vacía, el consolidado con inserción directa (el delta no la
                 // dejaría completa); en cualquier otro caso, el consolidado con MERGE incondicional.
-                var targetRows = await _mergeExecutor.CountRowsAsync(connection, schema, entry.Entity, sqlVersion, cancellationToken);
+                var hasRows = await _mergeExecutor.HasRowsAsync(connection, schema, entry.Entity, sqlVersion, cancellationToken);
                 var deltaPath = _manifestStore.GetDeltaPath(task.PipelineId, task.JobId, entry.Entity);
-                var fromDelta = useDelta && entry.HasDelta && targetRows > 0 && File.Exists(deltaPath);
+                var fromDelta = useDelta && entry.HasDelta && hasRows && File.Exists(deltaPath);
                 var mode = fromDelta ? MergeMode.UpsertNewer
-                    : targetRows == 0 ? MergeMode.InsertIntoEmpty
+                    : !hasRows ? MergeMode.InsertIntoEmpty
                     : MergeMode.Upsert;
 
                 // MERGE en streaming: se lee por lotes (un row group a la vez) y se mergea por
@@ -205,8 +212,26 @@ public sealed class SqlExecutor : ISqlExecutor
                 await using var reloadKeys = reload
                     ? _mergeExecutor.CreateSourceKeySink(connection, schema, entry.Entity, cdmSchema, sqlVersion)
                     : null;
-                // DeleteMode.Delete: las filas de borrado no se cargan; sus Id se borran al final.
-                var deleteKeys = pipeline.DeleteMode == DeleteMode.Delete ? new List<object?>() : null;
+                // DeleteMode.Delete: las filas de borrado no se cargan; sus Id se borran por lotes
+                // mientras se lee, así no se juntan todas en memoria (el mismo patrón que las claves
+                // del Reload). El consolidado deduplica por Id: una clave borrada no es la de ninguna
+                // fila que se mergee. Una tabla vacía no tiene nada que borrar (InsertIntoEmpty).
+                var applyDeletes = pipeline.DeleteMode == DeleteMode.Delete;
+                var deleteKeys = applyDeletes && mode != MergeMode.InsertIntoEmpty ? new List<object?>(mergeBatch) : null;
+                var deleted = 0;
+                async Task FlushDeletesAsync()
+                {
+                    if (deleteKeys is not { Count: > 0 })
+                    {
+                        return;
+                    }
+
+                    stallWatch.Touch($"{entry.Entity} · deletes");
+                    progress.Report(JobStepCatalog.Merge, entityResults.Count, item: entry.Entity, phase: "deletes", failed: failedEntities);
+                    deleted += await _mergeExecutor.DeleteKeysAsync(connection, schema, entry.Entity, cdmSchema, deleteKeys, sqlVersion, cancellationToken);
+                    deleteKeys.Clear();
+                }
+
                 await using (var parquetStream = fromDelta
                     ? File.OpenRead(deltaPath)
                     : await parquetStore.OpenParquetReadAsync(entry.ParquetPath, cancellationToken))
@@ -214,11 +239,15 @@ public sealed class SqlExecutor : ISqlExecutor
                     var batch = new List<Dictionary<string, object?>>(mergeBatch);
                     await foreach (var row in ParquetMaterializer.ReadStreamingAsync(parquetStream, cdmSchema, cancellationToken))
                     {
-                        if (deleteKeys is not null && DeleteRows.IsDeleteRow(row))
+                        if (applyDeletes && DeleteRows.IsDeleteRow(row))
                         {
-                            if (row.TryGetValue("Id", out var deletedId))
+                            if (deleteKeys is not null && row.TryGetValue("Id", out var deletedId))
                             {
                                 deleteKeys.Add(deletedId);
+                                if (deleteKeys.Count >= mergeBatch)
+                                {
+                                    await FlushDeletesAsync();
+                                }
                             }
 
                             continue;
@@ -261,17 +290,11 @@ public sealed class SqlExecutor : ISqlExecutor
                     }
                 }
 
-                // Una tabla vacía no tiene nada que borrar (InsertIntoEmpty ya las saltó).
-                if (deleteKeys is { Count: > 0 } && mode != MergeMode.InsertIntoEmpty)
+                await FlushDeletesAsync();
+                if (deleted > 0)
                 {
-                    stallWatch.Touch($"{entry.Entity} · deletes");
-                    progress.Report(JobStepCatalog.Merge, entityResults.Count, item: entry.Entity, phase: "deletes", failed: failedEntities);
-                    var deleted = await _mergeExecutor.DeleteKeysAsync(connection, schema, entry.Entity, cdmSchema, deleteKeys, sqlVersion, cancellationToken);
-                    if (deleted > 0)
-                    {
-                        _jobs.AppendEvent(task.JobId, EventLevel.Info, $"{entry.Entity}: {deleted} fila(s) borrada(s) en F&O eliminada(s) del destino.",
-                            null, "Event.Sql.SourceDeletesApplied", entry.Entity, deleted);
-                    }
+                    _jobs.AppendEvent(task.JobId, EventLevel.Info, $"{entry.Entity}: {deleted} fila(s) borrada(s) en F&O eliminada(s) del destino.",
+                        null, "Event.Sql.SourceDeletesApplied", entry.Entity, deleted);
                 }
 
                 stallWatch.Touch($"{entry.Entity} · count");
@@ -293,10 +316,11 @@ public sealed class SqlExecutor : ISqlExecutor
                 _jobs.AppendEvent(task.JobId, EventLevel.Info, $"{entry.Entity}: merged {merged}{(fromDelta ? " (delta)" : "")}, table count {sqlRows}.",
                     null, fromDelta ? "Event.Sql.EntityMergedDelta" : "Event.Sql.EntityMerged", entry.Entity, merged, sqlRows);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
                 // Una cancelación del worker (SIGTERM/redeploy) no es un fallo de la entidad: se
                 // propaga para que la tarea se reintente en vez de marcar el job sano como Error.
+                // Se mira el token y no el tipo: el driver la traduce a SqlException.
                 // Una entidad que falla (container parquet sin configurar, schema corrupto,
                 // error SQL) NO debe tumbar toda la etapa ni terminar en silencio: se marca
                 // 'error', se registra, y el resto de entidades continúa.
@@ -345,8 +369,11 @@ public sealed class SqlExecutor : ISqlExecutor
 
         // El delta solo sirve dentro de este job: se borra al terminar la etapa (vaya bien o mal;
         // un reintento recarga desde el consolidado). Una cancelación sale antes por excepción
-        // y lo conserva para la réplica que reclame la tarea.
-        TryDeleteDirectory(_manifestStore.GetDeltaDirectory(task.PipelineId, task.JobId));
+        // y lo conserva para la réplica que reclame la tarea; con el token ya cancelado, tampoco.
+        if (!cancellationToken.IsCancellationRequested)
+        {
+            TryDeleteDirectory(_manifestStore.GetDeltaDirectory(task.PipelineId, task.JobId));
+        }
 
         var hasEntityError = entityResults.Any(e =>
             string.Equals(e.Status, "error", StringComparison.OrdinalIgnoreCase));

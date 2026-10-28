@@ -14,7 +14,7 @@ public sealed class JobStore : JsonFileStore<Job>
     private readonly object _indexLock = new();
     private readonly Dictionary<string, (DateTime WriteTime, long Length, JobIndexEntry Entry)> _index = new(StringComparer.Ordinal);
 
-    public JobStore(IOptions<AppOptions> options) : base(options, "jobs")
+    public JobStore(IOptions<AppOptions> options, ILogger<JobStore>? logger = null) : base(options, "jobs", logger)
     {
         _locksDir = Path.Combine(options.Value.DataDir, "locks");
     }
@@ -55,9 +55,17 @@ public sealed class JobStore : JsonFileStore<Job>
                 {
                     job = Read(file.FullName);
                 }
-                catch (Exception ex) when (ex is System.Text.Json.JsonException or IOException or UnauthorizedAccessException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    // Corrupto o a medio mover por otro proceso: se omite, como en ListAll.
+                    // Abierto o a medio mover por otro proceso: se queda lo último leído, sin tocar la
+                    // caché, y se relee en la siguiente consulta. Quitarlo hacía que un job en curso
+                    // desapareciera de ListRunning y de las guardas por un error transitorio.
+                    continue;
+                }
+                catch (System.Text.Json.JsonException ex)
+                {
+                    // Corrupto: se omite, como en ListAll.
+                    WarnUnreadable(file.FullName, ex);
                     job = null;
                 }
 
@@ -101,7 +109,12 @@ public sealed class JobStore : JsonFileStore<Job>
     {
         lock (_indexLock)
         {
-            _index.Remove(id);
+            // Se invalida sin quitarla: ListIndex la relee, y si no puede leerla en ese momento se
+            // queda con la última. Un fichero borrado sale por el barrido de los que ya no están.
+            if (_index.TryGetValue(id, out var cached))
+            {
+                _index[id] = cached with { WriteTime = default };
+            }
         }
     }
 
