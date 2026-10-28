@@ -75,7 +75,7 @@
                     }
                     else
                     {
-                        <ApexChart TItem="StageQueueDepth" Title="@L["Page.Analytics.Chart.QueueByStage"]" Options="_barQueueOptions" Height="280" @key="_themeMode">
+                        <ApexChart TItem="StageQueueDepth" Title="@L["Page.Analytics.Chart.QueueByStage"]" Options="_barQueueOptions" Height="280" @key="(_themeMode, _loads)">
                             <ApexPointSeries TItem="StageQueueDepth"
                                              Items="_snapshot.QueueDepths"
                                              Name="@L["Page.Analytics.Series.Pending"]"
@@ -106,7 +106,7 @@
                     }
                     else
                     {
-                        <ApexChart TItem="LabeledValue" Title="@L["Page.Analytics.Chart.AvgDuration"]" Options="_barDurationOptions" Height="280" @key="_themeMode">
+                        <ApexChart TItem="LabeledValue" Title="@L["Page.Analytics.Chart.AvgDuration"]" Options="_barDurationOptions" Height="280" @key="(_themeMode, _loads)">
                             <ApexPointSeries TItem="LabeledValue"
                                              Items="_snapshot.AvgDurationByType"
                                              Name="@L["Page.Analytics.Series.Minutes"]"
@@ -130,7 +130,7 @@
                     else
                     {
                         @* La zona en la @key: las etiquetas cambian cuando se conoce la del navegador. *@
-                        <ApexChart TItem="DivergencePoint" Title="@L["Page.Analytics.Chart.DivergenceOverTime"]" Options="_lineDivergenceOptions" Height="280" @key="(_themeMode, Time.Zone)">
+                        <ApexChart TItem="DivergencePoint" Title="@L["Page.Analytics.Chart.DivergenceOverTime"]" Options="_lineDivergenceOptions" Height="280" @key="(_themeMode, Time.Zone, _loads)">
                             <ApexPointSeries TItem="DivergencePoint"
                                              Items="_snapshot.DivergenceOverTime"
                                              Name="@L["Page.Analytics.Series.Divergence"]"
@@ -149,7 +149,7 @@
                     }
                     else
                     {
-                        <ApexChart TItem="LabeledValue" Title="@L["Page.Analytics.Chart.StatusDistribution"]" Options="_donutOptions" Height="280" @key="_themeMode">
+                        <ApexChart TItem="LabeledValue" Title="@L["Page.Analytics.Chart.StatusDistribution"]" Options="_donutOptions" Height="280" @key="(_themeMode, _loads)">
                             <ApexPointSeries TItem="LabeledValue"
                                              Items="_snapshot.StatusDistribution"
                                              Name="@L["Page.Analytics.Series.Jobs"]"
@@ -167,7 +167,7 @@
                 @* Jobs per day (line, last 14 days). La zona en la @key: los días cambian cuando se
                    conoce la del navegador. *@
                 <FluentCard>
-                    <ApexChart TItem="DailyJobCount" Title="@L["Page.Analytics.Chart.JobsPerDay"]" Options="_lineJobsOptions" Height="280" @key="(_themeMode, Time.Zone)">
+                    <ApexChart TItem="DailyJobCount" Title="@L["Page.Analytics.Chart.JobsPerDay"]" Options="_lineJobsOptions" Height="280" @key="(_themeMode, Time.Zone, _loads)">
                         <ApexPointSeries TItem="DailyJobCount"
                                          Items="_snapshot.JobsPerDay"
                                          Name="@L["Page.Analytics.Series.Success"]"
@@ -191,7 +191,7 @@
                     }
                     else
                     {
-                        <ApexChart TItem="LabeledValue" Title="@L["Page.Analytics.Chart.MergedRows"]" Options="_barRowsOptions" Height="280" @key="_themeMode">
+                        <ApexChart TItem="LabeledValue" Title="@L["Page.Analytics.Chart.MergedRows"]" Options="_barRowsOptions" Height="280" @key="(_themeMode, _loads)">
                             <ApexPointSeries TItem="LabeledValue"
                                              Items="_snapshot.MergedRowsByPipeline"
                                              Name="@L["Page.Analytics.Series.Rows"]"
@@ -215,6 +215,10 @@
     private string _pipelineFilter = "";
     private Mode _themeMode = Mode.Light;
 
+    // Cuenta las cargas: en la @key de cada gráfico, que se monta de nuevo con las opciones (el
+    // eje de cantidades depende del máximo de los datos).
+    private int _loads;
+
     private ApexChartOptions<LabeledValue> _donutOptions = BrandOptions<LabeledValue>(Mode.Light);
     private ApexChartOptions<LabeledValue> _barRowsOptions = BrandOptions<LabeledValue>(Mode.Light);
     private ApexChartOptions<DailyJobCount> _lineJobsOptions = BrandOptions<DailyJobCount>(Mode.Light);
@@ -225,7 +229,6 @@
     protected override void OnInitialized()
     {
         Load();
-        ApplyTheme();
         ThemeState.Changed += OnThemeChanged;
     }
 
@@ -245,7 +248,12 @@
 
     private void Reload() => Load();
 
-    private void Load() => _snapshot = AnalyticsSvc.GetSnapshot(_pipelineFilter, Time.Zone);
+    private void Load()
+    {
+        _snapshot = AnalyticsSvc.GetSnapshot(_pipelineFilter, Time.Zone);
+        _loads++;
+        ApplyTheme();
+    }
 
     // El servicio da los nombres de los enums; se traducen al pintar.
     private string StatusLabel(string status) =>
@@ -267,20 +275,24 @@
     private void ApplyTheme()
     {
         _themeMode = ThemeState.IsDark ? Mode.Dark : Mode.Light;
+        var snapshot = _snapshot;
 
         _donutOptions = BrandOptions<LabeledValue>(_themeMode);
-        _barRowsOptions = BrandOptions<LabeledValue>(_themeMode);
-        _lineJobsOptions = BrandOptions<DailyJobCount>(_themeMode);
+        _barRowsOptions = BrandOptions<LabeledValue>(_themeMode, snapshot?.MergedRowsByPipeline.Select(r => r.Value).DefaultIfEmpty().Max() ?? 0);
+        _lineJobsOptions = BrandOptions<DailyJobCount>(_themeMode, snapshot?.JobsPerDay.Select(d => (double)Math.Max(d.Success, d.Error)).DefaultIfEmpty().Max() ?? 0);
         _lineDivergenceOptions = BrandOptions<DivergencePoint>(_themeMode);
         _barDurationOptions = BrandOptions<LabeledValue>(_themeMode);
-        _barQueueOptions = BrandOptions<StageQueueDepth>(_themeMode);
+        _barQueueOptions = BrandOptions<StageQueueDepth>(_themeMode, snapshot?.QueueDepths.Select(q => (double)Math.Max(q.Pending, Math.Max(q.Claimed, q.Error))).DefaultIfEmpty().Max() ?? 0);
     }
 
-    // Cada gráfico necesita su propia instancia de opciones (no se pueden compartir).
-    private static ApexChartOptions<TItem> BrandOptions<TItem>(Mode mode) where TItem : class => new()
+    // Cada gráfico necesita su propia instancia de opciones (no se pueden compartir). Fondo y letra
+    // los de la página: en oscuro, Apex pintaba su propio fondo gris y su fuente. countMax: el eje
+    // es de cantidades (jobs, filas) y no lleva decimales.
+    private static ApexChartOptions<TItem> BrandOptions<TItem>(Mode mode, double? countMax = null) where TItem : class => new()
     {
         Colors = new List<string>(BrandPalette),
-        Chart = new Chart { Height = 280 },
+        Chart = new Chart { Height = 280, Background = "transparent", FontFamily = "inherit" },
         Theme = new ApexCharts.Theme { Mode = mode },
+        Yaxis = countMax is { } max ? [ChartAxes.Count(max)] : null,
     };
 }
