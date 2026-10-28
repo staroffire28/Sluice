@@ -2,8 +2,10 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
+using Sluice.Portal.Scheduler;
 using Sluice.Portal.Services;
 using Sluice.Portal.Services.Adls;
+using Sluice.Portal.Services.Logging;
 using Sluice.Portal.Services.Pipeline;
 using Sluice.Portal.Services.Stores;
 
@@ -885,6 +887,31 @@ public sealed class IngestExecutor : IIngestExecutor
                 Message = completionNote,
                 Status = jobStatusAfterIngest == JobStatus.Partial ? PipelineFailureAlert.Warning : PipelineFailureAlert.Error,
             }, cancellationToken);
+        }
+
+        // Un Run que se para en un snapshot incompleto cerraba Ok sin avisar. Avisa por el webhook una
+        // vez por snapshot y de nuevo cada 24 h, con la última alerta en IncompleteSnapshot.LastAlertedAt.
+        // Si lo lanzó el scheduler (solo valida el snapshot pendiente más antiguo y puede toparse con otro
+        // posterior que Synapse aún escribe), espera los mismos 45 min que él desde
+        // IncompleteSnapshot.FirstSeenAt. Si lo lanzó otro (a mano, por la API o un job antiguo sin
+        // lanzador), avisa ya: alguien lo pidió y puede que el scheduler esté apagado.
+        if (incompleteSnapshot is not null && _alerts is not null)
+        {
+            var tracked = _stateStore.GetOrCreate(task.PipelineId).IncompleteSnapshot;
+            var now = DateTimeOffset.UtcNow;
+            if (tracked?.Name == incompleteSnapshot
+                && (job.TriggeredBy != AuditActor.Scheduler || now - tracked.FirstSeenAt >= PipelineSchedulerService.IncompleteSnapshotGrace)
+                && (tracked.LastAlertedAt is not { } last || now - last >= PipelineSchedulerService.IncompleteSnapshotRepeat))
+            {
+                var message = $"Pipeline {pipeline.Name} parado: el snapshot {incompleteSnapshot} está cerrado pero incompleto ({incomplete?.Reason}). " +
+                    "No se procesa nada más hasta que el volcado de Synapse Link se complete; revisa la exportación.";
+                if ((await _alerts.SendSnapshotIncompleteAsync(pipeline.Id, pipeline.Name, incompleteSnapshot, message, cancellationToken)).Success)
+                {
+                    _stateStore.Update(task.PipelineId, s => s.IncompleteSnapshot?.Name == incompleteSnapshot
+                        ? s with { IncompleteSnapshot = s.IncompleteSnapshot with { LastAlertedAt = now } }
+                        : s);
+                }
+            }
         }
     }
 
