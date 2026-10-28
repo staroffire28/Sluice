@@ -375,8 +375,9 @@ public sealed class ReconcileExecutor : IReconcileExecutor
                 _mergeExecutor.ReadRowsAsync(sql, sqlSchema, entity, columns.Select(c => c.Name).ToList(), cancellationToken),
                 cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
+            // Con el token cancelado se propaga, aunque el driver de SQL la traduzca a SqlException.
             return new ValueCompareEntityResult { Entity = entity, Error = ex.Message };
         }
     }

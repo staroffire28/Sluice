@@ -278,7 +278,7 @@
         _showEditor = true;
     }
 
-    private void SaveEditor()
+    private async Task SaveEditor()
     {
         try
         {
@@ -305,7 +305,7 @@
             else
             {
                 var existing = PipelineService.Get(_editingId)!;
-                PipelineService.Update(Audit.Current, _editingId, existing with
+                await PipelineService.UpdateAsync(Audit.Current, _editingId, existing with
                 {
                     Name = _editName,
                     SourceId = _sourceId,
@@ -317,6 +317,10 @@
             _showEditor = false;
             _ = NotificationService.ShowSuccessToastAsync(L["Common.Saved"].Value);
             Load();
+        }
+        catch (PipelineBusyException)
+        {
+            _ = NotificationService.ShowErrorToastAsync(L["Page.Pipelines.BusyRetarget"].Value);
         }
         catch (Exception ex)
         {
