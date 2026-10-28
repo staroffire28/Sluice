@@ -249,7 +249,7 @@
         _showEditor = true;
     }
 
-    private void Save()
+    private async Task Save()
     {
         var config = new Dictionary<string, string?>
         {
@@ -284,13 +284,18 @@
             else
             {
                 var existing = Connections.Get(_editingId)!;
-                Connections.Update(Audit.Current, _editingId, existing with
+                await Connections.UpdateAsync(Audit.Current, _editingId, existing with
                 {
                     Name = _name,
                     Type = _type,
                     Config = config,
                 });
             }
+        }
+        catch (PipelineBusyException)
+        {
+            _ = NotificationService.ShowErrorToastAsync(L["Common.ConnectionBusyRetarget"].Value);
+            return;
         }
         catch (InvalidOperationException ex)
         {

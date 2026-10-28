@@ -30,12 +30,22 @@ public sealed class PipelineSchedulerService : BackgroundService
     // Aviso de snapshot incompleto ya registrado en el activity log (pipeline → ronda de aviso), para
     // no repetirlo en cada poll mientras el webhook no lo acepte.
     private readonly Dictionary<string, string> _incompleteLogged = new(StringComparer.OrdinalIgnoreCase);
+    // Lo mismo para el aviso de bloqueo por changelog (pipeline → ronda de aviso).
+    private readonly Dictionary<string, string> _changelogBlockLogged = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _lagAlertsNoticed = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _lagAlertsSent = new(StringComparer.OrdinalIgnoreCase);
     // Restore a medias: aviso registrado y alerta entregada, una vez por episodio. Se rearman en cuanto
     // el estado del pipeline ya no tiene el restore a medias.
     private readonly HashSet<string> _restoreHoldNoticed = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _restoreHoldAlerted = new(StringComparer.OrdinalIgnoreCase);
+    // Fallo del scheduler en un pipeline: lo mismo, una vez por episodio. Se rearman cuando el pipeline
+    // vuelve a evaluarse sin error.
+    private readonly HashSet<string> _schedulerErrorNoticed = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _schedulerErrorAlerted = new(StringComparer.OrdinalIgnoreCase);
+    // Destino marcado por la migración (faltan sus campos): igual, una vez por episodio. Se rearman en
+    // cuanto el pipeline vuelve a arrancar.
+    private readonly HashSet<string> _fieldsRequiredNoticed = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _fieldsRequiredAlerted = new(StringComparer.OrdinalIgnoreCase);
     private bool _alertDeliveryFailedThisPoll;
 
     public PipelineSchedulerService(
@@ -188,20 +198,30 @@ public sealed class PipelineSchedulerService : BackgroundService
         var failed = 0;
         foreach (var pipeline in _pipelines.List().Where(p => p.Enabled))
         {
-            if (_stateStore.GetOrCreate(pipeline.Id).RestoreInProgress is null)
-            {
-                _restoreHoldNoticed.Remove(pipeline.Id);
-                _restoreHoldAlerted.Remove(pipeline.Id);
-            }
-
             if (_jobs.ListRunning().Any(j => j.PipelineId == pipeline.Id))
             {
+                // Con un job en curso no hay restore a medias (no arranca nada mientras haya uno
+                // pendiente): el episodio terminó.
+                _restoreHoldNoticed.Remove(pipeline.Id);
+                _restoreHoldAlerted.Remove(pipeline.Id);
+                _fieldsRequiredNoticed.Remove(pipeline.Id);
+                _fieldsRequiredAlerted.Remove(pipeline.Id);
                 continue;
             }
 
             evaluated++;
+            var pipelineFailed = false;
             try
             {
+                // Dentro del try: un pipeline_state.json ilegible cuenta como fallo de este pipeline,
+                // no tumba el poll de los demás.
+                var state = _stateStore.GetOrCreate(pipeline.Id);
+                if (state.RestoreInProgress is null)
+                {
+                    _restoreHoldNoticed.Remove(pipeline.Id);
+                    _restoreHoldAlerted.Remove(pipeline.Id);
+                }
+
                 var catalog = await _snapshots.GetCatalogAsync(pipeline.Id, ct);
                 try
                 {
@@ -211,7 +231,13 @@ public sealed class PipelineSchedulerService : BackgroundService
                             "Scheduler skip {PipelineId}: {Reason}",
                             pipeline.Id,
                             catalog.BlockReason);
+                        await HoldForChangelogBlockAsync(pipeline, catalog, state, ct);
                         continue;
+                    }
+
+                    if (state.ChangelogBlock is not null)
+                    {
+                        _stateStore.Update(pipeline.Id, s => s with { ChangelogBlock = null });
                     }
 
                     if (catalog.PendingSnapshots.Count == 0)
@@ -230,6 +256,8 @@ public sealed class PipelineSchedulerService : BackgroundService
                         pipeline.Id,
                         catalog.PendingSnapshots.Count);
                     await _orchestration.RunPipelineAsync(AuditActor.Scheduler, pipeline.Id, JobType.Incremental, ct);
+                    _fieldsRequiredNoticed.Remove(pipeline.Id);
+                    _fieldsRequiredAlerted.Remove(pipeline.Id);
                 }
                 finally
                 {
@@ -257,13 +285,50 @@ public sealed class PipelineSchedulerService : BackgroundService
                     _restoreHoldAlerted.Add(pipeline.Id);
                 }
             }
-            catch (Exception ex)
+            catch (ConnectionFieldsRequiredException ex)
             {
+                // Retención, no fallo: es lo esperado tras la migración hasta que alguien escriba los
+                // campos del destino. Igual que el restore a medias, una vez por episodio.
+                _logger.LogInformation("Scheduler hold {PipelineId}: {Reason}", pipeline.Id, ex.Message);
+                var message = $"Pipeline {pipeline.Name} parado: {ex.Message}";
+                if (_fieldsRequiredNoticed.Add(pipeline.Id))
+                {
+                    _activity.LogSystem("connection.fields-required", message, pipeline.Id, null, "warning",
+                        "Activity.Connection.FieldsRequiredHold", pipeline.Name, ex.ConnectionName);
+                }
+
+                if (!_fieldsRequiredAlerted.Contains(pipeline.Id) && await TrySendPendingAlertAsync(message, ct))
+                {
+                    _fieldsRequiredAlerted.Add(pipeline.Id);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                // La cancelación del apagado no entra aquí: no es un fallo del pipeline. El fallo se
+                // registra y alerta una vez por episodio (la alerta cuenta solo si llega al webhook), no
+                // en cada poll; se rearma cuando el pipeline vuelve a evaluarse sin error.
                 failed++;
+                pipelineFailed = true;
                 _logger.LogWarning(ex, "Scheduler failed for pipeline {PipelineId}", pipeline.Id);
-                _activity.LogSystem("scheduler.error", $"El scheduler falló en el pipeline {pipeline.Id}: {ex.Message}", pipeline.Id, null, "error",
-                    "Activity.Scheduler.Error", pipeline.Id, ex.Message);
-                await _alerts.SendAsync($"Scheduler failed for {pipeline.Id}: {ex.Message}", ct);
+                if (_schedulerErrorNoticed.Add(pipeline.Id))
+                {
+                    _activity.LogSystem("scheduler.error", $"El scheduler falló en el pipeline {pipeline.Id}: {ex.Message}", pipeline.Id, null, "error",
+                        "Activity.Scheduler.Error", pipeline.Id, ex.Message);
+                }
+
+                if (!_schedulerErrorAlerted.Contains(pipeline.Id)
+                    && await TrySendPendingAlertAsync($"Scheduler failed for {pipeline.Id}: {ex.Message}", ct))
+                {
+                    _schedulerErrorAlerted.Add(pipeline.Id);
+                }
+            }
+            finally
+            {
+                if (!pipelineFailed)
+                {
+                    _schedulerErrorNoticed.Remove(pipeline.Id);
+                    _schedulerErrorAlerted.Remove(pipeline.Id);
+                }
             }
         }
 
@@ -293,18 +358,34 @@ public sealed class PipelineSchedulerService : BackgroundService
                 continue;
             }
 
+            Job job;
             try
             {
-                var job = await _orchestration.StartQueuedAsync(pipeline.Id, queued, ct);
+                job = await _orchestration.StartQueuedAsync(pipeline.Id, queued, ct);
                 _runQueue.Complete(pipeline.Id);
-                var requestedAt = queued.RequestedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
-                _jobs.AppendEvent(job.Id, EventLevel.Info, $"Lanzado desde la cola (pedido el {requestedAt} UTC).", null, "Event.Job.LaunchedFromQueue", requestedAt);
+                _restoreHoldNoticed.Remove(pipeline.Id);
+                _restoreHoldAlerted.Remove(pipeline.Id);
             }
             catch (PipelineBusyException ex)
             {
                 // Un job recién cancelado aún detiene su stage: vuelve a la cola para el próximo poll.
                 _runQueue.Release(pipeline.Id);
                 _logger.LogInformation("Queued run waits {PipelineId}: {Reason}", pipeline.Id, ex.Message);
+                continue;
+            }
+            catch (RestorePendingException ex)
+            {
+                // Restore a medias: espera en la cola hasta que se termine, sin alertar. Un solo aviso
+                // por episodio, compartido con el del auto-run.
+                _runQueue.Release(pipeline.Id);
+                _logger.LogInformation("Queued run waits {PipelineId}: {Reason}", pipeline.Id, ex.Message);
+                if (_restoreHoldNoticed.Add(pipeline.Id))
+                {
+                    _activity.LogSystem("restore.pending", $"Pipeline {pipeline.Name} parado: {ex.Message}", pipeline.Id, null, "warning",
+                        "Activity.Restore.Pending", pipeline.Name, ex.Message);
+                }
+
+                continue;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -314,6 +395,19 @@ public sealed class PipelineSchedulerService : BackgroundService
                 var message = $"No se pudo lanzar {queued.Type} en cola del pipeline {pipeline.Id}: {ex.Message}";
                 _logger.LogWarning(ex, "Queued run failed for pipeline {PipelineId}", pipeline.Id);
                 await _alerts.SendAsync(message, ct);
+                continue;
+            }
+
+            // Fuera del try de arriba: el job ya arrancó, así que un fallo al anotarlo no es un
+            // "no se pudo lanzar".
+            try
+            {
+                var requestedAt = queued.RequestedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+                _jobs.AppendEvent(job.Id, EventLevel.Info, $"Lanzado desde la cola (pedido el {requestedAt} UTC).", null, "Event.Job.LaunchedFromQueue", requestedAt);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Queued run {JobId} started, but its queue event could not be saved", job.Id);
             }
         }
     }
@@ -380,6 +474,50 @@ public sealed class PipelineSchedulerService : BackgroundService
         // Sin webhook no hay caída que esperar: el resto de alertas del poll se siguen registrando.
         _alertDeliveryFailedThisPoll = !result.Success && result != AlertDeliveryResult.NotConfigured;
         return result.Success;
+    }
+
+    public static readonly TimeSpan ChangelogBlockGrace = TimeSpan.FromMinutes(45);
+    public static readonly TimeSpan ChangelogBlockRepeat = TimeSpan.FromHours(24);
+
+    // Pipeline bloqueado por el changelog (vacío, o con una carpeta que no está): mientras siga así no
+    // se procesa nada, y antes solo quedaba un LogDebug. Como el snapshot incompleto: desde cuándo y la
+    // última alerta van en el estado del pipeline; tras la gracia se avisa como warning, y de nuevo cada
+    // 24 h. Al desbloquearse, el ciclo borra el episodio.
+    private async Task HoldForChangelogBlockAsync(Models.Pipeline pipeline, SnapshotCatalogResult catalog, PipelineState state, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var current = state.ChangelogBlock;
+        if (current is null)
+        {
+            current = new ChangelogBlock { FirstSeenAt = now };
+            _stateStore.Update(pipeline.Id, s => s with { ChangelogBlock = current });
+        }
+
+        var waiting = now - current.FirstSeenAt;
+        var due = waiting >= ChangelogBlockGrace
+            && (current.LastAlertedAt is not { } last || now - last >= ChangelogBlockRepeat);
+        if (!due)
+        {
+            return;
+        }
+
+        var waitText = FormatWait(waiting);
+        var message = $"Pipeline {pipeline.Name} parado: el changelog de Synapse Link lo bloquea desde hace {waitText} ({catalog.BlockReason}). " +
+            "No se procesa nada hasta que el changelog nombre una carpeta existente; revisa la exportación.";
+        var round = $"{current.FirstSeenAt:O}|{current.LastAlertedAt:O}";
+        if (_changelogBlockLogged.GetValueOrDefault(pipeline.Id) != round)
+        {
+            _changelogBlockLogged[pipeline.Id] = round;
+            _activity.LogSystem("changelog.blocked", message, pipeline.Id, null, "warning",
+                "Activity.Changelog.Blocked", pipeline.Name, waitText, catalog.BlockReason);
+        }
+
+        if (await TrySendPendingAlertAsync(message, ct))
+        {
+            _stateStore.Update(pipeline.Id, s => s.ChangelogBlock is { } block
+                ? s with { ChangelogBlock = block with { LastAlertedAt = now } }
+                : s);
+        }
     }
 
     public static readonly TimeSpan IncompleteSnapshotGrace = TimeSpan.FromMinutes(45);
