@@ -79,6 +79,7 @@ const eventFor = (sample) =>
   EVENTS.find((e) => e.type === sample.eventType && (!e.status || e.status === sample.status)) ?? FALLBACK;
 const AUTOFIX = {
   scheduled: 'Programada: se re-sincronizan las tablas una vez',
+  failed: 'No se pudo lanzar: corrige desde Conciliación',
   off: 'Desactivada: corrige desde Conciliación',
   unresolved: 'No resolvió la diferencia: revisa Conciliación',
 };
@@ -99,7 +100,7 @@ const pipelineName = `coalesce(${T('pipelineName')},${T('pipelineId')})`;
 const row = (label, value) => `if(empty(${value}),'',concat(${lit(DETAIL_START(label))},${value},${lit(DETAIL_END)}))`;
 const fecha = `concat(formatDateTime(coalesce(${T('timestamp')},utcNow()),'dd/MM/yyyy HH:mm'),' UTC')`;
 const AR = `coalesce(${T('autoRemediation')},'')`;
-const autofix = `if(equals(${AR},'scheduled'),${lit(AUTOFIX.scheduled)},if(equals(${AR},'off'),${lit(AUTOFIX.off)},if(equals(${AR},'unresolved'),${lit(AUTOFIX.unresolved)},'')))`;
+const autofix = `if(equals(${AR},'scheduled'),${lit(AUTOFIX.scheduled)},if(equals(${AR},'failed'),${lit(AUTOFIX.failed)},if(equals(${AR},'off'),${lit(AUTOFIX.off)},if(equals(${AR},'unresolved'),${lit(AUTOFIX.unresolved)},''))))`;
 const divergence =
   `if(equals(${T('maxDivergencePct')},null),'',concat(${lit(DETAIL_START('Divergencia máxima'))},formatNumber(float(${T('maxDivergencePct')}),'0.##','es-ES'),' %',${lit(DETAIL_END)}))`;
 const outP = (k) => `outputs('Presentacion')?['${k}']`;
@@ -328,6 +329,8 @@ const SAMPLES = [
     entities: ['custtable', 'vendtable', 'salesline'], message: 'La divergencia de conteos superó el umbral en el pipeline Lean.' },
   { eventType: 'reconcile.values', pipelineName: 'Lean', jobId: 'job-lean-20261009230500-d4e5f6', autoRemediation: 'off',
     entities: ['purchreqbusinessjustificationcodes'], message: 'Hay filas con valores distintos entre el Parquet consolidado y SQL.' },
+  { eventType: 'reconcile.divergence', pipelineName: 'Lean', jobId: 'job-lean-20261009231500-e7f8a9', maxDivergencePct: 2.7, autoRemediation: 'failed',
+    entities: ['inventtrans'], message: 'La divergencia de conteos superó el umbral en el pipeline Lean. Automatic correction could not be launched: another job is already running for this pipeline.' },
   { eventType: 'pipeline.failure', pipelineName: 'Lean', jobId: 'job-lean-20261009231000-778899', jobType: 'Incremental', stage: 'sql',
     message: 'Login failed for user. The login is from an untrusted domain.' },
   { eventType: 'pipeline.failure', status: 'warning', pipelineName: 'Lean', jobId: 'job-lean-20261009233000-aabbcc', jobType: 'Incremental', stage: 'ingest',
