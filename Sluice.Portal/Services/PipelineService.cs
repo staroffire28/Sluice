@@ -112,6 +112,7 @@ public sealed class PipelineService : IPipelineService
 
     // Con otro origen o destino, un job en curso acabaría entre el sitio viejo y el nuevo (p. ej. el
     // SQL mergea solo el delta en el destino nuevo): se rechaza bajo el lock de ejecución, como el borrado.
+    // Igual con otro modo de borrado: cada etapa lo lee al empezar y el job ingeriría con uno y cargaría con otro.
     private async Task<(PipelineModel Before, PipelineModel After)?> UpdateCoreAsync(string id, PipelineModel pipeline, CancellationToken cancellationToken)
     {
         if (_store.GetById(id) is not { } existing)
@@ -119,14 +120,16 @@ public sealed class PipelineService : IPipelineService
             return null;
         }
 
-        if (existing.SourceId == pipeline.SourceId && existing.DestinationId == pipeline.DestinationId)
+        if (existing.SourceId == pipeline.SourceId
+            && existing.DestinationId == pipeline.DestinationId
+            && existing.DeleteMode == pipeline.DeleteMode)
         {
             return UpdateCore(id, pipeline) is { } updated ? (existing, updated) : null;
         }
 
         using var runLock = await PipelineRunLock.AcquireAsync(_options.DataDir, id, PipelineRunLock.DefaultTimeout, cancellationToken);
         await PipelineBusyException.ThrowIfBusyAsync(_jobs, _tasks, id,
-            "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de cambiar su origen o su destino.",
+            "Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de cambiar su origen, su destino o qué hacer con las filas borradas en F&O.",
             "Page.Pipelines.BusyRetarget", cancellationToken);
         return UpdateCore(id, pipeline) is { } moved ? (existing, moved) : null;
     }
