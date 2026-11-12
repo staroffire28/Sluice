@@ -168,8 +168,8 @@
         var result = await DialogService.ShowConfirmationAsync(
             string.Format(L["Common.CancelJobConfirm"].Value, jobId),
             L["Common.CancelJobTitle"].Value,
-            L["Common.Cancel"].Value,
-            L["Common.Back"].Value);
+            L["Common.CancelJobAction"].Value,
+            L["Common.CancelJobKeep"].Value);
         if (result.Cancelled)
         {
             return;

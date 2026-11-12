@@ -63,6 +63,8 @@
   <data name="Common.DeleteFailed" xml:space="preserve"><value>No se pudo eliminar.</value></data>
   <data name="Common.CancelJobConfirm" xml:space="preserve"><value>¿Cancelar el job {0}? Esta acción detiene su ejecución.</value></data>
   <data name="Common.CancelJobTitle" xml:space="preserve"><value>Cancelar job</value></data>
+  <data name="Common.CancelJobAction" xml:space="preserve"><value>Cancelar job</value></data>
+  <data name="Common.CancelJobKeep" xml:space="preserve"><value>Seguir ejecutando</value></data>
   <data name="Common.JobCancelled" xml:space="preserve"><value>Job {0} cancelado</value></data>
   <data name="Page.Jobs.Report" xml:space="preserve"><value>Reporte</value></data>
   <data name="Page.Jobs.ReportGenerating" xml:space="preserve"><value>Generando reporte PDF…</value></data>
