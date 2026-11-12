@@ -223,7 +223,14 @@ public sealed class WorkerHostService : BackgroundService
             // ExecuteAsync termina) y la tarea, aún en claimed/, se reclama al vencer el lease.
             _logger.LogError(ex, "Task {TaskId} failed in stage {Stage}", task.Id, stage);
             await StopHeartbeatAsync();
-            await _tasks.FailAsync(task.Id, stage, workerId, ex.Message, ct);
+            if (await _tasks.FailAsync(task.Id, stage, workerId, ex.Message, ct) is null)
+            {
+                // La tarea ya no es nuestra: perdimos el lease sin que el latido lo detectara y otra
+                // réplica ejecuta la etapa. Su resultado decide el job; no se marca como fallido.
+                _logger.LogWarning("Fallo del stage {Stage} de la tarea {TaskId} ignorado: la tarea ya no pertenece a este worker.", stage, task.Id);
+                return;
+            }
+
             await MarkJobFailedAsync(task.JobId, stage, ex.Message, ct, KnownErrors.CodeFrom(ex));
         }
         finally
