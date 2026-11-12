@@ -111,6 +111,7 @@ public sealed class ConnectionService : IConnectionService
             throw new InvalidOperationException($"Id de conexión no válido: '{connection.Id}'.");
         }
 
+        connection = WithNormalizedConfig(connection);
         RejectConnectionString(connection.Config);
         _store.SaveNew(connection);
         return SecretMasker.Mask(connection);
@@ -120,6 +121,7 @@ public sealed class ConnectionService : IConnectionService
     // el client_secret de Azure en un origen que pasa a local) y no se arrastra.
     private static Connection Merge(Connection existing, Connection connection)
     {
+        connection = WithNormalizedConfig(connection);
         RejectConnectionString(connection.Config);
         var merged = connection with
         {
@@ -153,6 +155,24 @@ public sealed class ConnectionService : IConnectionService
         }
 
         return merged;
+    }
+
+    // Las claves del Config no distinguen mayúsculas (así fusiona MergeConfig y guarda el store), pero
+    // el cuerpo de la API llega en un Dictionary ordinal: sin esto, la guarda de secretos buscaba "host"
+    // y no veía "Host", que luego pisaba el host guardado conservando la contraseña. La misma clave con
+    // distintas mayúsculas es un error, no una elección silenciosa.
+    private static Connection WithNormalizedConfig(Connection connection)
+    {
+        var config = new Dictionary<string, string?>(connection.Config.Count, StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in connection.Config)
+        {
+            if (!config.TryAdd(key, value))
+            {
+                throw new InvalidOperationException($"La clave '{key}' aparece repetida con distintas mayúsculas: envíala una sola vez.");
+            }
+        }
+
+        return connection with { Config = config };
     }
 
     // La cadena de conexión SQL libre ya no se admite: apuntaba a cualquier servidor con cualquier
@@ -500,6 +520,7 @@ public sealed class ConnectionService : IConnectionService
 
     private async Task<ConnectionTestResult> TestSourceDraftCoreAsync(Connection draft, string? existingId, CancellationToken cancellationToken)
     {
+        draft = WithNormalizedConfig(draft);
         var existing = existingId is null ? null : _store.GetById(existingId);
         var connection = existing is not null && string.Equals(existing.Type, draft.Type, StringComparison.OrdinalIgnoreCase)
             ? draft with { Config = MergeConfig(existing.Config, draft.Config) }
@@ -524,6 +545,7 @@ public sealed class ConnectionService : IConnectionService
 
     private Task<SqlVersionDetection> DetectSqlVersionCoreAsync(Connection draft, string? existingId, CancellationToken cancellationToken)
     {
+        draft = WithNormalizedConfig(draft);
         var existing = existingId is null ? null : _store.GetById(existingId);
         var connection = existing is not null && string.Equals(existing.Type, draft.Type, StringComparison.OrdinalIgnoreCase)
             ? draft with { Config = MergeConfig(existing.Config, draft.Config) }
