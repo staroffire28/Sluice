@@ -14,13 +14,26 @@ volumen sobreviva intacto.
 
 ## Qué incluye el backup
 
-Todo `DATA_DIR`: `connections/`, `pipelines/`, `jobs/`, `tasks/`, `reports/`, `keys/`
-(keyring de Data Protection), `workers/`, el estado por pipeline (`{pipelineId}/state/`) y
-`parquet/` (el parquet consolidado de los orígenes que lo guardan en el disco del portal, con
-sus versiones anteriores en `parquet/_versions/`).
+Todo `DATA_DIR` salvo lo que el portal regenera: `connections/`, `pipelines/`, `jobs/`,
+`tasks/`, `reports/`, `keys/` (keyring de Data Protection), `settings.json`, `auth/` (estado
+de la sesión), `logs/` (registro de actividad), `alerts/` (última entrega de alertas),
+`migrations/`, `workers/`, la carpeta de cada pipeline (`{pipelineId}/state/` y las corridas
+en `{pipelineId}/runs/`) y `parquet/` (el parquet consolidado de los orígenes que lo guardan
+en el disco del portal, con sus versiones anteriores en `parquet/_versions/`).
 No incluye el parquet consolidado guardado en ADLS ni los snapshots de ADLS (eso vive en
 Azure, fuera del volumen local, y tiene su propia durabilidad/replicación gestionada por
 Azure Storage).
+
+Se dejan fuera, porque el portal los reconstruye y solo engordarían el backup:
+
+- `cache/consolidated/`: la copia local del parquet consolidado de cada tabla guardado en
+  ADLS. Puede ocupar tanto como todos tus consolidados, y se vuelve a bajar cuando hace falta.
+- `staging/`: los temporales de cada ingest, que se borran al terminar.
+- `locks/`: archivos de lock que solo existen mientras un proceso los tiene.
+
+Tras restaurar, el primer run que toca cada tabla vuelve a bajar su parquet consolidado de
+ADLS (una descarga completa por tabla; después, solo cuando cambia). Cuenta con ese tiempo y
+esa salida de datos si el portal corre fuera de la región del almacenamiento de F&O.
 
 ## La clave de cifrado
 
