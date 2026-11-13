@@ -31,7 +31,13 @@ public interface IPipelineResetService
     // pipeline llegó a cargar — evita arrastrar datos de una prueba anterior. NO toca la
     // configuración del pipeline (Source/Destination/Name) ni las pausas de sincronización
     // (TablePauseStore), que son preferencia del usuario, no datos de prueba.
-    Task<PipelineResetResult> ResetAsync(AuditActor actor, string pipelineId, bool truncateSql, CancellationToken cancellationToken = default);
+    // Si la historia está en riesgo (ver IsHistoryAtRisk), exige acknowledgeHistoryLoss=true; si no,
+    // lanza ResetHistoryNotAcknowledgedException sin tocar nada.
+    Task<PipelineResetResult> ResetAsync(AuditActor actor, string pipelineId, bool truncateSql, bool acknowledgeHistoryLoss, CancellationToken cancellationToken = default);
+
+    // Con la retención de origen borrando de verdad (o settings.json ilegible, que no deja saberlo)
+    // puede que el lago ya no tenga los primeros snapshots, y el reset reconstruye solo con los que quedan.
+    bool IsHistoryAtRisk();
 }
 
 public sealed class PipelineResetService : IPipelineResetService
@@ -45,6 +51,7 @@ public sealed class PipelineResetService : IPipelineResetService
     private readonly ITaskStore _tasks;
     private readonly RunQueueService? _runQueue;
     private readonly IAuditLog _audit;
+    private readonly SettingsStore _settings;
     private readonly AppOptions _options;
 
     public PipelineResetService(
@@ -57,9 +64,11 @@ public sealed class PipelineResetService : IPipelineResetService
         IJobService jobs,
         ITaskStore tasks,
         IAuditLog audit,
+        SettingsStore settings,
         RunQueueService? runQueue = null)
     {
         _audit = audit;
+        _settings = settings;
         _options = options.Value;
         _runQueue = runQueue;
         _pipelines = pipelines;
@@ -73,12 +82,12 @@ public sealed class PipelineResetService : IPipelineResetService
 
     // Una entrada para todo el reset (no una por parquet borrado). Un truncado que falla en alguna
     // tabla detiene el reset antes de borrar nada: queda como error, con las tablas que fallaron.
-    public Task<PipelineResetResult> ResetAsync(AuditActor actor, string pipelineId, bool truncateSql, CancellationToken cancellationToken = default) =>
+    public Task<PipelineResetResult> ResetAsync(AuditActor actor, string pipelineId, bool truncateSql, bool acknowledgeHistoryLoss, CancellationToken cancellationToken = default) =>
         _audit.AuditAsync(
             actor,
             "pipeline.reset",
             pipelineId,
-            () => ResetCoreAsync(actor, pipelineId, truncateSql, cancellationToken),
+            () => ResetCoreAsync(actor, pipelineId, truncateSql, acknowledgeHistoryLoss, cancellationToken),
             result => result.Completed
                 ? new AuditResult(
                     $"Pipeline {pipelineId} reseteado{(truncateSql ? " con truncado de SQL" : "")} " +
@@ -93,10 +102,21 @@ public sealed class PipelineResetService : IPipelineResetService
             $"No se pudo resetear {pipelineId}",
             failureKey: "Activity.Failed.Reset", failureArgs: [pipelineId]);
 
-    private async Task<PipelineResetResult> ResetCoreAsync(AuditActor actor, string pipelineId, bool truncateSql, CancellationToken cancellationToken)
+    public bool IsHistoryAtRisk() =>
+        !_settings.TryGet(out var settings)
+        || (settings.SourceSnapshotRetentionDays > 0 && !settings.SourceSnapshotRetentionDryRun);
+
+    private async Task<PipelineResetResult> ResetCoreAsync(AuditActor actor, string pipelineId, bool truncateSql, bool acknowledgeHistoryLoss, CancellationToken cancellationToken)
     {
         _ = _pipelines.Get(pipelineId)
             ?? throw new InvalidOperationException($"Pipeline '{pipelineId}' not found.");
+
+        // Antes de tocar nada: sin acuse, un reset con la historia en riesgo la perdería sin que nadie
+        // lo haya aceptado (la página lo pide con su casilla; la API, con acknowledgeHistoryLoss).
+        if (!acknowledgeHistoryLoss && IsHistoryAtRisk())
+        {
+            throw new ResetHistoryNotAcknowledgedException(pipelineId);
+        }
 
         // Mismo criterio que Run/Resync: resetear bajo un job en curso truncaría tablas y borraría
         // parquets que el job está usando, y al terminar este pisaría el estado reseteado. El lock de
