@@ -588,7 +588,7 @@ public sealed class OrchestrationService : IOrchestrationService
             }
         }
 
-        var rewound =state with { LastProcessedSnapshot = snapshot, Tables = tables, PendingReload = pendingReload, PendingRestore = pendingRestore, PendingBackfill = pendingBackfill, RestoreInProgress = new() { Snapshot = snapshot, FromSnapshot = from }, RetiredSnapshots = ParquetVersions.Retire(state.RetiredSnapshots, versions, plan) };
+        var rewound = state with { LastProcessedSnapshot = snapshot, Tables = tables, PendingReload = pendingReload, PendingRestore = pendingRestore, PendingBackfill = pendingBackfill, RestoreInProgress = new() { Snapshot = snapshot, FromSnapshot = from }, RetiredSnapshots = ParquetVersions.Retire(state.RetiredSnapshots, versions, plan) };
         stateStore.Save(rewound);
         foreach (var (entity, version) in plan.Restore)
         {
