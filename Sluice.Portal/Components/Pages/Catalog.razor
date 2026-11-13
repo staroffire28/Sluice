@@ -19,7 +19,7 @@
 
     <PageSection>
         <div class="toolbar" data-testid="catalog-page" data-pipeline="@_pipelineId">
-            <FluentSelect TOption="string" TValue="string" @bind-Value="_pipelineId" @bind-Value:after="Reload" data-testid="catalog-pipeline" Label="@L["Common.Pipeline"]" Style="min-width:240px;">
+            <FluentSelect TOption="string" TValue="string" @bind-Value="_pipelineId" @bind-Value:after="OnPipelineChanged" data-testid="catalog-pipeline" Label="@L["Common.Pipeline"]" Style="min-width:240px;">
                 @foreach (var p in PipelineService.List())
                 {
                     <FluentOption TValue="string" Value="@p.Id">@p.Name</FluentOption>
@@ -163,6 +163,16 @@
     {
         _loadCts?.Cancel();
         _loadCts?.Dispose();
+    }
+
+    // Al cambiar de pipeline se vacía la lista antes de leer el lago: si no, las tablas del anterior
+    // seguían a la vista (y sus switches actuaban sobre el nuevo) hasta que llegaba el listado.
+    // Actualizar sobre el mismo pipeline no vacía, para no parpadear.
+    private async Task OnPipelineChanged()
+    {
+        _tables = [];
+        ApplyPaging();
+        await Reload();
     }
 
     private async Task Reload()

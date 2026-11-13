@@ -18,7 +18,7 @@
 
     <PageSection>
         <div class="toolbar">
-            <FluentSelect TOption="string" TValue="string" @bind-Value="_pipelineId" @bind-Value:after="Load" data-testid="snapshots-pipeline" Label="@L["Common.Pipeline"]" Style="min-width:240px;">
+            <FluentSelect TOption="string" TValue="string" @bind-Value="_pipelineId" @bind-Value:after="OnPipelineChanged" data-testid="snapshots-pipeline" Label="@L["Common.Pipeline"]" Style="min-width:240px;">
                 @foreach (var p in PipelineService.List())
                 {
                     <FluentOption TValue="string" Value="@p.Id">@p.Name</FluentOption>
@@ -164,6 +164,15 @@
         disposition is SnapshotRetentionService.DispositionRetained
             or SnapshotRetentionService.DispositionEligible
             or SnapshotRetentionService.DispositionProtected;
+
+    // Al cambiar de pipeline se vacía el catálogo antes de leer el lago: si no, los KPI y snapshots
+    // del anterior seguían bajo el selector del nuevo. Actualizar no vacía, para no parpadear.
+    private async Task OnPipelineChanged()
+    {
+        _catalog = null;
+        ApplyPaging();
+        await Load();
+    }
 
     private async Task Load()
     {

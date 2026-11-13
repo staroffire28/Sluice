@@ -25,7 +25,7 @@
 
     <PageSection>
         <div class="toolbar" data-testid="parquet-page" data-pipeline="@_pipelineId">
-            <FluentSelect TOption="string" TValue="string" @bind-Value="_pipelineId" @bind-Value:after="Reload" data-testid="parquet-pipeline" Label="@L["Common.Pipeline"]" Style="min-width:240px;">
+            <FluentSelect TOption="string" TValue="string" @bind-Value="_pipelineId" @bind-Value:after="OnPipelineChanged" data-testid="parquet-pipeline" Label="@L["Common.Pipeline"]" Style="min-width:240px;">
                 @foreach (var p in PipelineService.List())
                 {
                     <FluentOption TValue="string" Value="@p.Id">@p.Name</FluentOption>
@@ -239,6 +239,16 @@
         {
             StateHasChanged();
         }
+    }
+
+    // Al cambiar de pipeline se vacía el listado antes de leer el lago: si no, los archivos del
+    // anterior seguían a la vista y Descargar o Borrar usaban su ruta con el id del nuevo.
+    // Actualizar sobre el mismo pipeline no vacía, para no parpadear.
+    private async Task OnPipelineChanged()
+    {
+        _allRows = [];
+        ApplyPaging();
+        await Reload();
     }
 
     private async Task Reload()
