@@ -569,7 +569,13 @@ public sealed class OrchestrationService : IOrchestrationService
         var tables = new Dictionary<string, TableState>(state.Tables, StringComparer.OrdinalIgnoreCase);
         var pendingReload = new List<string>(state.PendingReload);
         var pendingRestore = new Dictionary<string, PendingRestoreTable>(StringComparer.OrdinalIgnoreCase);
-        var rewound = state with { LastProcessedSnapshot = snapshot, Tables = tables, PendingReload = pendingReload, PendingRestore = pendingRestore, RestoreInProgress = new() { Snapshot = snapshot, FromSnapshot = from }, RetiredSnapshots = ParquetVersions.Retire(state.RetiredSnapshots, versions, plan) };
+        // Las marcas de backfill posteriores al punto se quitan: esos snapshots vuelven a procesarse
+        // y el siguiente ingest marca la tabla en pausa en el primero que se salte. Si se conservaran,
+        // TryAdd no las pisaría y al reanudarla se perderían los snapshots entre el punto y la marca.
+        var pendingBackfill = state.PendingBackfill
+            .Where(e => string.CompareOrdinal(e.Value, snapshot) <= 0)
+            .ToDictionary(e => e.Key, e => e.Value, StringComparer.OrdinalIgnoreCase);
+        var rewound = state with { LastProcessedSnapshot = snapshot, Tables = tables, PendingReload = pendingReload, PendingRestore = pendingRestore, PendingBackfill = pendingBackfill, RestoreInProgress = new() { Snapshot = snapshot, FromSnapshot = from }, RetiredSnapshots = ParquetVersions.Retire(state.RetiredSnapshots, versions, plan) };
         stateStore.Save(rewound);
         foreach (var (entity, version) in plan.Restore)
         {
