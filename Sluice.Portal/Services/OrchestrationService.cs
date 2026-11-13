@@ -575,6 +575,19 @@ public sealed class OrchestrationService : IOrchestrationService
         var pendingBackfill = state.PendingBackfill
             .Where(e => string.CompareOrdinal(e.Value, snapshot) <= 0)
             .ToDictionary(e => e.Key, e => e.Value, StringComparer.OrdinalIgnoreCase);
+        // Una tabla que vuelve a una versión archivada con marca recupera lo que se saltó en pausa
+        // hasta el punto: la marca se repone si es igual o anterior (la viva anterior se conserva).
+        // Va en el estado rebobinado, que se guarda antes de mover nada: mover la versión borra su
+        // sidecar y el reintento de un restore a medias ya no la vería.
+        foreach (var (entity, version) in plan.Restore)
+        {
+            if (version.PendingBackfill is { } mark && string.CompareOrdinal(mark, snapshot) <= 0
+                && (!pendingBackfill.TryGetValue(entity, out var live) || string.CompareOrdinal(mark, live) < 0))
+            {
+                pendingBackfill[entity] = mark;
+            }
+        }
+
         var rewound = state with { LastProcessedSnapshot = snapshot, Tables = tables, PendingReload = pendingReload, PendingRestore = pendingRestore, PendingBackfill = pendingBackfill, RestoreInProgress = new() { Snapshot = snapshot, FromSnapshot = from }, RetiredSnapshots = ParquetVersions.Retire(state.RetiredSnapshots, versions, plan) };
         stateStore.Save(rewound);
         foreach (var (entity, version) in plan.Restore)

@@ -574,6 +574,9 @@ public sealed class IngestExecutor : IIngestExecutor
                         ReplacedByJobId = task.JobId,
                         Table = pipelineState.Tables.GetValueOrDefault(entity),
                         PipelineSnapshot = pipelineState.LastProcessedSnapshot,
+                        // El anterior no trae lo que la tabla se saltó en pausa: si se restaura, la
+                        // marca vuelve con él.
+                        PendingBackfill = pendingBackfill.GetValueOrDefault(entity),
                     },
                     DateTimeOffset.UtcNow, cancellationToken);
 
