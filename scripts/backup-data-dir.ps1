@@ -3,6 +3,8 @@
 # reportes y el keyring de Data Protection que descifra los secretos de conexión --
 # perder el keyring vuelve irrecuperables las credenciales ADLS/SQL ya guardadas
 # aunque el resto del volumen sobreviva.
+# Deja fuera lo que el portal regenera: cache/consolidated (copia local de los consolidados,
+# se vuelve a bajar), staging (temporales de cada ingest) y locks (locks de archivo).
 #
 # Requiere Docker Engine con contenedores Linux (usa la imagen "alpine" para el tar;
 # funciona igual con Docker Desktop en modo Linux containers / WSL2, que es el
@@ -82,7 +84,7 @@ try {
         -v "${VolumeName}:/data:ro" `
         -v "${tarDir}:/backup" `
         alpine `
-        tar czf "/backup/$archiveName" -C /data .
+        tar czf "/backup/$archiveName" --exclude=./cache/consolidated --exclude=./staging --exclude=./locks -C /data .
 
     if ($LASTEXITCODE -ne 0) {
         throw "El backup falló (docker run exit code $LASTEXITCODE)."

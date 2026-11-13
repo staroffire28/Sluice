@@ -13,13 +13,26 @@ credentials **unrecoverable**, even if the rest of the volume survives intact.
 
 ## What the backup includes
 
-All of `DATA_DIR`: `connections/`, `pipelines/`, `jobs/`, `tasks/`, `reports/`, `keys/`
-(the Data Protection keyring), `workers/`, each pipeline's state (`{pipelineId}/state/`) and
-`parquet/` (the consolidated Parquet of the sources that keep it on the portal disk, with
-its earlier versions in `parquet/_versions/`).
+All of `DATA_DIR` except what the portal regenerates: `connections/`, `pipelines/`, `jobs/`,
+`tasks/`, `reports/`, `keys/` (the Data Protection keyring), `settings.json`, `auth/` (the
+session state), `logs/` (the activity log), `alerts/` (the last alert delivery),
+`migrations/`, `workers/`, each pipeline's folder (`{pipelineId}/state/` and the runs in
+`{pipelineId}/runs/`) and `parquet/` (the consolidated Parquet of the sources that keep it on
+the portal disk, with its earlier versions in `parquet/_versions/`).
 It does not include the consolidated Parquet kept in ADLS or the ADLS snapshots: those live
 in Azure, outside the local volume, with their own durability and replication managed by
 Azure Storage.
+
+Left out, because the portal rebuilds them and they would only make the backup bigger:
+
+- `cache/consolidated/`: the local copy of each table's consolidated Parquet kept in ADLS. It
+  can be as large as all your consolidated data, and it is downloaded again when needed.
+- `staging/`: each ingest's temporary files, deleted when the ingest finishes.
+- `locks/`: lock files that only exist while a process holds them.
+
+After a restore, the first run that touches each table downloads its consolidated Parquet
+from ADLS again (one full download per table, then only when it changes). Plan for that
+time and egress if the portal runs outside the region of your F&O storage.
 
 ## The encryption key
 
