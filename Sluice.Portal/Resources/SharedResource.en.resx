@@ -1072,7 +1072,7 @@
   <data name="Error.PipelineLocked" xml:space="preserve"><value>The pipeline is busy (a start or reset is in progress).</value></data>
   <data name="Error.PipelineBusyDelete" xml:space="preserve"><value>A job is running for this pipeline: wait for it to finish or cancel it before deleting the pipeline.</value></data>
   <data name="Error.PipelineBusyReset" xml:space="preserve"><value>A job is running for this pipeline: wait for it to finish or cancel it before resetting.</value></data>
-  <data name="Error.ResetHistoryNotAcknowledged" xml:space="preserve"><value>Resetting {0} would rebuild the pipeline only from the snapshots left in the lake: source retention already deleted the earlier ones, and their history, which only exists in the consolidated parquet, would be lost. To reset anyway, confirm it (acknowledgeHistoryLoss=true in the API).</value></data>
+  <data name="Error.ResetHistoryNotAcknowledged" xml:space="preserve"><value>Resetting {0} would rebuild the pipeline only from the snapshots left in the lake: source retention may have deleted the earlier ones, and their history, which only exists in the consolidated parquet, would be lost. To reset anyway, confirm it (acknowledgeHistoryLoss=true in the API).</value></data>
   <data name="Error.RestorePending" xml:space="preserve"><value>A restore is half done on this pipeline: restore point {0} again to finish it.</value></data>
   <data name="Error.InvalidPipelineId" xml:space="preserve"><value>Invalid pipeline id: '{0}'.</value></data>
   <data name="Error.SourceNotFound" xml:space="preserve"><value>Source connection not found.</value></data>

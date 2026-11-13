@@ -6,6 +6,6 @@ namespace Sluice.Portal.Services;
 public sealed class ResetHistoryNotAcknowledgedException(string pipelineId)
     : LocalizedException(
         $"El reset de {pipelineId} reconstruiría el pipeline solo con los snapshots que quedan en el lago: " +
-        "la retención de origen ya borró los anteriores y su historia, que solo está en el parquet consolidado, se perdería. " +
+        "la retención de origen puede haber borrado los anteriores y su historia, que solo está en el parquet consolidado, se perdería. " +
         "Para resetear igualmente, confírmalo (acknowledgeHistoryLoss=true en la API).",
         "Error.ResetHistoryNotAcknowledged", pipelineId);
