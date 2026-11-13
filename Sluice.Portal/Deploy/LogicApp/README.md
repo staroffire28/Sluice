@@ -16,7 +16,7 @@ imagen de Sluice. Abre `email-preview.html` para ver cómo llega cada tipo de av
 | Evento (`eventType`) | Cuándo lo envía Sluice | Correo |
 |---|---|---|
 | `pipeline.failure` | Un job falla en ingesta, SQL o conciliación | **FALLO**, importancia alta |
-| `pipeline.failure` con `status` `warning` | La ingesta o SQL terminan en Partial: parte de las tablas sí cargó | **AVISO**, importancia normal |
+| `pipeline.failure` con `status` `warning` | La ingesta o SQL terminan en Partial (parte de las tablas sí cargó), o la conciliación no pudo contar alguna tabla | **AVISO**, importancia normal |
 | `snapshot.incomplete` | El snapshot pendiente más antiguo está cerrado pero incompleto y frena el pipeline | **SNAPSHOT INCOMPLETO**, con el snapshot |
 | `reconcile.divergence` | La divergencia de conteos supera el umbral de Ajustes | **DIVERGENCIA**, con las tablas afectadas |
 | `reconcile.values` | «Comparar valores» encuentra filas distintas, faltantes o sobrantes | **VALORES**, con las tablas afectadas |
