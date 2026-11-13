@@ -468,164 +468,201 @@ public sealed class IngestExecutor : IIngestExecutor
 
         var manifestEntities = new List<IngestEntityManifest>();
         var entitiesWithoutId = new List<string>();
+        // Tablas que fallaron en la lectura (antes de consolidar) y en la consolidación: cada paso del
+        // progreso marca solo sus fallos.
+        var readFailed = entityFailures.Count > 0;
+        var consolidationFailures = 0;
 
         progress.StartStep(JobStepCatalog.Consolidate, total: transientPaths.Count);
         foreach (var (entity, transients) in transientPaths)
         {
             progress.Report(JobStepCatalog.Consolidate, manifestEntities.Count, item: entity, force: true);
-            var schema = entitySchemas[entity];
-            var consolidatedBlobPath = IngestManifestStore.GetConsolidatedBlobPath(task.PipelineId, entity);
-            var schemaBlobPath = IngestManifestStore.GetConsolidatedSchemaBlobPath(task.PipelineId, entity);
-            await ReportSchemaChangesAsync(task.JobId, pipeline.Name, entity, schemaBlobPath, schema, parquetStore, cancellationToken);
-
-            // Fuentes newest-first: transitorios (último snapshot primero); en incremental,
-            // además el consolidado previo como base. En Force se reconstruye solo desde los
-            // snapshots procesados (la selección abarca toda la historia).
-            var sources = new List<Func<CancellationToken, Task<Stream>>>();
-            for (var i = transients.Count - 1; i >= 0; i--)
-            {
-                var path = transients[i];
-                sources.Add(_ => Task.FromResult<Stream>(File.OpenRead(path)));
-            }
-
-            var transientSources = sources.ToList();
-            var consolidatedExists = await parquetStore.ParquetExistsAsync(consolidatedBlobPath, cancellationToken);
-            var hasPreviousConsolidated = !isForce && consolidatedExists;
-            if (hasPreviousConsolidated)
-            {
-                sources.Add(await PreviousConsolidatedSourceAsync(parquetStore, consolidatedBlobPath, task.PipelineId, task.JobId, entity, cancellationToken));
-            }
-            else if (!isForce && pipelineState.Tables.ContainsKey(entity))
-            {
-                // Sin consolidado y aún en el estado: una publicación se cortó entre sus dos renames
-                // o alguien lo borró, haya versiones o no. Seguir lo reconstruiría solo con los
-                // snapshots nuevos y la historia se perdería en silencio. Una tabla que archivó una
-                // restauración (aún no existía en ese punto) ya no está en el estado y se reconstruye.
-                throw new InvalidOperationException(
-                    await ParquetVersions.HasVersionsAsync(parquetStore, task.PipelineId, entity, cancellationToken)
-                        ? $"{entity}: falta el parquet consolidado pero hay versiones anteriores. Restaura un punto en la página Parquet (Puntos de restauración) y vuelve a ejecutar."
-                        : $"{entity}: falta el parquet consolidado de una tabla ya cargada. Resetea el pipeline para recargarla con los snapshots que queden en el lago.");
-            }
-
-            var stagingConsolidated = _manifestStore.GetStagingConsolidatedPath(task.JobId, entity);
-            Directory.CreateDirectory(Path.GetDirectoryName(stagingConsolidated)!);
-            ParquetConsolidator.ConsolidationResult result;
             try
             {
-                await using var output = File.Create(stagingConsolidated);
-                result = await ParquetConsolidator.ConsolidateAsync(sources, schema, output, cancellationToken: cancellationToken);
-            }
-            finally
-            {
-                File.Delete(_manifestStore.GetStagingPreviousConsolidatedPath(task.JobId, entity));
-            }
+                var schema = entitySchemas[entity];
+                var consolidatedBlobPath = IngestManifestStore.GetConsolidatedBlobPath(task.PipelineId, entity);
+                var schemaBlobPath = IngestManifestStore.GetConsolidatedSchemaBlobPath(task.PipelineId, entity);
+                await ReportSchemaChangesAsync(task.JobId, pipeline.Name, entity, schemaBlobPath, schema, parquetStore, cancellationToken);
 
-            if (result.RowsWithoutId > 0)
-            {
-                // Esas filas no llegan ni al parquet ni a SQL: el job queda en Partial (antes cerraba Ok).
-                entitiesWithoutId.Add(entity);
-                _jobs.AppendEvent(task.JobId, EventLevel.Warning,
-                    $"{entity}: {result.RowsWithoutId} fila(s) sin Id válido descartada(s).",
-                    null, "Event.Ingest.RowsWithoutId", entity, result.RowsWithoutId);
-            }
-
-            // Antes de publicar: el fichero tiene las filas que el consolidador dice haber escrito.
-            long writtenRows;
-            await using (var written = File.OpenRead(stagingConsolidated))
-            {
-                writtenRows = await ParquetMaterializer.CountRowsAsync(written, cancellationToken: cancellationToken);
-            }
-
-            if (writtenRows != result.Rows)
-            {
-                throw new InvalidOperationException(
-                    $"{entity}: el consolidado tiene {writtenRows:N0} filas y se escribieron {result.Rows:N0}; no se publica y se conserva el anterior.");
-            }
-
-            // Las filas de borrado se conservan, así que el consolidado no debería encoger. Solo se
-            // avisa: con la versión anterior a salvo, bloquear dejaría el pipeline atascado.
-            if (consolidatedExists)
-            {
-                var previousRows = await parquetStore.CountParquetRowsAsync(consolidatedBlobPath, cancellationToken: cancellationToken);
-                if (result.Rows < previousRows)
+                // Fuentes newest-first: transitorios (último snapshot primero); en incremental,
+                // además el consolidado previo como base. En Force se reconstruye solo desde los
+                // snapshots procesados (la selección abarca toda la historia).
+                var sources = new List<Func<CancellationToken, Task<Stream>>>();
+                for (var i = transients.Count - 1; i >= 0; i--)
                 {
-                    var message = $"{entity}: el consolidado nuevo tiene {result.Rows:N0} filas y el anterior {previousRows:N0}. La versión anterior queda guardada en la página Parquet por si hay que restaurarla.";
-                    _jobs.AppendEvent(task.JobId, EventLevel.Warning, message, null, "Event.Ingest.ConsolidatedShrank", entity, result.Rows, previousRows);
-                    if (_alerts is not null)
-                    {
-                        await _alerts.SendAsync($"Pipeline {pipeline.Name}: {message}", cancellationToken);
-                    }
-                }
-            }
-
-            // Schema + consolidado al almacén durable (independiente de SQL): se sube con otro
-            // nombre, se valida y sustituye al anterior, que pasa a ser una versión.
-            await ParquetVersions.PublishAsync(
-                parquetStore, task.PipelineId, entity, stagingConsolidated, result.Rows,
-                JsonSerializer.Serialize(schema, JsonDefaults.Options),
-                new ParquetVersion
-                {
-                    ReplacedByJobId = task.JobId,
-                    Table = pipelineState.Tables.GetValueOrDefault(entity),
-                    PipelineSnapshot = pipelineState.LastProcessedSnapshot,
-                },
-                DateTimeOffset.UtcNow, cancellationToken);
-
-            // Delta: solo las filas de los snapshots de esta corrida (deduplicadas), para que la
-            // etapa SQL no remergee la tabla entera. Solo con consolidado previo: sin él la tabla
-            // destino está vacía y SQL carga el consolidado (el delta sería una copia completa).
-            // El consolidado recién generado compite solo por claves: una fila de esta corrida que
-            // pierde frente a él (versión anterior de un Id ya cargado o ya borrado) no entra al delta.
-            var hasDelta = false;
-            if (hasPreviousConsolidated)
-            {
-                var deltaPath = _manifestStore.GetDeltaPath(task.PipelineId, task.JobId, entity);
-                Directory.CreateDirectory(Path.GetDirectoryName(deltaPath)!);
-                await using (var delta = File.Create(deltaPath))
-                {
-                    await ParquetConsolidator.ConsolidateAsync(
-                        transientSources, schema, delta,
-                        keyOnlySources: [_ => Task.FromResult<Stream>(File.OpenRead(stagingConsolidated))],
-                        cancellationToken: cancellationToken);
+                    var path = transients[i];
+                    sources.Add(_ => Task.FromResult<Stream>(File.OpenRead(path)));
                 }
 
-                hasDelta = true;
-            }
+                var transientSources = sources.ToList();
+                var consolidatedExists = await parquetStore.ParquetExistsAsync(consolidatedBlobPath, cancellationToken);
+                var hasPreviousConsolidated = !isForce && consolidatedExists;
+                if (hasPreviousConsolidated)
+                {
+                    sources.Add(await PreviousConsolidatedSourceAsync(parquetStore, consolidatedBlobPath, task.PipelineId, task.JobId, entity, cancellationToken));
+                }
+                else if (!isForce && pipelineState.Tables.ContainsKey(entity))
+                {
+                    // Sin consolidado y aún en el estado: una publicación se cortó entre sus dos renames
+                    // o alguien lo borró, haya versiones o no. Seguir lo reconstruiría solo con los
+                    // snapshots nuevos y la historia se perdería en silencio. Una tabla que archivó una
+                    // restauración (aún no existía en ese punto) ya no está en el estado y se reconstruye.
+                    throw new InvalidOperationException(
+                        await ParquetVersions.HasVersionsAsync(parquetStore, task.PipelineId, entity, cancellationToken)
+                            ? $"{entity}: falta el parquet consolidado pero hay versiones anteriores. Restaura un punto en la página Parquet (Puntos de restauración) y vuelve a ejecutar."
+                            : $"{entity}: falta el parquet consolidado de una tabla ya cargada. Resetea el pipeline para recargarla con los snapshots que queden en el lago.");
+                }
 
-            // El consolidado publicado pasa a ser la copia local (ConsolidatedCache), así el run
-            // siguiente no lo baja. Si falla, solo se pierde la caché: ese run lo bajará.
-            if (parquetStore is not LocalParquetStore)
-            {
+                var stagingConsolidated = _manifestStore.GetStagingConsolidatedPath(task.JobId, entity);
+                Directory.CreateDirectory(Path.GetDirectoryName(stagingConsolidated)!);
+                ParquetConsolidator.ConsolidationResult result;
                 try
                 {
-                    if (await parquetStore.GetParquetPropertiesAsync(consolidatedBlobPath, cancellationToken) is { } published)
+                    await using var output = File.Create(stagingConsolidated);
+                    result = await ParquetConsolidator.ConsolidateAsync(sources, schema, output, cancellationToken: cancellationToken);
+                }
+                finally
+                {
+                    File.Delete(_manifestStore.GetStagingPreviousConsolidatedPath(task.JobId, entity));
+                }
+
+                if (result.RowsWithoutId > 0)
+                {
+                    // Esas filas no llegan ni al parquet ni a SQL: el job queda en Partial (antes cerraba Ok).
+                    entitiesWithoutId.Add(entity);
+                    _jobs.AppendEvent(task.JobId, EventLevel.Warning,
+                        $"{entity}: {result.RowsWithoutId} fila(s) sin Id válido descartada(s).",
+                        null, "Event.Ingest.RowsWithoutId", entity, result.RowsWithoutId);
+                }
+
+                // Antes de publicar: el fichero tiene las filas que el consolidador dice haber escrito.
+                long writtenRows;
+                await using (var written = File.OpenRead(stagingConsolidated))
+                {
+                    writtenRows = await ParquetMaterializer.CountRowsAsync(written, cancellationToken: cancellationToken);
+                }
+
+                if (writtenRows != result.Rows)
+                {
+                    throw new InvalidOperationException(
+                        $"{entity}: el consolidado tiene {writtenRows:N0} filas y se escribieron {result.Rows:N0}; no se publica y se conserva el anterior.");
+                }
+
+                // Las filas de borrado se conservan, así que el consolidado no debería encoger. Solo se
+                // avisa: con la versión anterior a salvo, bloquear dejaría el pipeline atascado.
+                if (consolidatedExists)
+                {
+                    var previousRows = await parquetStore.CountParquetRowsAsync(consolidatedBlobPath, cancellationToken: cancellationToken);
+                    if (result.Rows < previousRows)
                     {
-                        _consolidatedCache.Store(task.PipelineId, entity, stagingConsolidated, published);
+                        var message = $"{entity}: el consolidado nuevo tiene {result.Rows:N0} filas y el anterior {previousRows:N0}. La versión anterior queda guardada en la página Parquet por si hay que restaurarla.";
+                        _jobs.AppendEvent(task.JobId, EventLevel.Warning, message, null, "Event.Ingest.ConsolidatedShrank", entity, result.Rows, previousRows);
+                        if (_alerts is not null)
+                        {
+                            await _alerts.SendAsync($"Pipeline {pipeline.Name}: {message}", cancellationToken);
+                        }
                     }
                 }
-                catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+
+                // Schema + consolidado al almacén durable (independiente de SQL): se sube con otro
+                // nombre, se valida y sustituye al anterior, que pasa a ser una versión.
+                await ParquetVersions.PublishAsync(
+                    parquetStore, task.PipelineId, entity, stagingConsolidated, result.Rows,
+                    JsonSerializer.Serialize(schema, JsonDefaults.Options),
+                    new ParquetVersion
+                    {
+                        ReplacedByJobId = task.JobId,
+                        Table = pipelineState.Tables.GetValueOrDefault(entity),
+                        PipelineSnapshot = pipelineState.LastProcessedSnapshot,
+                    },
+                    DateTimeOffset.UtcNow, cancellationToken);
+
+                // Delta: solo las filas de los snapshots de esta corrida (deduplicadas), para que la
+                // etapa SQL no remergee la tabla entera. Solo con consolidado previo: sin él la tabla
+                // destino está vacía y SQL carga el consolidado (el delta sería una copia completa).
+                // El consolidado recién generado compite solo por claves: una fila de esta corrida que
+                // pierde frente a él (versión anterior de un Id ya cargado o ya borrado) no entra al delta.
+                var hasDelta = false;
+                if (hasPreviousConsolidated)
                 {
-                    _logger.LogWarning(ex, "No se pudo guardar la copia local del consolidado de {Entity}; el próximo run lo bajará.", entity);
+                    var deltaPath = _manifestStore.GetDeltaPath(task.PipelineId, task.JobId, entity);
+                    Directory.CreateDirectory(Path.GetDirectoryName(deltaPath)!);
+                    await using (var delta = File.Create(deltaPath))
+                    {
+                        await ParquetConsolidator.ConsolidateAsync(
+                            transientSources, schema, delta,
+                            keyOnlySources: [_ => Task.FromResult<Stream>(File.OpenRead(stagingConsolidated))],
+                            cancellationToken: cancellationToken);
+                    }
+
+                    hasDelta = true;
                 }
+
+                // El consolidado publicado pasa a ser la copia local (ConsolidatedCache), así el run
+                // siguiente no lo baja. Si falla, solo se pierde la caché: ese run lo bajará.
+                if (parquetStore is not LocalParquetStore)
+                {
+                    try
+                    {
+                        if (await parquetStore.GetParquetPropertiesAsync(consolidatedBlobPath, cancellationToken) is { } published)
+                        {
+                            _consolidatedCache.Store(task.PipelineId, entity, stagingConsolidated, published);
+                        }
+                    }
+                    catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+                    {
+                        _logger.LogWarning(ex, "No se pudo guardar la copia local del consolidado de {Entity}; el próximo run lo bajará.", entity);
+                    }
+                }
+
+                manifestEntities.Add(new IngestEntityManifest
+                {
+                    Entity = entity,
+                    HasDelta = hasDelta,
+                    ParquetPath = consolidatedBlobPath,
+                    Snapshot = lastSnapshot ?? "",
+                    CsvRows = entityCsvRows.GetValueOrDefault(entity),
+                    // Con DeleteMode.Delete las filas de borrado no llegan a SQL: no cuentan como filas.
+                    FilteredRows = pipeline.DeleteMode == DeleteMode.Delete ? result.Rows - result.DeleteRows : result.Rows,
+                    Watermark = result.MaxWatermark,
+                    SourceRowCount = entityCsvRows.GetValueOrDefault(entity),
+                    SchemaPath = schemaBlobPath,
+                });
+            }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                // Mismo aislamiento que en la lectura: un fallo al consolidar una tabla (un cambio de
+                // tipo que no convierte los valores del consolidado, la parada por consolidado ausente)
+                // la deja en error y fuera del manifest (SQL no la carga), conserva su PendingBackfill y
+                // las demás siguen. El snapshot no se marca como procesado, así que el siguiente job la
+                // reintenta: si falló antes de publicar, sobre su consolidado anterior intacto; entre los
+                // dos renames de PublishAsync, parándola por consolidado ausente (arriba); después de
+                // publicar, su delta vuelve a traer estas filas (empatan con el consolidado). La
+                // cancelación del worker se propaga, como en la lectura.
+                consolidationFailures++;
+                if (!entityFailures.TryGetValue(entity, out var failuresForEntity))
+                {
+                    failuresForEntity = [];
+                    entityFailures[entity] = failuresForEntity;
+                }
+
+                failuresForEntity.Add($"consolidación: {ex.GetType().Name}: {ex.Message}");
+                var code = KnownErrors.CodeFrom(ex);
+                if (code is not null)
+                {
+                    entityCodes.TryAdd(entity, code);
+                }
+
+                _logger.LogError(ex, "Ingest consolidation failed for entity {Entity}", entity);
+                _jobs.AppendEvent(task.JobId, EventLevel.Error,
+                    $"{entity}: falló la consolidación — {ex.GetType().Name}: {ex.Message}", code,
+                    "Event.Ingest.ConsolidationFailed", entity, ex.GetType().Name, ex.Message);
             }
 
-            manifestEntities.Add(new IngestEntityManifest
-            {
-                Entity = entity,
-                HasDelta = hasDelta,
-                ParquetPath = consolidatedBlobPath,
-                Snapshot = lastSnapshot ?? "",
-                CsvRows = entityCsvRows.GetValueOrDefault(entity),
-                // Con DeleteMode.Delete las filas de borrado no llegan a SQL: no cuentan como filas.
-                FilteredRows = pipeline.DeleteMode == DeleteMode.Delete ? result.Rows - result.DeleteRows : result.Rows,
-                Watermark = result.MaxWatermark,
-                SourceRowCount = entityCsvRows.GetValueOrDefault(entity),
-                SchemaPath = schemaBlobPath,
-            });
-            progress.Report(JobStepCatalog.Consolidate, manifestEntities.Count);
+            progress.Report(JobStepCatalog.Consolidate, manifestEntities.Count, failed: consolidationFailures);
         }
 
-        progress.CompleteStep(JobStepCatalog.Consolidate);
+        progress.CompleteStep(JobStepCatalog.Consolidate, consolidationFailures > 0 ? "error" : "done");
         progress.StartStep(JobStepCatalog.Register);
 
         DeleteStaging(task.JobId);
@@ -842,8 +879,9 @@ public sealed class IngestExecutor : IIngestExecutor
             }
         }
 
-        // Las entidades fallan al leerse en el paso de snapshots: ahí se marca el error.
-        progress.Finish(hasEntityError ? "error" : "done", failedStep: JobStepCatalog.Snapshots);
+        // Las entidades que fallan al leerse marcan el error en el paso de snapshots; las que fallan al
+        // consolidar ya lo marcaron en el suyo.
+        progress.Finish(hasEntityError ? "error" : "done", failedStep: readFailed ? JobStepCatalog.Snapshots : null);
         _jobs.Update(job.Id, updatedJob);
 
         var completionNote = incomplete is null
