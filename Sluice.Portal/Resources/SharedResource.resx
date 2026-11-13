@@ -894,6 +894,7 @@
   <data name="Event.Ingest.ChangelogFolderMissing" xml:space="preserve"><value>No se encuentra la carpeta del changelog '{0}'.</value></data>
   <data name="Event.Ingest.ProcessingSnapshot" xml:space="preserve"><value>Procesando el snapshot {0}.</value></data>
   <data name="Event.Ingest.EntityFailed" xml:space="preserve"><value>{0}: falló la ingesta del snapshot {1} — {2}: {3}</value></data>
+  <data name="Event.Ingest.ConsolidationFailed" xml:space="preserve"><value>{0}: falló la consolidación — {1}: {2}</value></data>
   <data name="Event.Ingest.SkippedPaused" xml:space="preserve"><value>{0:N0} tabla(s) omitida(s) por pausa: {1}.</value></data>
   <data name="Event.Ingest.Backfilling" xml:space="preserve"><value>{0}: reanudada tras una pausa; se leen los snapshots que se saltó, desde {1}.</value></data>
   <data name="Event.Ingest.BackfillSnapshotsMissing" xml:space="preserve"><value>{0}: el snapshot {1}, el primero que se saltó en pausa, ya no está en el lago; los cambios de ese tiempo no se recuperan. Un reset del pipeline la recarga con los snapshots que queden.</value></data>

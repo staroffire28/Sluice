@@ -895,6 +895,7 @@
   <data name="Event.Ingest.ChangelogFolderMissing" xml:space="preserve"><value>Changelog folder '{0}' not found.</value></data>
   <data name="Event.Ingest.ProcessingSnapshot" xml:space="preserve"><value>Processing snapshot {0}.</value></data>
   <data name="Event.Ingest.EntityFailed" xml:space="preserve"><value>{0}: ingest failed for snapshot {1} — {2}: {3}</value></data>
+  <data name="Event.Ingest.ConsolidationFailed" xml:space="preserve"><value>{0}: consolidation failed — {1}: {2}</value></data>
   <data name="Event.Ingest.SkippedPaused" xml:space="preserve"><value>{0:N0} table(s) skipped because they are paused: {1}.</value></data>
   <data name="Event.Ingest.Backfilling" xml:space="preserve"><value>{0}: resumed after a pause; reading the snapshots it skipped, from {1}.</value></data>
   <data name="Event.Ingest.BackfillSnapshotsMissing" xml:space="preserve"><value>{0}: snapshot {1}, the first one it skipped while paused, is no longer in the lake; the changes from that time cannot be recovered. A pipeline reset reloads it from the snapshots that remain.</value></data>
