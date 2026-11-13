@@ -186,6 +186,21 @@ public sealed class ReconcileExecutor : IReconcileExecutor
         {
             var current = _jobs.Get(task.JobId)!;
             _jobs.Update(current.Id, current with { Status = JobStatus.Partial });
+
+            // Como las etapas de ingest y SQL: el Partial avisa por el webhook, una sola vez con todas
+            // las tablas que no se pudieron contar (dejan de estar vigiladas). La divergencia, si la
+            // hay, sigue su propia alerta.
+            var detail = string.Join("; ", failed.Select(f => $"{f.Entity}: {f.Error ?? "falta el parquet consolidado"}"));
+            await _alerts.SendPipelineFailureAsync(new PipelineFailureAlert
+            {
+                PipelineId = pipeline.Id,
+                PipelineName = pipeline.Name,
+                JobId = task.JobId,
+                JobType = job.Type.ToString(),
+                Stage = "reconcile",
+                Message = $"Conciliación: {failed.Count} tabla(s) sin conciliar. {detail}",
+                Status = PipelineFailureAlert.Warning,
+            }, cancellationToken);
         }
 
         // Cada rama reporta antes de procesar cada entidad: el contador final (todas las
