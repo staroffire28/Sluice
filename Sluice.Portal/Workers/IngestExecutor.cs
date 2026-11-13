@@ -722,14 +722,17 @@ public sealed class IngestExecutor : IIngestExecutor
         // SQL las cargue; una que ya lo estaba conserva su entrada (la más antigua manda). Un estado de
         // una versión sin el campo (null) se convierte con la regla de antes: si el último job con
         // etapa SQL no la completó, sus filas pueden faltar en SQL, así que estas tablas se apuntan a
-        // su nombre y SQL las carga desde el consolidado completo.
-        var pendingSql = new Dictionary<string, string>(pipelineState.PendingSql ?? [], StringComparer.OrdinalIgnoreCase);
+        // su nombre y SQL las carga desde el consolidado completo. Sin tablas en el manifest no hay
+        // nada que convertir y el campo sigue null, para que el siguiente ingest con tablas evalúe la regla.
+        var pendingSql = pipelineState.PendingSql is null && manifestEntities.Count == 0
+            ? null
+            : new Dictionary<string, string>(pipelineState.PendingSql ?? [], StringComparer.OrdinalIgnoreCase);
         var pendingOwner = pipelineState.PendingSql is null && manifestEntities.Count > 0
             ? PreviousIncompleteSqlJobId(task) ?? task.JobId
             : task.JobId;
         foreach (var entry in manifestEntities)
         {
-            pendingSql.TryAdd(entry.Entity, pendingOwner);
+            pendingSql!.TryAdd(entry.Entity, pendingOwner);
         }
 
         _stateStore.Save(pipelineState with

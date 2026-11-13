@@ -416,16 +416,34 @@ public sealed class SqlExecutor : ISqlExecutor
         // Las tablas cargadas bien (desde el consolidado o desde el delta de este job), sea cual sea el
         // tipo de job, dejan de estar pendientes de SQL; las que fallaron siguen. Con la etapa cortada
         // por una cancelación no se quita nada: el reintento las recarga. El estado se relee al guardar
-        // (el scheduler escribe el mismo fichero) y se guarda una sola vez.
+        // (el scheduler escribe el mismo fichero) y se guarda una sola vez. Las que fallaron y no estaban
+        // pendientes (un job sin ingest: recarga o re-sync) pasan a estarlo con el id de este job, así el
+        // siguiente Incremental las carga desde el consolidado; con PendingSql null se deja null (la
+        // regla antigua del ingest cubre ese caso).
         var refreshTables = reload && entitySqlRows.Count > 0;
-        HashSet<string> clearPending = cancellationToken.IsCancellationRequested
+        var cancelled = cancellationToken.IsCancellationRequested;
+        HashSet<string> clearPending = cancelled
             ? []
             : new HashSet<string>(loaded.Concat(dropPending), StringComparer.OrdinalIgnoreCase);
-        if (_stateStore is not null && (refreshTables || pendingSql?.Keys.Any(clearPending.Contains) == true))
+        List<string> failedPending = cancelled
+            ? []
+            : entityResults
+                .Where(e => string.Equals(e.Status, "error", StringComparison.OrdinalIgnoreCase) && !loaded.Contains(e.Entity))
+                .Select(e => e.Entity)
+                .ToList();
+        if (_stateStore is not null && (refreshTables
+            || pendingSql?.Keys.Any(clearPending.Contains) == true
+            || (pendingSql is not null && failedPending.Any(e => !pendingSql.ContainsKey(e)))))
         {
             _stateStore.Update(task.PipelineId, current =>
             {
-                var updated = current with { PendingSql = WithoutPending(current.PendingSql, clearPending) };
+                var remaining = WithoutPending(current.PendingSql, clearPending);
+                foreach (var entity in failedPending)
+                {
+                    remaining?.TryAdd(entity, task.JobId);
+                }
+
+                var updated = current with { PendingSql = remaining };
                 if (!refreshTables)
                 {
                     return updated;
