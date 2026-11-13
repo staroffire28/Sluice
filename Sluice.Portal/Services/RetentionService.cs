@@ -105,18 +105,36 @@ public sealed class RetentionService
     public RetentionSweepResult Sweep(DateTimeOffset now, AppSettings settings)
     {
         var plan = Plan(now, settings);
+        var failures = new DeleteFailures();
 
         var result = new RetentionSweepResult
         {
-            Jobs = DeleteFiles(plan.JobFiles),
-            Reports = DeleteFiles(plan.ReportFiles),
-            Tasks = DeleteFiles(plan.TaskFiles),
-            Runs = DeleteDirectories(plan.RunDirectories),
-            Staging = DeleteDirectories(plan.StagingDirectories),
-            ActivityLogs = DeleteFiles(plan.ActivityLogFiles),
+            Jobs = DeleteFiles(plan.JobFiles, failures),
+            Reports = DeleteFiles(plan.ReportFiles, failures),
+            Tasks = DeleteFiles(plan.TaskFiles, failures),
+            Runs = DeleteDirectories(plan.RunDirectories, failures),
+            Staging = DeleteDirectories(plan.StagingDirectories, failures),
+            ActivityLogs = DeleteFiles(plan.ActivityLogFiles, failures),
+            Failed = failures.Count,
         };
 
-        if (result.Total > 0)
+        // Lo que no se pudo borrar (p. ej. el volumen sin permisos tras un restore) hace crecer el
+        // disco: un único warning resumen (el detalle por ruta va en Debug) y una entrada de aviso
+        // en el registro de actividad, aunque no se haya borrado nada.
+        if (result.Failed > 0)
+        {
+            _logger.LogWarning(failures.First,
+                "Retención: {Failed} elementos no se pudieron borrar ({Deleted} borrados); primer error: {Error}",
+                result.Failed, result.Total, failures.First?.Message);
+            _activity.LogSystem(
+                "retention.sweep",
+                $"Retención: {result.Jobs} jobs, {result.Reports} reportes, {result.Tasks} tareas, " +
+                $"{result.Runs} runs, {result.Staging} staging, {result.ActivityLogs} logs de actividad eliminados; " +
+                $"{result.Failed} elementos no se pudieron borrar (primer error: {failures.First?.Message}).",
+                null, null, "warning", "Activity.Retention.SweepFailures",
+                result.Jobs, result.Reports, result.Tasks, result.Runs, result.Staging, result.ActivityLogs, result.Failed, failures.First?.Message);
+        }
+        else if (result.Total > 0)
         {
             _activity.LogSystem(
                 "retention.sweep",
@@ -310,7 +328,7 @@ public sealed class RetentionService
         }
     }
 
-    private int DeleteFiles(IReadOnlyList<string> paths)
+    private int DeleteFiles(IReadOnlyList<string> paths, DeleteFailures failures)
     {
         var deleted = 0;
         foreach (var path in paths)
@@ -325,6 +343,7 @@ public sealed class RetentionService
             }
             catch (Exception ex)
             {
+                failures.Add(ex);
                 _logger.LogDebug(ex, "Retención: no se pudo borrar archivo {Path}", path);
             }
         }
@@ -332,7 +351,7 @@ public sealed class RetentionService
         return deleted;
     }
 
-    private int DeleteDirectories(IReadOnlyList<string> paths)
+    private int DeleteDirectories(IReadOnlyList<string> paths, DeleteFailures failures)
     {
         var deleted = 0;
         foreach (var path in paths)
@@ -347,11 +366,25 @@ public sealed class RetentionService
             }
             catch (Exception ex)
             {
+                failures.Add(ex);
                 _logger.LogDebug(ex, "Retención: no se pudo borrar directorio {Path}", path);
             }
         }
 
         return deleted;
+    }
+
+    // Fallos de borrado de un barrido: cuántos y el primero, para el aviso resumen.
+    private sealed class DeleteFailures
+    {
+        public int Count { get; private set; }
+        public Exception? First { get; private set; }
+
+        public void Add(Exception ex)
+        {
+            Count++;
+            First ??= ex;
+        }
     }
 
     // Un artefacto se purga si su job no sobrevive y, además, o su job existe (se está
@@ -393,5 +426,8 @@ public sealed record RetentionSweepResult
     public int Runs { get; init; }
     public int Staging { get; init; }
     public int ActivityLogs { get; init; }
+
+    // Elementos que tocaba borrar y no se pudieron (permisos, bloqueos): no cuentan en Total.
+    public int Failed { get; init; }
     public int Total => Jobs + Reports + Tasks + Runs + Staging + ActivityLogs;
 }

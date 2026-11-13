@@ -951,6 +951,7 @@
   <data name="Activity.Snapshot.Incomplete" xml:space="preserve"><value>Pipeline {0} on hold: snapshot {1} has been closed but incomplete for {2} ({3}). Nothing else is processed until the Synapse Link export completes; check the export.</value></data>
   <data name="Activity.Changelog.Blocked" xml:space="preserve"><value>Pipeline {0} on hold: the Synapse Link changelog has blocked it for {1} ({2}). Nothing is processed until the changelog names an existing folder; check the export.</value></data>
   <data name="Activity.Retention.Sweep" xml:space="preserve"><value>Retention: {0:N0} jobs, {1:N0} reports, {2:N0} tasks, {3:N0} runs, {4:N0} staging, {5:N0} activity logs deleted (age {6}d, floor {7}/pipeline).</value></data>
+  <data name="Activity.Retention.SweepFailures" xml:space="preserve"><value>Retention: {0:N0} jobs, {1:N0} reports, {2:N0} tasks, {3:N0} runs, {4:N0} staging, {5:N0} activity logs deleted; {6:N0} items could not be deleted (first error: {7}).</value></data>
   <data name="Activity.Retention.Error" xml:space="preserve"><value>The retention sweep failed: {0}</value></data>
   <data name="Activity.SnapshotRetention.Error" xml:space="preserve"><value>The snapshot retention sweep failed: {0}</value></data>
   <data name="Activity.SnapshotRetention.Skip" xml:space="preserve"><value>Pipeline {0}: purge skipped — consolidated Parquet files are missing: {1}.</value></data>
