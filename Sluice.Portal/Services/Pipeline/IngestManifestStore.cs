@@ -35,6 +35,16 @@ public sealed class IngestManifestStore
     public static string GetConsolidatedSchemaBlobPath(string pipelineId, string entity) =>
         $"{pipelineId}/{entity}.schema.json";
 
+    // Entrada sintética del manifest que apunta al consolidado durable de la tabla (parquet + schema):
+    // la etapa SQL la carga desde ahí, sin ingest (recargas, re-sync y tablas pendientes de SQL).
+    public static IngestEntityManifest ConsolidatedEntry(string pipelineId, string entity) => new()
+    {
+        Entity = entity,
+        ParquetPath = GetConsolidatedBlobPath(pipelineId, entity),
+        SchemaPath = GetConsolidatedSchemaBlobPath(pipelineId, entity),
+        Snapshot = "",
+    };
+
     // Staging LOCAL (volumen) para los parquet transitorios por snapshot: efímeros, se
     // consumen al consolidar y se borran. No van a ADLS.
     public string GetStagingRoot(string jobId) =>

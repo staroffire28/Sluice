@@ -921,7 +921,7 @@
   <data name="Event.Sql.EntityMergedDelta" xml:space="preserve"><value>{0}: {1:N0} fila(s) mergeadas (delta); la tabla tiene {2:N0}.</value></data>
   <data name="Event.Sql.EntityFailed" xml:space="preserve"><value>{0}: falló la etapa SQL — {1}: {2}</value></data>
   <data name="Event.Sql.MissingParquet" xml:space="preserve"><value>{0}: falta el parquet consolidado o su schema en el almacén; la tabla no se carga en SQL.</value></data>
-  <data name="Event.Sql.FullMergeAfterIncomplete" xml:space="preserve"><value>El último job ({0}) no completó la etapa SQL: este Incremental mergea el consolidado completo para reponer lo que faltara.</value></data>
+  <data name="Event.Sql.PendingFullMerge" xml:space="preserve"><value>{0}: quedó sin cargar en SQL en el job {1}; se carga desde el consolidado completo.</value></data>
   <data name="Event.Sql.PossibleBlock" xml:space="preserve"><value>{0}: lleva {1} sin avanzar en SQL (posible bloqueo). La sentencia sigue en curso; revisa los bloqueos en el destino (sys.dm_exec_requests, columna blocking_session_id).</value></data>
   <data name="Event.Enums.NoSnapshot" xml:space="preserve"><value>Traducción de enums activa pero no se pudo resolver snapshot (manifest vacío, sin last-processed ni settled). Se continúa sin columnas _$label.</value></data>
   <data name="Event.Enums.NoMetadataFile" xml:space="preserve"><value>Traducción de enums activa pero no se halló GlobalOptionsetMetadata.csv en el snapshot {0}.</value></data>

@@ -922,7 +922,7 @@
   <data name="Event.Sql.EntityMergedDelta" xml:space="preserve"><value>{0}: merged {1:N0} (delta), table count {2:N0}.</value></data>
   <data name="Event.Sql.EntityFailed" xml:space="preserve"><value>{0}: SQL stage failed — {1}: {2}</value></data>
   <data name="Event.Sql.MissingParquet" xml:space="preserve"><value>{0}: the consolidated Parquet file or its schema is missing from the store; the table is not loaded into SQL.</value></data>
-  <data name="Event.Sql.FullMergeAfterIncomplete" xml:space="preserve"><value>The last job ({0}) did not complete the SQL stage: this Incremental merges the full consolidated file to restore anything missing.</value></data>
+  <data name="Event.Sql.PendingFullMerge" xml:space="preserve"><value>{0}: was left unloaded in SQL by job {1}; it is loaded from the full consolidated file.</value></data>
   <data name="Event.Sql.PossibleBlock" xml:space="preserve"><value>{0}: no progress in SQL for {1} (possible blocking). The statement is still running; check blocking on the destination (sys.dm_exec_requests, column blocking_session_id).</value></data>
   <data name="Event.Enums.NoSnapshot" xml:space="preserve"><value>Enum translation is on but no snapshot could be resolved (empty manifest, no last-processed or settled snapshot). Continuing without _$label columns.</value></data>
   <data name="Event.Enums.NoMetadataFile" xml:space="preserve"><value>Enum translation is on but GlobalOptionsetMetadata.csv was not found in snapshot {0}.</value></data>

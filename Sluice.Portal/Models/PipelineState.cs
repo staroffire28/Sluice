@@ -11,6 +11,12 @@ public sealed record PipelineState
     // un restore que falla a medias (el reintento las recarga) y la vacía la recarga de SQL.
     public List<string> PendingReload { get; init; } = [];
 
+    // Tablas que un ingest dejó sin cargar en SQL → id del job cuyo ingest las dejó (si ya había una,
+    // se conserva la más antigua). Las añade el ingest al registrar y las quita la etapa SQL de
+    // cualquier job que las cargue bien; un Incremental carga también las que no traiga su manifest.
+    // null: estado guardado por una versión que no lo llevaba (no es lo mismo que vacío).
+    public Dictionary<string, string>? PendingSql { get; init; }
+
     // Tablas que el ingest se saltó por estar en pausa: el primer snapshot que se saltó. Al reanudarla,
     // el siguiente ingest le lee (solo a ella) desde ese snapshot hasta LastProcessedSnapshot.
     public Dictionary<string, string> PendingBackfill { get; init; } = new();

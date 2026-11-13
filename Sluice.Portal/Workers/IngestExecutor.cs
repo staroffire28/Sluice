@@ -718,12 +718,30 @@ public sealed class IngestExecutor : IIngestExecutor
             pendingBackfill.Remove(entity);
         }
 
+        // Las tablas del manifest quedan pendientes de SQL con el id de este job hasta que una etapa
+        // SQL las cargue; una que ya lo estaba conserva su entrada (la más antigua manda). Un estado de
+        // una versión sin el campo (null) se convierte con la regla de antes: si el último job con
+        // etapa SQL no la completó, sus filas pueden faltar en SQL, así que estas tablas se apuntan a
+        // su nombre y SQL las carga desde el consolidado completo. Sin tablas en el manifest no hay
+        // nada que convertir y el campo sigue null, para que el siguiente ingest con tablas evalúe la regla.
+        var pendingSql = pipelineState.PendingSql is null && manifestEntities.Count == 0
+            ? null
+            : new Dictionary<string, string>(pipelineState.PendingSql ?? [], StringComparer.OrdinalIgnoreCase);
+        var pendingOwner = pipelineState.PendingSql is null && manifestEntities.Count > 0
+            ? PreviousIncompleteSqlJobId(task) ?? task.JobId
+            : task.JobId;
+        foreach (var entry in manifestEntities)
+        {
+            pendingSql!.TryAdd(entry.Entity, pendingOwner);
+        }
+
         _stateStore.Save(pipelineState with
         {
             LastProcessedSnapshot = processedUpTo,
             GlobalWatermark = manifestEntities.Select(e => e.Watermark).Where(w => w.HasValue).Max(),
             Tables = updatedTables,
             PendingBackfill = pendingBackfill,
+            PendingSql = pendingSql,
             // El mismo snapshot sigue incompleto: se conserva desde cuándo (y la última alerta). Otro,
             // o ninguno, rearma el aviso.
             IncompleteSnapshot = incompleteSnapshot is null ? null
@@ -973,6 +991,23 @@ public sealed class IngestExecutor : IIngestExecutor
                 }
             }
         }
+    }
+
+    // Id del último job terminado del pipeline que carga todas sus tablas si no completó SQL; null si la
+    // completó o no hay ninguno. Se ignoran los que no tienen etapa SQL (Reconcile, Diff) y los
+    // ResyncTable: cargan una sola tabla, así que terminar bien no repara lo que un Incremental
+    // anterior dejó sin cargar en las demás. Se recorre el índice del más reciente al más antiguo y
+    // solo se lee el job.json de los candidatos hasta dar con uno que pasó por SQL (casi siempre el
+    // primero). Solo se usa para convertir un estado sin PendingSql.
+    private string? PreviousIncompleteSqlJobId(PipelineTask task)
+    {
+        var previous = _jobs.ListIndex(task.PipelineId)
+            .Where(e => e.Id != task.JobId && e.FinishedAt is not null
+                && e.Type is JobType.Incremental or JobType.Force or JobType.ReloadFromParquet)
+            .Select(e => _jobs.Get(e.Id))
+            .FirstOrDefault(j => j is not null && j.FinishedAt is not null
+                && j.StageStatus.GetValueOrDefault("sql") is not ("skipped" or null));
+        return previous is null || previous.StageStatus["sql"] == "done" ? null : previous.Id;
     }
 
     // La consolidación lee cada fuente dos veces. En ADLS, abrir el consolidado anterior es descargarlo
