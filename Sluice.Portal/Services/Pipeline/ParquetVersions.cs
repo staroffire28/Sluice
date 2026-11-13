@@ -17,6 +17,12 @@ public sealed record ParquetVersion
     // LastProcessedSnapshot del pipeline cuando esta versión era la vigente: al restaurarla se
     // rebobina hasta aquí para que las filas posteriores vuelvan en la siguiente ejecución.
     public string? PipelineSnapshot { get; init; }
+
+    // Marca de PipelineState.PendingBackfill que la tabla tenía al archivarse: el primer snapshot que
+    // se saltó en pausa desde que se escribió esta versión. Al restaurarla se repone si es igual o
+    // anterior al punto, para que el siguiente ingest le lea lo que se saltó. Las versiones archivadas
+    // antes de guardarla no la traen.
+    public string? PendingBackfill { get; init; }
     public string? SchemaJson { get; init; }
 }
 
