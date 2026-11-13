@@ -28,6 +28,7 @@ public sealed class SqlExecutor : ISqlExecutor
     private readonly JobProgressStore? _progressStore;
     private readonly PipelineStateStore? _stateStore;
     private readonly ColumnSelectionStore? _columns;
+    private readonly TablePauseStore? _pauses;
 
     public SqlExecutor(
         IJobService jobs,
@@ -41,9 +42,11 @@ public sealed class SqlExecutor : ISqlExecutor
         ILogger<SqlExecutor> logger,
         JobProgressStore? progress = null,
         PipelineStateStore? stateStore = null,
-        ColumnSelectionStore? columns = null)
+        ColumnSelectionStore? columns = null,
+        TablePauseStore? pauses = null)
     {
         _columns = columns;
+        _pauses = pauses;
         _jobs = jobs;
         _pipelines = pipelines;
         _manifestStore = manifestStore;
@@ -82,8 +85,59 @@ public sealed class SqlExecutor : ISqlExecutor
         progress.StartStep(JobStepCatalog.Prepare);
 
         var manifest = _manifestStore.Load(task.PipelineId, task.JobId);
-        if (manifest is null || manifest.Entities.Count == 0)
+
+        // Tablas que un ingest dejó sin cargar en SQL (PipelineState.PendingSql), con el job que las
+        // dejó. Un Incremental carga también las de jobs anteriores que no traiga su manifest, desde
+        // su consolidado; los demás tipos mantienen su alcance. Una en pausa se salta y sigue
+        // pendiente; una que ya no está en el estado (la archivó un restore, o hubo reset) deja de
+        // estarlo sin cargar nada. El manifest ampliado se guarda: la conciliación de este job y un
+        // reintento de la etapa ven las mismas tablas.
+        var state = _stateStore?.GetOrCreate(task.PipelineId);
+        var pendingSql = state?.PendingSql;
+        var dropPending = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var entries = manifest?.Entities ?? [];
+        if (job.Type == JobType.Incremental && state is not null && pendingSql is { Count: > 0 })
         {
+            var paused = _pauses?.GetPaused(task.PipelineId) ?? new HashSet<string>();
+            var skipped = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var carried = new List<IngestEntityManifest>();
+            // Las que ingirió este job (con su snapshot) se cargan siempre; una entrada sin snapshot es
+            // una arrastrada que añadió un intento anterior de esta misma etapa.
+            var ingested = new HashSet<string>(
+                entries.Where(e => !string.IsNullOrEmpty(e.Snapshot)).Select(e => e.Entity), StringComparer.OrdinalIgnoreCase);
+            foreach (var entity in pendingSql.Where(e => e.Value != task.JobId && !ingested.Contains(e.Key)).Select(e => e.Key).Order(StringComparer.OrdinalIgnoreCase))
+            {
+                if (paused.Contains(entity))
+                {
+                    skipped.Add(entity);
+                }
+                else if (!state.Tables.ContainsKey(entity))
+                {
+                    skipped.Add(entity);
+                    dropPending.Add(entity);
+                }
+                else if (!entries.Any(e => string.Equals(e.Entity, entity, StringComparison.OrdinalIgnoreCase)))
+                {
+                    carried.Add(IngestManifestStore.ConsolidatedEntry(task.PipelineId, entity));
+                }
+            }
+
+            var widened = entries.Where(e => !skipped.Contains(e.Entity)).Concat(carried).ToList();
+            if (carried.Count > 0 || widened.Count != entries.Count)
+            {
+                entries = widened;
+                manifest = (manifest ?? new IngestManifest { JobId = task.JobId, PipelineId = task.PipelineId }) with { Entities = widened };
+                _manifestStore.Save(manifest);
+            }
+        }
+
+        if (manifest is null || entries.Count == 0)
+        {
+            if (dropPending.Count > 0)
+            {
+                _stateStore!.Update(task.PipelineId, current => current with { PendingSql = WithoutPending(current.PendingSql, dropPending) });
+            }
+
             _jobs.AppendEvent(task.JobId, EventLevel.Info, JobEventMarkers.SqlNoManifest, null, "Event.Sql.NoManifest");
             _jobs.Update(job.Id, job with
             {
@@ -121,15 +175,17 @@ public sealed class SqlExecutor : ISqlExecutor
             || (task.Payload.TryGetValue("resyncMode", out var modeRaw)
                 && string.Equals(modeRaw?.ToString(), nameof(ResyncMode.Reload), StringComparison.OrdinalIgnoreCase));
 
-        // Un Incremental mergea solo el delta de su corrida. Si el último job terminado no completó
-        // SQL, sus filas pueden no estar en la tabla: antes un "Ejecutar" lo reparaba remergeando
-        // el consolidado entero, así que en ese caso se sigue haciendo.
-        var useDelta = job.Type == JobType.Incremental && !reload && PreviousSqlCompleted(task);
+        // Un Incremental mergea solo el delta de su corrida, y solo en las tablas que su propio ingest
+        // dejó pendientes: una que quedó pendiente de un job anterior puede no tener en SQL las filas
+        // de aquel, así que se carga desde el consolidado completo. Sin el store de estado no hay
+        // pendientes y vale el delta.
+        var incrementalDelta = job.Type == JobType.Incremental && !reload;
+        var loaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var failedEntities = 0;
-        progress.StartStep(JobStepCatalog.Merge, total: manifest.Entities.Count);
+        progress.StartStep(JobStepCatalog.Merge, total: entries.Count);
         using var stallWatch = new SqlStallWatch(StallAlertAfter, (step, elapsed) => WarnPossibleBlock(pipeline, task.JobId, step, elapsed), _logger);
-        foreach (var entry in manifest.Entities)
+        foreach (var entry in entries)
         {
             stallWatch.Touch($"{entry.Entity} · ensureTable");
             progress.Report(JobStepCatalog.Merge, entityResults.Count, item: entry.Entity, phase: "ensureTable", failed: failedEntities, rows: totalMerged, force: true);
@@ -191,12 +247,21 @@ public sealed class SqlExecutor : ISqlExecutor
                         null, "Event.Sql.DuplicateIds", entry.Entity);
                 }
 
+                var pendingOwner = pendingSql?.GetValueOrDefault(entry.Entity);
+                var ownDelta = _stateStore is null || pendingOwner == task.JobId;
+                if (incrementalDelta && pendingOwner is not null && pendingOwner != task.JobId)
+                {
+                    _jobs.AppendEvent(task.JobId, EventLevel.Info,
+                        $"{entry.Entity}: quedó sin cargar en SQL en el job {pendingOwner}; se carga desde el consolidado completo.",
+                        null, "Event.Sql.PendingFullMerge", entry.Entity, pendingOwner);
+                }
+
                 // Origen y modo: el delta (solo lo nuevo, sin reescribir lo igual) si la tabla ya
                 // tiene datos; si está vacía, el consolidado con inserción directa (el delta no la
                 // dejaría completa); en cualquier otro caso, el consolidado con MERGE incondicional.
                 var hasRows = await _mergeExecutor.HasRowsAsync(connection, schema, entry.Entity, sqlVersion, cancellationToken);
                 var deltaPath = _manifestStore.GetDeltaPath(task.PipelineId, task.JobId, entry.Entity);
-                var fromDelta = useDelta && entry.HasDelta && hasRows && File.Exists(deltaPath);
+                var fromDelta = incrementalDelta && ownDelta && entry.HasDelta && hasRows && File.Exists(deltaPath);
                 var mode = fromDelta ? MergeMode.UpsertNewer
                     : !hasRows ? MergeMode.InsertIntoEmpty
                     : MergeMode.Upsert;
@@ -302,6 +367,7 @@ public sealed class SqlExecutor : ISqlExecutor
                 var sqlRows = await _mergeExecutor.CountRowsAsync(connection, schema, entry.Entity, sqlVersion, cancellationToken);
                 totalMerged += merged;
                 entitySqlRows[entry.Entity] = sqlRows;
+                loaded.Add(entry.Entity);
 
                 entityResults.Add(new JobEntityResult
                 {
@@ -347,23 +413,39 @@ public sealed class SqlExecutor : ISqlExecutor
 
         // Un Force/ReloadFromParquet (o el re-sync en modo Reload) no pasa por el ingest, que es
         // quien fija el conteo de Tablas: tras la recarga se toma el conteo real de SQL.
-        if (reload && _stateStore is not null && entitySqlRows.Count > 0)
+        // Las tablas cargadas bien (desde el consolidado o desde el delta de este job), sea cual sea el
+        // tipo de job, dejan de estar pendientes de SQL; las que fallaron siguen. Con la etapa cortada
+        // por una cancelación no se quita nada: el reintento las recarga. El estado se relee al guardar
+        // (el scheduler escribe el mismo fichero) y se guarda una sola vez.
+        var refreshTables = reload && entitySqlRows.Count > 0;
+        HashSet<string> clearPending = cancellationToken.IsCancellationRequested
+            ? []
+            : new HashSet<string>(loaded.Concat(dropPending), StringComparer.OrdinalIgnoreCase);
+        if (_stateStore is not null && (refreshTables || pendingSql?.Keys.Any(clearPending.Contains) == true))
         {
-            var state = _stateStore.GetOrCreate(task.PipelineId);
-            var tables = new Dictionary<string, TableState>(state.Tables, StringComparer.OrdinalIgnoreCase);
-            foreach (var (entity, rows) in entitySqlRows)
+            _stateStore.Update(task.PipelineId, current =>
             {
-                if (tables.TryGetValue(entity, out var table))
+                var updated = current with { PendingSql = WithoutPending(current.PendingSql, clearPending) };
+                if (!refreshTables)
                 {
-                    tables[entity] = table with { RowCount = rows };
+                    return updated;
                 }
-            }
 
-            // Las tablas recargadas ya no esperan la recarga de un punto de restauración.
-            _stateStore.Save(state with
-            {
-                Tables = tables,
-                PendingReload = state.PendingReload.Where(e => !entitySqlRows.ContainsKey(e)).ToList(),
+                var tables = new Dictionary<string, TableState>(current.Tables, StringComparer.OrdinalIgnoreCase);
+                foreach (var (entity, rows) in entitySqlRows)
+                {
+                    if (tables.TryGetValue(entity, out var table))
+                    {
+                        tables[entity] = table with { RowCount = rows };
+                    }
+                }
+
+                // Las tablas recargadas ya no esperan la recarga de un punto de restauración.
+                return updated with
+                {
+                    Tables = tables,
+                    PendingReload = current.PendingReload.Where(e => !entitySqlRows.ContainsKey(e)).ToList(),
+                };
             });
         }
 
@@ -442,30 +524,11 @@ public sealed class SqlExecutor : ISqlExecutor
             ? Task.CompletedTask
             : keys.AddAsync(batch.Where(r => r.ContainsKey("Id")).Select(r => r["Id"]).ToList(), cancellationToken);
 
-    // ¿Completó SQL el último job terminado del pipeline que carga todas sus tablas? Se ignoran los
-    // que no tienen etapa SQL (Reconcile, Diff) y los ResyncTable: cargan una sola tabla, así que
-    // terminar bien no repara lo que un Incremental anterior dejó sin cargar en las demás. Sin
-    // jobs previos no hay nada que reparar. Se recorre el índice del más reciente al más antiguo y
-    // solo se lee el job.json de los candidatos hasta dar con uno que pasó por SQL (casi siempre el
-    // primero): antes se leían hasta 500 job.json enteros en cada etapa SQL.
-    private bool PreviousSqlCompleted(PipelineTask task)
-    {
-        var previous = _jobs.ListIndex(task.PipelineId)
-            .Where(e => e.Id != task.JobId && e.FinishedAt is not null
-                && e.Type is JobType.Incremental or JobType.Force or JobType.ReloadFromParquet)
-            .Select(e => _jobs.Get(e.Id))
-            .FirstOrDefault(j => j is not null && j.FinishedAt is not null
-                && j.StageStatus.GetValueOrDefault("sql") is not ("skipped" or null));
-        if (previous is null || previous.StageStatus["sql"] == "done")
-        {
-            return true;
-        }
-
-        _jobs.AppendEvent(task.JobId, EventLevel.Info,
-            $"El último job ({previous.Id}) no completó la etapa SQL: este Incremental mergea el consolidado completo para reponer lo que faltara.",
-            null, "Event.Sql.FullMergeAfterIncomplete", previous.Id);
-        return false;
-    }
+    // PendingSql sin esas tablas; null sigue siendo null (un estado de una versión sin el campo).
+    private static Dictionary<string, string>? WithoutPending(Dictionary<string, string>? pending, IReadOnlySet<string> entities) =>
+        pending?
+            .Where(e => !entities.Contains(e.Key))
+            .ToDictionary(e => e.Key, e => e.Value, StringComparer.OrdinalIgnoreCase);
 
     private void TryDeleteDirectory(string path)
     {

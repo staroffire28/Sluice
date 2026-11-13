@@ -686,13 +686,7 @@ public sealed class OrchestrationService : IOrchestrationService
         {
             JobId = jobId,
             PipelineId = pipelineId,
-            Entities = entities.Select(entity => new IngestEntityManifest
-            {
-                Entity = entity,
-                ParquetPath = IngestManifestStore.GetConsolidatedBlobPath(pipelineId, entity),
-                SchemaPath = IngestManifestStore.GetConsolidatedSchemaBlobPath(pipelineId, entity),
-                Snapshot = "",
-            }).ToList(),
+            Entities = entities.Select(entity => IngestManifestStore.ConsolidatedEntry(pipelineId, entity)).ToList(),
         });
         var automatic = actor == AuditActor.AutoFix;
 
@@ -839,13 +833,7 @@ public sealed class OrchestrationService : IOrchestrationService
         {
             JobId = jobId,
             PipelineId = pipelineId,
-            Entities = entities.Select(entity => new IngestEntityManifest
-            {
-                Entity = entity,
-                ParquetPath = IngestManifestStore.GetConsolidatedBlobPath(pipelineId, entity),
-                SchemaPath = IngestManifestStore.GetConsolidatedSchemaBlobPath(pipelineId, entity),
-                Snapshot = "",
-            }).ToList(),
+            Entities = entities.Select(entity => IngestManifestStore.ConsolidatedEntry(pipelineId, entity)).ToList(),
         });
 
         var job = new Job
