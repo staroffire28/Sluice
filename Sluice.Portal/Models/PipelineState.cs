@@ -47,6 +47,10 @@ public sealed record RestoreInProgress
 {
     public required string Snapshot { get; init; }
     public string? FromSnapshot { get; init; }
+
+    // PendingBackfill de antes del restore: las copias que archiva llevan la marca que su tabla tenía,
+    // aunque el estado rebobinado ya la haya quitado. Los guardados sin ella usan PendingBackfill.
+    public Dictionary<string, string>? FromPendingBackfill { get; init; }
 }
 
 public sealed record IncompleteSnapshot
