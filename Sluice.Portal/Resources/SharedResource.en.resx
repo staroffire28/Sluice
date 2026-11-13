@@ -888,6 +888,8 @@
   <data name="Event.Job.StageStoppedByCancel" xml:space="preserve"><value>Stage {0} stopped because the job was cancelled.</value></data>
   <data name="Event.Job.LaunchedFromQueue" xml:space="preserve"><value>Launched from the queue (requested on {0} UTC).</value></data>
   <data name="Event.Job.Orphaned" xml:space="preserve"><value>No pending or running task for more than {0:0} min (probably a worker went down between stages). Marked as Error: use Retry to run it again.</value></data>
+  <data name="Event.Job.LeaseReclaimCap" xml:space="preserve"><value>The {0} stage was reclaimed {1} times without finishing: the worker goes down (or restarts) while running it. Marked as Error: use Retry to run it again.</value></data>
+  <data name="Event.Job.Stalled" xml:space="preserve"><value>No activity for {0:0} h in the {1} stage; the job is still running. Check that stage's worker: if it does not move, cancel it and use Retry.</value></data>
   <data name="Event.AutoFix.Launched" xml:space="preserve"><value>Automatic fix: job {0} re-syncs {1}.</value></data>
   <data name="Event.AutoFix.NotLaunched" xml:space="preserve"><value>Automatic fix not launched: {0}</value></data>
   <data name="Event.Ingest.StoppingAtSnapshot" xml:space="preserve"><value>Stopping at snapshot {0}: {1} Will retry on the next run.</value></data>

@@ -138,6 +138,22 @@ public sealed class PipelineSchedulerService : BackgroundService
         // Antes de agendar: un job huérfano en Running bloquearía el auto-run de su pipeline.
         try
         {
+            // Antes que los huérfanos: el job cuya tarea agotó sus reclamaciones se cierra con su
+            // propio evento, sin esperar la gracia de 15 min.
+            foreach (var (job, stage) in await _watchdog.SweepReclaimCappedAsync(DateTimeOffset.UtcNow, ct))
+            {
+                var stageKey = stage.ToString().ToLowerInvariant();
+                await _alerts.SendPipelineFailureAsync(new PipelineFailureAlert
+                {
+                    PipelineId = job.PipelineId,
+                    PipelineName = _pipelines.Get(job.PipelineId)?.Name,
+                    JobId = job.Id,
+                    JobType = job.Type.ToString(),
+                    Stage = stageKey,
+                    Message = $"La etapa {stageKey} se reclamó {TaskStore.MaxLeaseReclaims} veces sin terminar: el worker cae (o se reinicia) mientras la ejecuta. Marcado como Error. Usa Reintentar para relanzarlo.",
+                }, ct);
+            }
+
             var orphaned = await _watchdog.SweepAsync(DateTimeOffset.UtcNow, ct);
             if (orphaned.Count > 0)
             {
@@ -162,6 +178,26 @@ public sealed class PipelineSchedulerService : BackgroundService
         {
             degraded = true;
             _logger.LogError(ex, "El vigilante de jobs huérfanos falló; se reintenta en el próximo poll.");
+        }
+
+        // Job en curso con su tarea viva pero sin actividad: el vigilante de huérfanos no lo ve. El aviso
+        // queda como evento del job (no cambia su estado) y se repite cada 6 h mientras siga parado; si
+        // la alerta no llega, la siguiente sale en el próximo aviso.
+        try
+        {
+            foreach (var stalled in _watchdog.WarnStalled(DateTimeOffset.UtcNow))
+            {
+                var name = _pipelines.Get(stalled.Job.PipelineId)?.Name ?? stalled.Job.PipelineId;
+                await _alerts.SendAsync(
+                    $"Job {stalled.Job.Id} del pipeline {name} sin actividad desde hace {stalled.Idle.TotalHours:0} h en la etapa {stalled.Stage}; sigue en curso. " +
+                    "Revisa el worker de esa etapa: si no avanza, cancélalo y usa Reintentar.",
+                    ct);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            degraded = true;
+            _logger.LogError(ex, "La vigilancia de jobs parados falló; se reintenta en el próximo poll.");
         }
 
         // En distribuido cada etapa tiene sus workers: si una se queda sin ninguno vivo, sus tareas

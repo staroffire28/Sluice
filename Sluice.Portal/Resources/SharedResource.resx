@@ -887,6 +887,8 @@
   <data name="Event.Job.StageStoppedByCancel" xml:space="preserve"><value>Etapa {0} detenida por la cancelación del job.</value></data>
   <data name="Event.Job.LaunchedFromQueue" xml:space="preserve"><value>Lanzado desde la cola (pedido el {0} UTC).</value></data>
   <data name="Event.Job.Orphaned" xml:space="preserve"><value>Sin ninguna tarea pendiente ni en curso desde hace más de {0:0} min (probable caída de un worker entre etapas). Se marca como Error: usa Reintentar para relanzarlo.</value></data>
+  <data name="Event.Job.LeaseReclaimCap" xml:space="preserve"><value>La etapa {0} se reclamó {1} veces sin terminar: el worker cae (o se reinicia) mientras la ejecuta. Se marca como Error: usa Reintentar para relanzarlo.</value></data>
+  <data name="Event.Job.Stalled" xml:space="preserve"><value>Sin actividad desde hace {0:0} h en la etapa {1}; el job sigue en curso. Revisa el worker de esa etapa: si no avanza, cancélalo y usa Reintentar.</value></data>
   <data name="Event.AutoFix.Launched" xml:space="preserve"><value>Corrección automática: el job {0} re-sincroniza {1}.</value></data>
   <data name="Event.AutoFix.NotLaunched" xml:space="preserve"><value>Corrección automática no lanzada: {0}</value></data>
   <data name="Event.Ingest.StoppingAtSnapshot" xml:space="preserve"><value>Se detiene en el snapshot {0}: {1} Se reintentará en el próximo run.</value></data>

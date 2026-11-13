@@ -22,7 +22,7 @@ Reporte
 
 Un job se dispara **manualmente** (**Ejecutar**, **Forzar**, **Reconciliar** o **Diff** en el menú de ejecución del Dashboard o de Pipelines) o **automáticamente** por el scheduler cuando detecta nuevos snapshots. En cualquier caso, si ya hay un job corriendo para ese pipeline, no arranca un segundo: una ejecución manual puede dejarse **en cola** para cuando termine.
 
-El trabajo fluye por una **cola basada en archivos**: cada tarea es un archivo JSON cuya carpeta (`pending` → `claimed` → `done`/`error`) es su estado. Un worker reclama una tarea con un lease temporal y envía heartbeats; si muere, el lease expira y la tarea vuelve a `pending`, así nada se queda atascado.
+El trabajo fluye por una **cola basada en archivos**: cada tarea es un archivo JSON cuya carpeta (`pending` → `claimed` → `done`/`error`) es su estado. Un worker reclama una tarea con un lease temporal y envía heartbeats; si muere, el lease expira y la tarea vuelve a `pending`, así nada se queda atascado. Una etapa cuyo worker cae una y otra vez (por ejemplo, por memoria) no se reintenta sin fin: la tercera vez que vence su lease la tarea pasa a `error` y el job se cierra en `Error` con una alerta (ver *Lease / heartbeat* en la referencia).
 
 ## Páginas
 

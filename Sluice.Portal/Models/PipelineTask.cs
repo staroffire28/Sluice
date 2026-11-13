@@ -14,4 +14,9 @@ public sealed record PipelineTask
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? FinishedAt { get; init; }
     public string? ErrorMessage { get; init; }
+
+    // Veces que el reclaim la devolvió a pending por lease vencido (worker caído o reiniciado a
+    // mitad de etapa). Al llegar a TaskStore.MaxLeaseReclaims ya no vuelve a la cola. Las tareas
+    // escritas antes de existir el campo se leen con 0.
+    public int LeaseReclaims { get; init; }
 }
