@@ -22,7 +22,7 @@ Report
 
 A job is triggered **manually** (**Run**, **Force**, **Reconcile** or **Diff** in the run menu of Dashboard or Pipelines) or **automatically** by the scheduler when it detects new snapshots. Either way, if a job is already running for that pipeline, no second one starts: a manual run can be **queued** for when it finishes.
 
-Work flows through a **file-based queue**: each task is a JSON file whose folder (`pending` → `claimed` → `done`/`error`) is its state. A worker claims a task with a temporary lease and sends heartbeats; if it dies, the lease expires and the task returns to `pending`, so nothing gets stuck.
+Work flows through a **file-based queue**: each task is a JSON file whose folder (`pending` → `claimed` → `done`/`error`) is its state. A worker claims a task with a temporary lease and sends heartbeats; if it dies, the lease expires and the task returns to `pending`, so nothing gets stuck. A stage whose worker keeps dying (for example, out of memory) is not retried forever: the third time its lease expires the task moves to `error` and the job is closed as `Error` with an alert (see *Lease / heartbeat* in the reference).
 
 ## Pages
 

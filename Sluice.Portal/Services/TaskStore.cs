@@ -10,6 +10,11 @@ namespace Sluice.Portal.Services;
 
 public sealed class TaskStore : ITaskStore
 {
+    // Una etapa cuyo worker cae (p. ej. por memoria) se reclamaba sin fin y el job seguía "en curso".
+    // Cuando su lease vence por MaxLeaseReclaims-ésima vez, la tarea pasa a error/ en vez de volver a pending, y el
+    // vigilante del scheduler (OrphanedJobWatchdog) cierra su job.
+    public const int MaxLeaseReclaims = 3;
+
     private readonly AppOptions _options;
     private readonly SettingsStore _settings;
     private readonly TimeProvider _time;
@@ -240,6 +245,8 @@ public sealed class TaskStore : ITaskStore
                 // no chocar con heartbeat/complete de tareas activas; bajo el handle se confirma
                 // que el lease sigue vencido (pudo renovarse) y se mueve.
                 PipelineTask? current;
+                bool capped;
+                string targetPath;
                 try
                 {
                     await using (var expired = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Delete))
@@ -250,7 +257,10 @@ public sealed class TaskStore : ITaskStore
                             continue;
                         }
 
-                        File.Move(file, pendingPath);
+                        // A la última reclamación permitida ya no vuelve a la cola: queda en error/.
+                        capped = current.LeaseReclaims + 1 >= MaxLeaseReclaims;
+                        targetPath = capped ? GetPath(stage, PipelineTaskStatus.Error, taskId) : pendingPath;
+                        File.Move(file, targetPath);
                     }
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -266,9 +276,22 @@ public sealed class TaskStore : ITaskStore
                     ClaimedBy = null,
                     ClaimedAt = null,
                     LeaseExpiresAt = null,
+                    LeaseReclaims = current.LeaseReclaims + 1,
                 };
 
-                await WriteTaskAsync(pendingPath, reclaimed, cancellationToken);
+                if (capped)
+                {
+                    reclaimed = reclaimed with
+                    {
+                        Status = PipelineTaskStatus.Error,
+                        FinishedAt = now,
+                        ErrorMessage = $"Lease vencido {reclaimed.LeaseReclaims} veces sin terminar la etapa {stage}: el worker cae mientras la ejecuta.",
+                    };
+                    _logger.LogError("Tarea {TaskId} ({Stage}): lease vencido {Count} veces sin terminar; se aparta a error/ en vez de reencolarla.",
+                        taskId, stage, reclaimed.LeaseReclaims);
+                }
+
+                await WriteTaskAsync(targetPath, reclaimed, cancellationToken);
             }
         }
     }
