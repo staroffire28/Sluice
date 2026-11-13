@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Services.Stores;
@@ -42,17 +44,20 @@ public sealed class SnapshotCatalogService : ISnapshotCatalogService
     private readonly IPipelineService _pipelines;
     private readonly IAdlsClientFactory _adlsFactory;
     private readonly SettingsStore _settings;
+    private readonly ILogger<SnapshotCatalogService> _logger;
 
     public SnapshotCatalogService(
         IOptions<AppOptions> options,
         IPipelineService pipelines,
         IAdlsClientFactory adlsFactory,
-        SettingsStore settings)
+        SettingsStore settings,
+        ILogger<SnapshotCatalogService>? logger = null)
     {
         _options = options.Value;
         _pipelines = pipelines;
         _adlsFactory = adlsFactory;
         _settings = settings;
+        _logger = logger ?? NullLogger<SnapshotCatalogService>.Instance;
     }
 
     public bool IsChangelogStalled(DateTimeOffset? changelogLastModified, DateTimeOffset now)
@@ -80,14 +85,26 @@ public sealed class SnapshotCatalogService : ISnapshotCatalogService
         var selection = SnapshotSelector.Select(allSnapshots, state.LastProcessedSnapshot, currentFolder);
         var now = DateTimeOffset.UtcNow;
         var appSettings = _settings.Get();
-        var retentionFloor = SnapshotRetentionService.SharedLastProcessed(_pipelines, pipeline.SourceId);
-        var analysis = SnapshotRetentionService.Analyze(
-            now,
-            appSettings,
-            allSnapshots,
-            retentionFloor,
-            SnapshotSelector.Select(allSnapshots, retentionFloor, currentFolder),
-            SnapshotRetentionService.SharedBackfillFrom(_pipelines, pipeline.SourceId));
+        // La retención lee el estado de todos los pipelines de la fuente. Si el de otro es ilegible,
+        // el catálogo de este no debe fallar (el scheduler lo pide en cada poll): se muestra sin
+        // carpetas elegibles. El barrido real sigue sin purgar mientras ese estado no se lea.
+        var siblingStateUnreadable = HasUnreadableSiblingState(pipeline);
+        SnapshotRetentionAnalysis analysis;
+        if (siblingStateUnreadable)
+        {
+            analysis = new SnapshotRetentionAnalysis([], new Dictionary<string, string>());
+        }
+        else
+        {
+            var retentionFloor = SnapshotRetentionService.SharedLastProcessed(_pipelines, pipeline.SourceId);
+            analysis = SnapshotRetentionService.Analyze(
+                now,
+                appSettings,
+                allSnapshots,
+                retentionFloor,
+                SnapshotSelector.Select(allSnapshots, retentionFloor, currentFolder),
+                SnapshotRetentionService.SharedBackfillFrom(_pipelines, pipeline.SourceId));
+        }
 
         var entries = allSnapshots
             .Select(name => new SnapshotEntry(
@@ -147,6 +164,29 @@ public sealed class SnapshotCatalogService : ISnapshotCatalogService
             appSettings.SourceSnapshotRetentionDryRun,
             cert.IsComplete,
             cert.MissingEntities);
+    }
+
+    // true si algún pipeline que comparte fuente con este tiene un estado ilegible (lo deja en el log).
+    private bool HasUnreadableSiblingState(Models.Pipeline pipeline)
+    {
+        foreach (var sibling in _pipelines.List().Where(p => p.SourceId == pipeline.SourceId && p.Id != pipeline.Id))
+        {
+            try
+            {
+                _pipelines.GetState(sibling.Id);
+            }
+            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "No se pudo leer el estado del pipeline {SiblingId}, que comparte origen con {PipelineId}: el catálogo se muestra sin carpetas elegibles para la retención.",
+                    sibling.Id,
+                    pipeline.Id);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string ResolveStatus(
