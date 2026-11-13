@@ -55,7 +55,6 @@
   <data name="Page.Dashboard.RunConfirmTitle" xml:space="preserve"><value>Run pipeline</value></data>
   <data name="Page.Dashboard.RunConfirm" xml:space="preserve"><value>Run {0} on this pipeline?</value></data>
   <data name="Page.Dashboard.ForceConfirm" xml:space="preserve"><value>Force reloads SQL from consolidated parquet in ADLS (all tables). This does NOT re-read the source CSVs — if you need to reprocess from ADLS (e.g. a previous ingest failure), use "Reset" and then "Run". Duration depends on volume. Continue?</value></data>
-  <data name="Common.Back" xml:space="preserve"><value>Back</value></data>
   <data name="Common.Saved" xml:space="preserve"><value>Saved</value></data>
   <data name="Common.NameRequired" xml:space="preserve"><value>Name is required and must contain at least one letter or number.</value></data>
   <data name="Common.ConnectionBusyRetarget" xml:space="preserve"><value>A pipeline that uses this connection has a job running: wait for it to finish or cancel it before changing where it points.</value></data>
@@ -63,6 +62,8 @@
   <data name="Common.DeleteFailed" xml:space="preserve"><value>Could not delete.</value></data>
   <data name="Common.CancelJobConfirm" xml:space="preserve"><value>Cancel job {0}? This stops its execution.</value></data>
   <data name="Common.CancelJobTitle" xml:space="preserve"><value>Cancel job</value></data>
+  <data name="Common.CancelJobAction" xml:space="preserve"><value>Cancel job</value></data>
+  <data name="Common.CancelJobKeep" xml:space="preserve"><value>Keep running</value></data>
   <data name="Common.JobCancelled" xml:space="preserve"><value>Job {0} cancelled</value></data>
   <data name="Page.Jobs.Report" xml:space="preserve"><value>Report</value></data>
   <data name="Page.Jobs.ReportGenerating" xml:space="preserve"><value>Generating PDF report…</value></data>
