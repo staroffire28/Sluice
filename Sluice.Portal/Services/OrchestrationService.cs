@@ -508,9 +508,12 @@ public sealed class OrchestrationService : IOrchestrationService
         }
 
         var from = state.RestoreInProgress is { } inProgress ? inProgress.FromSnapshot : state.LastProcessedSnapshot;
+        // Las marcas de backfill de antes del restore: el consolidado que se archiva las lleva para que
+        // el punto que lo devuelva las reponga. El reintento usa las que guardó el primer intento.
+        var fromBackfill = state.RestoreInProgress?.FromPendingBackfill ?? state.PendingBackfill;
         if (state.PendingRestore.Count > 0)
         {
-            state = await FinishPendingRestoreAsync(stateStore, pipelineId, state, from, cancellationToken);
+            state = await FinishPendingRestoreAsync(stateStore, pipelineId, state, from, fromBackfill, cancellationToken);
         }
 
         // La lista de puntos puede llevar abierta un rato: si la poda ya se llevó las versiones del
@@ -588,7 +591,7 @@ public sealed class OrchestrationService : IOrchestrationService
             }
         }
 
-        var rewound = state with { LastProcessedSnapshot = snapshot, Tables = tables, PendingReload = pendingReload, PendingRestore = pendingRestore, PendingBackfill = pendingBackfill, RestoreInProgress = new() { Snapshot = snapshot, FromSnapshot = from }, RetiredSnapshots = ParquetVersions.Retire(state.RetiredSnapshots, versions, plan) };
+        var rewound = state with { LastProcessedSnapshot = snapshot, Tables = tables, PendingReload = pendingReload, PendingRestore = pendingRestore, PendingBackfill = pendingBackfill, RestoreInProgress = new() { Snapshot = snapshot, FromSnapshot = from, FromPendingBackfill = fromBackfill }, RetiredSnapshots = ParquetVersions.Retire(state.RetiredSnapshots, versions, plan) };
         stateStore.Save(rewound);
         foreach (var (entity, version) in plan.Restore)
         {
@@ -601,7 +604,7 @@ public sealed class OrchestrationService : IOrchestrationService
             pendingRestore[entity] = new PendingRestoreTable { VersionId = version.Id, Table = version.Table, FromTable = current };
             stateStore.Save(rewound);
 
-            await _parquet.RestoreVersionAsync(pipelineId, entity, version.Id, CurrentAsVersion(current, from), cancellationToken);
+            await _parquet.RestoreVersionAsync(pipelineId, entity, version.Id, CurrentAsVersion(current, from, fromBackfill.GetValueOrDefault(entity)), cancellationToken);
             ParquetVersions.SetTable(tables, entity, version.Table);
             pendingRestore.Remove(entity);
             stateStore.Save(rewound);
@@ -609,7 +612,7 @@ public sealed class OrchestrationService : IOrchestrationService
 
         foreach (var entity in plan.Archive)
         {
-            await _parquet.ArchiveCurrentAsync(pipelineId, entity, CurrentAsVersion(state.Tables.GetValueOrDefault(entity), from), cancellationToken);
+            await _parquet.ArchiveCurrentAsync(pipelineId, entity, CurrentAsVersion(state.Tables.GetValueOrDefault(entity), from, fromBackfill.GetValueOrDefault(entity)), cancellationToken);
             tables.Remove(entity);
             pendingReload.RemoveAll(e => string.Equals(e, entity, StringComparison.OrdinalIgnoreCase));
             stateStore.Save(rewound);
@@ -639,7 +642,7 @@ public sealed class OrchestrationService : IOrchestrationService
     // versión sigue en la lista el fichero no llegó a moverse y se mueve; si no, ya está en su sitio.
     // Después el estado vuelve a cuadrar con los ficheros y el plan nuevo sale bien.
     private async Task<PipelineState> FinishPendingRestoreAsync(
-        PipelineStateStore stateStore, string pipelineId, PipelineState state, string? from, CancellationToken cancellationToken)
+        PipelineStateStore stateStore, string pipelineId, PipelineState state, string? from, IReadOnlyDictionary<string, string> fromBackfill, CancellationToken cancellationToken)
     {
         var versions = await _parquet.ListAllVersionsAsync(pipelineId, cancellationToken);
         var tables = new Dictionary<string, TableState>(state.Tables, StringComparer.OrdinalIgnoreCase);
@@ -652,7 +655,7 @@ public sealed class OrchestrationService : IOrchestrationService
                 .Any(v => v.Value.Any(version => version.Id == mark.VersionId));
             if (notMoved)
             {
-                await _parquet.RestoreVersionAsync(pipelineId, entity, mark.VersionId, CurrentAsVersion(mark.FromTable, from), cancellationToken);
+                await _parquet.RestoreVersionAsync(pipelineId, entity, mark.VersionId, CurrentAsVersion(mark.FromTable, from, fromBackfill.GetValueOrDefault(entity)), cancellationToken);
             }
 
             ParquetVersions.SetTable(tables, entity, mark.Table);
@@ -663,12 +666,13 @@ public sealed class OrchestrationService : IOrchestrationService
         return finished;
     }
 
-    private static ParquetVersion CurrentAsVersion(TableState? table, string? pipelineSnapshot) => new()
+    private static ParquetVersion CurrentAsVersion(TableState? table, string? pipelineSnapshot, string? pendingBackfill) => new()
     {
         Table = table,
         PipelineSnapshot = string.CompareOrdinal(table?.LastSnapshot, pipelineSnapshot) > 0
             ? table!.LastSnapshot
             : pipelineSnapshot,
+        PendingBackfill = pendingBackfill,
     };
 
     // Crea y encola el job de re-sync. Quien llama ya tiene el lock de ejecución del pipeline.
