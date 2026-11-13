@@ -135,16 +135,21 @@ public static class ManagementEndpoints
         // Reset para pruebas: limpia estado (LastProcessedSnapshot/tablas) y parquets
         // consolidados en ADLS; con truncateSql=true además vacía las tablas de destino en SQL.
         // No borra la configuración del pipeline (a diferencia de DELETE ?wipe=true).
-        api.MapPost("/pipelines/{id}/reset", async (string id, bool truncateSql, HttpContext http, IPipelineResetService svc, CancellationToken ct) =>
+        // Con la retención de origen borrando de verdad hace falta acknowledgeHistoryLoss=true (409 si no).
+        api.MapPost("/pipelines/{id}/reset", async (string id, bool truncateSql, bool? acknowledgeHistoryLoss, HttpContext http, IPipelineResetService svc, CancellationToken ct) =>
         {
             try
             {
-                var result = await svc.ResetAsync(AuditActor.FromHttp(http), id, truncateSql, ct);
+                var result = await svc.ResetAsync(AuditActor.FromHttp(http), id, truncateSql, acknowledgeHistoryLoss ?? false, ct);
                 return Results.Ok(result);
             }
             catch (PipelineBusyException ex)
             {
                 return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Pipeline busy.");
+            }
+            catch (ResetHistoryNotAcknowledgedException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "History loss not acknowledged.");
             }
             catch (InvalidOperationException ex)
             {

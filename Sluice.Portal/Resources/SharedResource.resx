@@ -1071,6 +1071,7 @@
   <data name="Error.PipelineLocked" xml:space="preserve"><value>El pipeline está ocupado (arranque o reset en curso).</value></data>
   <data name="Error.PipelineBusyDelete" xml:space="preserve"><value>Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de borrarlo.</value></data>
   <data name="Error.PipelineBusyReset" xml:space="preserve"><value>Hay un job en curso para este pipeline: espera a que termine o cancélalo antes de resetear.</value></data>
+  <data name="Error.ResetHistoryNotAcknowledged" xml:space="preserve"><value>El reset de {0} reconstruiría el pipeline solo con los snapshots que quedan en el lago: la retención de origen puede haber borrado los anteriores y su historia, que solo está en el parquet consolidado, se perdería. Para resetear igualmente, confírmalo (acknowledgeHistoryLoss=true en la API).</value></data>
   <data name="Error.RestorePending" xml:space="preserve"><value>Hay un restore a medias en este pipeline: vuelve a restaurar el punto {0} para terminarlo.</value></data>
   <data name="Error.InvalidPipelineId" xml:space="preserve"><value>Id de pipeline no válido: '{0}'.</value></data>
   <data name="Error.SourceNotFound" xml:space="preserve"><value>No se encuentra la conexión de origen.</value></data>

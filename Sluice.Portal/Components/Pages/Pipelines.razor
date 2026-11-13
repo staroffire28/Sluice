@@ -16,7 +16,6 @@
 @inject RunQueueService RunQueue
 @inject NavigationManager Nav
 @inject ILogger<Pipelines> Logger
-@inject SettingsStore Settings
 @inject Sluice.Portal.Services.Adls.IAdlsClientFactory AdlsFactory
 @implements IAsyncDisposable
 
@@ -397,8 +396,7 @@
         _resetOldestSnapshot = null;
         // Con la retención borrando de verdad (o settings.json ilegible, que no deja saberlo) puede que
         // el lago ya no tenga los primeros snapshots: se avisa y se dice desde cuándo los conserva.
-        _resetHistoryAtRisk = !Settings.TryGet(out var settings)
-            || (settings.SourceSnapshotRetentionDays > 0 && !settings.SourceSnapshotRetentionDryRun);
+        _resetHistoryAtRisk = PipelineResetService.IsHistoryAtRisk();
         _resetHistoryLoading = _resetHistoryAtRisk;
         _showReset = true;
         if (!_resetHistoryAtRisk)
@@ -441,7 +439,7 @@
         _resetting = true;
         try
         {
-            var result = await PipelineResetService.ResetAsync(Audit.Current, _resetId, _truncateSql);
+            var result = await PipelineResetService.ResetAsync(Audit.Current, _resetId, _truncateSql, _resetHistoryAck);
             if (!result.Completed)
             {
                 await NotificationService.ShowErrorToastAsync(string.Format(L["Page.Pipelines.ResetFailed"].Value, result.TableTruncateFailures.Count));
