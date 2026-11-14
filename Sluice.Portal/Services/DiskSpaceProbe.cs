@@ -28,11 +28,19 @@ public sealed class DriveInfoDiskSpaceProbe : IDiskSpaceProbe
     {
         try
         {
-            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            // En Windows se mide la propia ruta: el volumen de un contenedor Windows se monta en C:\data
+            // y la unidad C: sería el disco del contenedor. GetDiskFreeSpaceEx sigue el punto de montaje.
+            if (OperatingSystem.IsWindows())
+            {
+                return GetDiskFreeSpaceEx(Path.GetFullPath(path), out var available, out var total, out _) && total > 0
+                    ? new DiskSpace((long)available, (long)total)
+                    : null;
+            }
+
             var root = FindMountRoot(
                 Path.GetFullPath(path),
                 DriveInfo.GetDrives().Select(d => d.RootDirectory.FullName),
-                comparison,
+                StringComparison.Ordinal,
                 Path.DirectorySeparatorChar);
             if (root is null)
             {
@@ -47,6 +55,11 @@ public sealed class DriveInfoDiskSpaceProbe : IDiskSpaceProbe
             return null;
         }
     }
+
+    // Libre: los bytes disponibles para este proceso (cuotas incluidas); total: el del volumen.
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool GetDiskFreeSpaceEx(string directoryName, out ulong freeBytesAvailableToCaller, out ulong totalNumberOfBytes, out ulong totalNumberOfFreeBytes);
 
     // En Linux cada punto de montaje es una "unidad": vale el de prefijo más largo que contenga la
     // ruta, cortando por separador (/data no contiene /database).
