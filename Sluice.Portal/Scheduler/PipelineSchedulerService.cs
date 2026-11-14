@@ -110,6 +110,7 @@ public sealed class PipelineSchedulerService : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             var pollMinutes = Math.Max(1, _settings.Get().SchedulerPollMinutes);
+            _heartbeat.MarkWaiting(pollMinutes);
             try
             {
                 await Task.Delay(TimeSpan.FromMinutes(pollMinutes), stoppingToken);

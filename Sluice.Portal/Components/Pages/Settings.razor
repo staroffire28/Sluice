@@ -261,7 +261,7 @@
         _storedWebhookUrl = settings.AlertWebhookUrl;
         _lastPoll = Heartbeat.LastPollAt;
         _schedulerStale = Heartbeat.IsStale(settings.SchedulerPollMinutes);
-        _staleAfterMinutes = SchedulerHeartbeat.StaleAfter(settings.SchedulerPollMinutes).TotalMinutes;
+        _staleAfterMinutes = Heartbeat.CurrentStaleAfter(settings.SchedulerPollMinutes).TotalMinutes;
         _disk = DiskProbe.Get(AppOptions.Value.DataDir);
     }
 
