@@ -129,6 +129,8 @@
   <data name="Common.Health.Online" xml:space="preserve"><value>Online</value></data>
   <data name="Common.Health.Degraded" xml:space="preserve"><value>Degraded</value></data>
   <data name="Common.Health.Offline" xml:space="preserve"><value>Offline</value></data>
+  <data name="Common.Health.Reason.SchedulerStale" xml:space="preserve"><value>Scheduler stalled</value></data>
+  <data name="Common.Health.Reason.DiskLow" xml:space="preserve"><value>Low disk space</value></data>
   <data name="Common.Loading" xml:space="preserve"><value>Loading…</value></data>
   <data name="Common.NoData" xml:space="preserve"><value>No data.</value></data>
   <data name="Common.Add" xml:space="preserve"><value>Add</value></data>
@@ -528,6 +530,13 @@
   <data name="Page.Settings.Deadman.Waiting" xml:space="preserve"><value>Configured; no ping yet since the portal started.</value></data>
   <data name="Page.Settings.Deadman.Ok" xml:space="preserve"><value>{0}: last ping succeeded ({1}).</value></data>
   <data name="Page.Settings.Deadman.Failed" xml:space="preserve"><value>{0}: the last ping failed ({1}). The external monitor will report Sluice as down.</value></data>
+  <data name="Page.Settings.SystemStatus" xml:space="preserve"><value>Orchestrator status</value></data>
+  <data name="Page.Settings.SystemStatus.LastPoll" xml:space="preserve"><value>Last completed scheduler poll: {0}.</value></data>
+  <data name="Page.Settings.SystemStatus.NoPollYet" xml:space="preserve"><value>The scheduler has not completed a poll since the portal started.</value></data>
+  <data name="Page.Settings.SystemStatus.SchedulerStale" xml:space="preserve"><value>The scheduler has not completed a poll for more than {0:0} min: it may have stopped. Check the container log and restart it if it does not move.</value></data>
+  <data name="Page.Settings.SystemStatus.Disk" xml:space="preserve"><value>Free space on the DATA_DIR volume: {0:0.0} GB of {1:0.0} GB ({2:0.#} %).</value></data>
+  <data name="Page.Settings.SystemStatus.DiskUnknown" xml:space="preserve"><value>The free space of the DATA_DIR volume cannot be measured.</value></data>
+  <data name="Page.Settings.SystemStatus.DiskLow" xml:space="preserve"><value>Disk space is low (threshold {0:0.0} GB): free up space or grow the volume before jobs fail to write.</value></data>
   <data name="Page.Sources.ParquetContainer" xml:space="preserve"><value>Parquet container (destination)</value></data>
   <data name="Nav.Reconcile" xml:space="preserve"><value>Reconciliation</value></data>
   <data name="Page.Reconcile.Title" xml:space="preserve"><value>Reconciliation</value></data>
@@ -950,6 +959,7 @@
   <data name="Activity.Restore.Pending" xml:space="preserve"><value>Pipeline {0} on hold: {1}</value></data>
   <data name="Activity.Scheduler.Error" xml:space="preserve"><value>The scheduler failed on pipeline {0}: {1}</value></data>
   <data name="Activity.Pipeline.Lag" xml:space="preserve"><value>Pipeline {0} is behind: {1:N0} closed snapshot(s) not processed; the oldest ({2}) has been waiting for {3:0} h (threshold {4} h).</value></data>
+  <data name="Activity.Disk.Low" xml:space="preserve"><value>Low disk space on DATA_DIR: {0:0.0} GB free of {1:0.0} GB ({2:0.#} %), below the {3:0.0} GB threshold. Free up space or grow the volume before jobs fail to write.</value></data>
   <data name="Activity.Snapshot.Incomplete" xml:space="preserve"><value>Pipeline {0} on hold: snapshot {1} has been closed but incomplete for {2} ({3}). Nothing else is processed until the Synapse Link export completes; check the export.</value></data>
   <data name="Activity.Changelog.Blocked" xml:space="preserve"><value>Pipeline {0} on hold: the Synapse Link changelog has blocked it for {1} ({2}). Nothing is processed until the changelog names an existing folder; check the export.</value></data>
   <data name="Activity.Retention.Sweep" xml:space="preserve"><value>Retention: {0:N0} jobs, {1:N0} reports, {2:N0} tasks, {3:N0} runs, {4:N0} staging, {5:N0} activity logs deleted (age {6}d, floor {7}/pipeline).</value></data>

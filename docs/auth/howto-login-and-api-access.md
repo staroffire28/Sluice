@@ -80,7 +80,7 @@ Rotating `UI_API_KEY` does **not** invalidate existing sessions (they are signed
 
 | Check | Expected |
 |-------|----------|
-| `GET /health` | `{"status":"ok"}` |
+| `GET /health` | `{"status":"ok","scheduler":"ok","disk":"ok"}` |
 | `GET /api/status` without cookie | `401 Unauthorized` |
 | `GET /api/status` after JSON login | `200` with JSON body |
 

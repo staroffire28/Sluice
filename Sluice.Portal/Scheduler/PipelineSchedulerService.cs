@@ -26,6 +26,8 @@ public sealed class PipelineSchedulerService : BackgroundService
     private readonly QueueStallWatch _queueStall;
     private readonly RunQueueService _runQueue;
     private readonly PipelineStateStore _stateStore;
+    private readonly SchedulerHeartbeat _heartbeat;
+    private readonly IDiskSpaceProbe _disk;
     private readonly Dictionary<string, DateTimeOffset> _stallAlertsSent = new(StringComparer.OrdinalIgnoreCase);
     // Aviso de snapshot incompleto ya registrado en el activity log (pipeline → ronda de aviso), para
     // no repetirlo en cada poll mientras el webhook no lo acepte.
@@ -46,6 +48,10 @@ public sealed class PipelineSchedulerService : BackgroundService
     // cuanto el pipeline vuelve a arrancar.
     private readonly HashSet<string> _fieldsRequiredNoticed = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _fieldsRequiredAlerted = new(StringComparer.OrdinalIgnoreCase);
+    // Poco espacio en DATA_DIR: aviso registrado y alerta entregada, una vez por episodio. Se rearman
+    // cuando el disco vuelve a estar por encima del umbral (no con un estado desconocido).
+    private bool _diskLowNoticed;
+    private bool _diskLowAlerted;
     private bool _alertDeliveryFailedThisPoll;
 
     public PipelineSchedulerService(
@@ -63,9 +69,13 @@ public sealed class PipelineSchedulerService : BackgroundService
         OrphanedJobWatchdog watchdog,
         QueueStallWatch queueStall,
         RunQueueService runQueue,
-        PipelineStateStore stateStore)
+        PipelineStateStore stateStore,
+        SchedulerHeartbeat heartbeat,
+        IDiskSpaceProbe disk)
     {
         _stateStore = stateStore;
+        _heartbeat = heartbeat;
+        _disk = disk;
         _watchdog = watchdog;
         _queueStall = queueStall;
         _runQueue = runQueue;
@@ -127,12 +137,38 @@ public sealed class PipelineSchedulerService : BackgroundService
         }
     }
 
-    // internal: los tests ejercitan un ciclo sin esperar al primer tick del timer.
+    // internal: los tests ejercitan un ciclo sin esperar al primer tick del timer. Un sondeo que
+    // termina, aunque sea con excepción, cuenta como completado: lo que delata /health es un bucle que
+    // dejó de dar vueltas, no un ciclo con fallos (esos ya alertan por su cuenta).
     internal async Task PollAsync(CancellationToken ct)
+    {
+        try
+        {
+            await PollOnceAsync(ct);
+        }
+        finally
+        {
+            _heartbeat.MarkPollCompleted();
+        }
+    }
+
+    private async Task PollOnceAsync(CancellationToken ct)
     {
         _alertDeliveryFailedThisPoll = false;
         // Un vigilante del ciclo que falla: el poll sigue, pero no hace ping al dead-man.
         var degraded = false;
+
+        // Lo primero: con el disco lleno es justo lo demás (leer pipelines, escribir estado) lo que falla.
+        try
+        {
+            await CheckDiskSpaceAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            degraded = true;
+            _logger.LogError(ex, "La vigilancia del espacio en disco falló; se reintenta en el próximo poll.");
+        }
+
         await CheckChangelogStallsAsync(ct);
 
         // Antes de agendar: un job huérfano en Running bloquearía el auto-run de su pipeline.
@@ -491,6 +527,45 @@ public sealed class PipelineSchedulerService : BackgroundService
         if (await TrySendPendingAlertAsync(message, ct))
         {
             _lagAlertsSent.Add(pipeline.Id);
+        }
+    }
+
+    // Poco espacio libre en el volumen de DATA_DIR: una alerta por episodio, deduplicada y reintentada
+    // como las demás. Si no se puede medir no se avisa ni se rearma.
+    private async Task CheckDiskSpaceAsync(CancellationToken ct)
+    {
+        if (_disk.Get(_options.DataDir) is not { } space)
+        {
+            return;
+        }
+
+        if (!space.IsLow)
+        {
+            _diskLowNoticed = false;
+            _diskLowAlerted = false;
+            return;
+        }
+
+        if (_diskLowAlerted)
+        {
+            return;
+        }
+
+        var freeGb = (double)space.FreeBytes / DiskSpace.Gigabyte;
+        var totalGb = (double)space.TotalBytes / DiskSpace.Gigabyte;
+        var thresholdGb = (double)space.LowThresholdBytes / DiskSpace.Gigabyte;
+        var message = $"Poco espacio en disco en DATA_DIR: quedan {freeGb:0.0} GB libres de {totalGb:0.0} GB ({space.FreePercent:0.#} %), " +
+            $"por debajo del umbral de {thresholdGb:0.0} GB. Libera espacio o amplía el volumen antes de que los jobs fallen al escribir.";
+        if (!_diskLowNoticed)
+        {
+            _diskLowNoticed = true;
+            _activity.LogSystem("disk.low", message, null, null, "warning",
+                "Activity.Disk.Low", freeGb, totalGb, space.FreePercent, thresholdGb);
+        }
+
+        if (await TrySendPendingAlertAsync(message, ct))
+        {
+            _diskLowAlerted = true;
         }
     }
 

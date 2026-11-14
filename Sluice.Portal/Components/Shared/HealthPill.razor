@@ -1,4 +1,5 @@
 @rendermode InteractiveServer
+@using System.Text.Json
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Hosting.Server
 @using Microsoft.AspNetCore.Hosting.Server.Features
@@ -8,10 +9,11 @@
 @inject IStringLocalizer<SharedResource> L
 @implements IAsyncDisposable
 
-<FluentBadge Appearance="@_appearance" Color="@_color" id="health-pill">@_label</FluentBadge>
+<FluentBadge Appearance="@_appearance" Color="@_color" id="health-pill" title="@_title">@_label</FluentBadge>
 
 @code {
     private string _label = "";
+    private string? _title;
     private BadgeAppearance _appearance = BadgeAppearance.Tint;
     private BadgeColor _color = BadgeColor.Informative;
     private PageRefreshTimer? _timer;
@@ -32,7 +34,12 @@
             var client = HttpFactory.CreateClient();
             client.BaseAddress = ResolveSelfBaseAddress();
             using var response = await client.GetAsync("/health", ct);
-            if (response.IsSuccessStatusCode)
+            // Una respuesta no correcta (DATA_DIR no escribible) sigue siendo "Degradado" sin motivo.
+            IReadOnlyList<string>? reasons = response.IsSuccessStatusCode
+                ? DegradedReasons(await response.Content.ReadAsStringAsync(ct))
+                : [];
+            _title = reasons is { Count: > 0 } ? string.Join("; ", reasons.Select(r => L[r].Value)) : null;
+            if (reasons is null)
             {
                 _label = L["Common.Health.Online"];
                 _appearance = BadgeAppearance.Tint;
@@ -53,12 +60,48 @@
         }
         catch
         {
+            _title = null;
             _label = L["Common.Health.Offline"];
             _appearance = BadgeAppearance.Ghost;
             _color = BadgeColor.Informative;
         }
 
         await InvokeAsync(StateHasChanged);
+    }
+
+    // Motivos (claves de recurso) de un /health que responde 200 con status "degraded" (scheduler
+    // parado, poco disco); null si no está degradado o el cuerpo no se entiende (se trata como antes).
+    internal static IReadOnlyList<string>? DegradedReasons(string body)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || Field(root, "status") != "degraded")
+            {
+                return null;
+            }
+
+            var reasons = new List<string>();
+            if (Field(root, "scheduler") == "stale")
+            {
+                reasons.Add("Common.Health.Reason.SchedulerStale");
+            }
+
+            if (Field(root, "disk") == "low")
+            {
+                reasons.Add("Common.Health.Reason.DiskLow");
+            }
+
+            return reasons;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        static string? Field(JsonElement root, string name) =>
+            root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
     }
 
     // El portal se comprueba a sí mismo por loopback usando el puerto real de

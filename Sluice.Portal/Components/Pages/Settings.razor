@@ -10,6 +10,9 @@
 @inject AlertService AlertService
 @inject AlertDeliveryStatusStore DeliveryStatusStore
 @inject DeadmanService Deadman
+@inject SchedulerHeartbeat Heartbeat
+@inject IDiskSpaceProbe DiskProbe
+@inject Microsoft.Extensions.Options.IOptions<Sluice.Portal.Configuration.AppOptions> AppOptions
 @inject IStringLocalizer<SharedResource> L
 @inject BrowserTime Time
 
@@ -113,6 +116,30 @@
                     <FluentMessageBar Intent="MessageBarIntent.Warning">@L["Page.Settings.Deadman.Failed", FormatTime(ping.At), ping.Detail]</FluentMessageBar>
                 }
             </div>
+
+            @* Lo mismo que resume /health: el último sondeo completado del scheduler y el espacio libre del
+               volumen de DATA_DIR, sin depender de un monitor externo. *@
+            <div data-testid="settings-system-status">
+                <h3 class="dialog-form-subtitle">@L["Page.Settings.SystemStatus"]</h3>
+                <p class="field-hint" data-testid="settings-scheduler-last-poll">
+                    @(_lastPoll is { } poll
+                        ? L["Page.Settings.SystemStatus.LastPoll", FormatTime(poll)]
+                        : L["Page.Settings.SystemStatus.NoPollYet"])
+                </p>
+                @if (_schedulerStale)
+                {
+                    <FluentMessageBar data-testid="settings-scheduler-stale" Intent="MessageBarIntent.Warning">@L["Page.Settings.SystemStatus.SchedulerStale", _staleAfterMinutes]</FluentMessageBar>
+                }
+                <p class="field-hint" data-testid="settings-disk-space">
+                    @(_disk is { } disk
+                        ? L["Page.Settings.SystemStatus.Disk", (double)disk.FreeBytes / DiskSpace.Gigabyte, (double)disk.TotalBytes / DiskSpace.Gigabyte, disk.FreePercent]
+                        : L["Page.Settings.SystemStatus.DiskUnknown"])
+                </p>
+                @if (_disk is { IsLow: true } low)
+                {
+                    <FluentMessageBar data-testid="settings-disk-low" Intent="MessageBarIntent.Warning">@L["Page.Settings.SystemStatus.DiskLow", (double)low.LowThresholdBytes / DiskSpace.Gigabyte]</FluentMessageBar>
+                }
+            </div>
         </div>
     </PageSection>
 
@@ -200,6 +227,10 @@
     private bool _testingAlert;
     private AlertDeliveryResult? _testResult;
     private AlertDeliveryStatus? _delivery;
+    private DateTimeOffset? _lastPoll;
+    private bool _schedulerStale;
+    private double _staleAfterMinutes;
+    private DiskSpace? _disk;
 
     private string FormatTime(DateTimeOffset at) => Time.Format(at, "G");
 
@@ -228,6 +259,10 @@
         _alertEnabled = settings.AlertEnabled;
         _pipelineLagAlertHours = settings.PipelineLagAlertHours;
         _storedWebhookUrl = settings.AlertWebhookUrl;
+        _lastPoll = Heartbeat.LastPollAt;
+        _schedulerStale = Heartbeat.IsStale(settings.SchedulerPollMinutes);
+        _staleAfterMinutes = SchedulerHeartbeat.StaleAfter(settings.SchedulerPollMinutes).TotalMinutes;
+        _disk = DiskProbe.Get(AppOptions.Value.DataDir);
     }
 
     private void SaveSettings()

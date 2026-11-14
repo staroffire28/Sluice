@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Services;
+using Sluice.Portal.Services.Stores;
 
 namespace Sluice.Portal.Endpoints;
 
@@ -10,8 +11,26 @@ public static class HealthEndpoints
     {
         // Liveness: rápido a propósito (polling cada 60s del HealthPill, healthcheck de Docker
         // cada 30s, y arranque de e2e tests que esperan /health en un loop ajustado). Solo
-        // confirma que el proceso responde y que DATA_DIR es escribible — nunca toca SQL/ADLS.
-        app.MapLivenessEndpoint();
+        // confirma que el proceso responde y que DATA_DIR es escribible — nunca toca SQL/ADLS. En el
+        // orquestador añade, solo como indicadores, si el scheduler sigue sondeando y si queda poco
+        // disco: "degraded" sigue siendo 200 (el contenedor no está caído, hay que mirarlo).
+        app.MapGet("/health", (IOptions<AppOptions> options, SettingsStore settings, SchedulerHeartbeat heartbeat, IDiskSpaceProbe disk) =>
+        {
+            if (DataDirProbe.CheckWritable(options.Value.DataDir) is not null)
+            {
+                return LivenessResult(options.Value);
+            }
+
+            var schedulerStale = heartbeat.IsStale(settings.Get().SchedulerPollMinutes);
+            var space = disk.Get(options.Value.DataDir);
+            var diskLow = space?.IsLow == true;
+            return Results.Ok(new
+            {
+                status = schedulerStale || diskLow ? "degraded" : "ok",
+                scheduler = schedulerStale ? "stale" : "ok",
+                disk = space is null ? "unknown" : diskLow ? "low" : "ok",
+            });
+        });
         app.MapGet("/internal/health", (IOptions<AppOptions> options) => LivenessResult(options.Value));
 
         // Readiness: además de la escritura en DATA_DIR, prueba conectividad real de ADLS/SQL
