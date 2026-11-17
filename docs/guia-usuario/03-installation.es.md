@@ -168,6 +168,7 @@ Se editan en el portal, se guardan en el volumen y aplican sin reiniciar. Si `se
 | Umbral de divergencia de reconcile (%) | Por encima, un job se marca Parcial y alerta. | 1.0 |
 | Corrección automática | Al terminar una corrida con tablas sobre el umbral (o con diferencias de valores), las re-sincroniza solas, una vez. | Desactivada |
 | Retención de histórico (días) | Antigüedad a partir de la cual se purgan jobs y sus artefactos. `0` la desactiva. | 90 |
+| Retención del registro de actividad (días) | Días que se guarda el registro de actividad (la traza de auditoría), aparte de la retención de histórico ([detalles](04-reference.es.md#volumen-local-data_dir)). Mínimo 90. | 90 |
 | Días sin datos para resaltar una tabla | En **Tablas**, *Último dato* se resalta cuando la última carga con filas es más antigua (por ejemplo, una tabla quitada del perfil de Synapse Link). `0` lo desactiva. | 7 |
 | Retención de snapshots origen (días) | Antigüedad a partir de la cual se purgan las carpetas CSV ya procesadas del container de Synapse Link. `0` la desactiva. | 30 |
 | Simulación de la purga de snapshots | Registra qué se borraría sin borrar nada. | Activada |

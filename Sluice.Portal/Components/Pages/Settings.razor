@@ -40,6 +40,8 @@
         <div class="dialog-form dialog-form--narrow">
             <FluentNumberInput TValue="int" @bind-Value="_retentionDays" Label="@L["Page.Settings.RetentionDays"]" />
             <p class="field-hint">@L["Page.Settings.RetentionDays.Hint"]</p>
+            <FluentNumberInput TValue="int" @bind-Value="_auditRetentionDays" Label="@L["Page.Settings.AuditRetentionDays"]" data-testid="settings-audit-retention-days" />
+            <p class="field-hint">@L["Page.Settings.AuditRetentionDays.Hint"]</p>
             <FluentNumberInput TValue="int" @bind-Value="_staleTableDays" Label="@L["Page.Settings.StaleTableDays"]" data-testid="settings-stale-days" />
             <p class="field-hint">@L["Page.Settings.StaleTableDays.Hint"]</p>
             <FluentNumberInput TValue="int" @bind-Value="_parquetVersionDays" Label="@L["Page.Settings.ParquetVersionDays"]" data-testid="settings-parquet-version-days" />
@@ -205,6 +207,7 @@
     private double _divergencePct = 1.0;
     private bool _autoRemediate;
     private int _retentionDays = 90;
+    private int _auditRetentionDays = SettingsStore.MinAuditRetentionDays;
     private int _sourceSnapshotRetentionDays = 30;
     private int _staleTableDays = 7;
     private int _parquetVersionDays = 7;
@@ -251,6 +254,7 @@
         _divergencePct = settings.ReconDivergencePct;
         _autoRemediate = settings.AutoRemediate;
         _retentionDays = settings.RetentionDays;
+        _auditRetentionDays = settings.AuditRetentionDays;
         _staleTableDays = settings.StaleTableDays;
         _parquetVersionDays = settings.ParquetVersionDays;
         _sourceSnapshotRetentionDays = settings.SourceSnapshotRetentionDays;
@@ -283,6 +287,7 @@
             ReconDivergencePct = _divergencePct,
             AutoRemediate = _autoRemediate,
             RetentionDays = _retentionDays,
+            AuditRetentionDays = _auditRetentionDays,
             StaleTableDays = _staleTableDays,
             ParquetVersionDays = _parquetVersionDays,
             SourceSnapshotRetentionDays = _sourceSnapshotRetentionDays,
