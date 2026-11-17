@@ -79,7 +79,9 @@
                     <StatusBadge Status="@context.Status" />
                 </TemplateColumn>
                 <TemplateColumn Title="@L["Page.Tables.Sync"]">
-                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                    @* Wrap: si no hay sitio (1366px con una tabla de nombre largo y datos anchos), la
+                       insignia "Pausada" baja debajo del interruptor en vez de desplazar la tabla. *@
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalGap="4" Wrap="true" VerticalAlignment="VerticalAlignment.Center">
                         <FluentSwitch TValue="bool" data-testid="@($"sync-{context.Entity}")" Value="@(!context.Paused)"
                                       AriaLabel="@L["Page.Tables.SyncAria", context.Entity]"
                                       ValueChanged="@(active => TogglePaused(context.Entity, !active))" />
