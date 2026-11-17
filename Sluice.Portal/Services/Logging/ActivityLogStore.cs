@@ -346,7 +346,7 @@ public sealed class ActivityLogStore : IActivityLog, IAuditLog
     private static string DecodeLine(byte[] buffer, int start, int end, byte[] tail) =>
         (tail.Length == 0
             ? Encoding.UTF8.GetString(buffer, start, end - start)
-            : Encoding.UTF8.GetString([.. buffer[start..end], .. tail])).TrimStart('﻿').TrimEnd('\r');
+            : Encoding.UTF8.GetString([.. buffer[start..end], .. tail])).TrimStart('\uFEFF').TrimEnd('\r');
 
     private string GetLogDirectory() => Path.Combine(_options.DataDir, "logs");
 
