@@ -323,6 +323,7 @@
   <data name="Page.Parquet.Modified" xml:space="preserve"><value>Modified</value></data>
   <data name="Page.Parquet.ConfirmDelete" xml:space="preserve"><value>Delete the parquet '{0}' from ADLS? This action is irreversible.</value></data>
   <data name="Page.Parquet.ConfirmDeleteTitle" xml:space="preserve"><value>Confirm delete</value></data>
+  <data name="Page.Parquet.NothingDeleted" xml:space="preserve"><value>'{0}' was not deleted: it is no longer listed for this pipeline. The list has been refreshed.</value></data>
   <data name="Page.Parquet.MissingConsolidated" xml:space="preserve"><value>Consolidated missing: restore a point</value></data>
   <data name="Page.Parquet.RestorePoints" xml:space="preserve"><value>Restore points</value></data>
   <data name="Page.Parquet.RestorePointsHint" xml:space="preserve"><value>A point for each processed snapshot that a later run left behind by changing a table already loaded. Restoring one takes the whole pipeline back to that moment: every table that changed afterwards gets back the Parquet it had, tables that did not exist yet are archived, and the pipeline is rewound to that snapshot. SQL is reloaded only for the tables that go back, and the next run brings back the later rows if their snapshots are still in the lake. Points are kept for the days set in Settings, and the most recent one is always kept; it also undoes a restore.</value></data>
@@ -1093,6 +1094,7 @@
   <data name="Error.PipelineRunning" xml:space="preserve"><value>A job is already running for this pipeline.</value></data>
   <data name="Error.PipelineStopping" xml:space="preserve"><value>Job {0} is stopping after being cancelled; wait a few seconds and try again.</value></data>
   <data name="Error.PipelineLocked" xml:space="preserve"><value>The pipeline is busy (a start or reset is in progress).</value></data>
+  <data name="Error.Parquet.TableInPipeline" xml:space="preserve"><value>{0} is still in the pipeline: its consolidated file cannot be deleted. To reload it, restore a point or reset the pipeline.</value></data>
   <data name="Error.PipelineBusyDelete" xml:space="preserve"><value>A job is running for this pipeline: wait for it to finish or cancel it before deleting the pipeline.</value></data>
   <data name="Error.PipelineBusyReset" xml:space="preserve"><value>A job is running for this pipeline: wait for it to finish or cancel it before resetting.</value></data>
   <data name="Error.ResetHistoryNotAcknowledged" xml:space="preserve"><value>Resetting {0} would rebuild the pipeline only from the snapshots left in the lake: source retention may have deleted the earlier ones, and their history, which only exists in the consolidated parquet, would be lost. To reset anyway, confirm it (acknowledgeHistoryLoss=true in the API).</value></data>
