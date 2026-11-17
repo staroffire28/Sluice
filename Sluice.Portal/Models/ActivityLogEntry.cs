@@ -48,10 +48,12 @@ public sealed record ActivityLogEntry
         : Client is null ? Channel : $"{Channel} · {Client}";
 }
 
-// Rejected: la acción se rechazó por una regla (pipeline ocupado, validación); Error: falló.
+// Rejected: la acción se rechazó por una regla (pipeline ocupado, validación); Error: falló;
+// Cancelled: quien la pidió cortó antes de que terminara.
 public enum AuditOutcome
 {
     Ok,
     Rejected,
     Error,
+    Cancelled,
 }

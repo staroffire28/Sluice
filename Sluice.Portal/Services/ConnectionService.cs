@@ -216,7 +216,8 @@ public sealed class ConnectionService : IConnectionService
                 },
             $"No se pudo guardar la conexión {RoleLabel(connection.Role)} '{connection.Name}'",
             failureKey: "Activity.Failed.ConnectionSave", failureArgs: [RolePart(connection.Role), connection.Name],
-            target: id);
+            target: id,
+            cancellationToken: cancellationToken);
         return (result.Connection, result.CopiedTables);
     }
 
@@ -451,9 +452,9 @@ public sealed class ConnectionService : IConnectionService
 
     // Una prueba que no conecta es un resultado, no una excepción: queda como Error con su mensaje.
     public Task<ConnectionTestResult> TestAsync(AuditActor actor, string id, CancellationToken cancellationToken = default) =>
-        AuditTestAsync(actor, id, () => TestCoreAsync(id, cancellationToken));
+        AuditTestAsync(actor, id, () => TestCoreAsync(id, cancellationToken), cancellationToken);
 
-    private Task<ConnectionTestResult> AuditTestAsync(AuditActor actor, string target, Func<Task<ConnectionTestResult>> test) =>
+    private Task<ConnectionTestResult> AuditTestAsync(AuditActor actor, string target, Func<Task<ConnectionTestResult>> test, CancellationToken cancellationToken) =>
         _audit.AuditAsync(
             actor,
             "connection.test",
@@ -463,7 +464,8 @@ public sealed class ConnectionService : IConnectionService
                 MessageKey: "Activity.Connection.Tested", MessageArgs: [target, result.Message]),
             $"No se pudo probar la conexión {target}",
             failureKey: "Activity.Failed.ConnectionTest", failureArgs: [target],
-            target: target);
+            target: target,
+            cancellationToken: cancellationToken);
 
     private Task<ConnectionTestResult> TestCoreAsync(string id, CancellationToken cancellationToken)
     {
@@ -514,7 +516,7 @@ public sealed class ConnectionService : IConnectionService
 
     // Las pruebas desde el formulario (sin guardar) también salen a la red del cliente.
     public Task<ConnectionTestResult> TestSourceDraftAsync(AuditActor actor, Connection draft, string? existingId, CancellationToken cancellationToken = default) =>
-        AuditTestAsync(actor, DraftTarget(draft, existingId), () => TestSourceDraftCoreAsync(draft, existingId, cancellationToken));
+        AuditTestAsync(actor, DraftTarget(draft, existingId), () => TestSourceDraftCoreAsync(draft, existingId, cancellationToken), cancellationToken);
 
     private static string DraftTarget(Connection draft, string? existingId) => existingId ?? $"'{draft.Name}' (sin guardar)";
 
@@ -541,7 +543,8 @@ public sealed class ConnectionService : IConnectionService
                 MessageKey: "Activity.Connection.Tested", MessageArgs: [DraftTarget(draft, existingId), result.Message]),
             $"No se pudo probar la conexión {DraftTarget(draft, existingId)}",
             failureKey: "Activity.Failed.ConnectionTest", failureArgs: [DraftTarget(draft, existingId)],
-            target: DraftTarget(draft, existingId));
+            target: DraftTarget(draft, existingId),
+            cancellationToken: cancellationToken);
 
     private Task<SqlVersionDetection> DetectSqlVersionCoreAsync(Connection draft, string? existingId, CancellationToken cancellationToken)
     {

@@ -88,19 +88,43 @@ public sealed class PipelineResetService : IPipelineResetService
             "pipeline.reset",
             pipelineId,
             () => ResetCoreAsync(actor, pipelineId, truncateSql, acknowledgeHistoryLoss, cancellationToken),
-            result => result.Completed
+            result => Describe(pipelineId, truncateSql, result),
+            $"No se pudo resetear {pipelineId}",
+            failureKey: "Activity.Failed.Reset", failureArgs: [pipelineId],
+            cancellationToken: cancellationToken);
+
+    // El mensaje nombra las tablas truncadas: también las de un reset detenido, que ya quedaron vacías.
+    private static AuditResult Describe(string pipelineId, bool truncateSql, PipelineResetResult result)
+    {
+        var truncated = string.Join(", ", result.TablesTruncated);
+        if (!result.Completed)
+        {
+            var failed = string.Join(", ", result.TableTruncateFailures.Select(f => f.Entity));
+            return result.TablesTruncated.Count == 0
                 ? new AuditResult(
-                    $"Pipeline {pipelineId} reseteado{(truncateSql ? " con truncado de SQL" : "")} " +
-                    $"({result.TablesTruncated.Count} tabla(s) truncada(s), {result.ParquetArtifactsDeleted} parquet(s) borrado(s)).",
-                    MessageKey: "Activity.Reset.Done",
-                    MessageArgs: [pipelineId, truncateSql ? new EventPart("Activity.Reset.WithTruncate") : "", result.TablesTruncated.Count, result.ParquetArtifactsDeleted])
-                : new AuditResult(
-                    $"Reset de {pipelineId} detenido: fallo al truncar {string.Join(", ", result.TableTruncateFailures.Select(f => f.Entity))}.",
+                    $"Reset de {pipelineId} detenido: fallo al truncar {failed}.",
                     Outcome: AuditOutcome.Error,
                     MessageKey: "Activity.Reset.Stopped",
-                    MessageArgs: [pipelineId, string.Join(", ", result.TableTruncateFailures.Select(f => f.Entity))]),
-            $"No se pudo resetear {pipelineId}",
-            failureKey: "Activity.Failed.Reset", failureArgs: [pipelineId]);
+                    MessageArgs: [pipelineId, failed])
+                : new AuditResult(
+                    $"Reset de {pipelineId} detenido: fallo al truncar {failed}; se truncaron {truncated}.",
+                    Outcome: AuditOutcome.Error,
+                    MessageKey: "Activity.Reset.StoppedAfterTruncate",
+                    MessageArgs: [pipelineId, failed, truncated]);
+        }
+
+        var withTruncate = result.TablesTruncated.Count > 0 ? $" con truncado de SQL de {truncated}"
+            : truncateSql ? " con truncado de SQL"
+            : "";
+        object withTruncatePart = result.TablesTruncated.Count > 0 ? new EventPart("Activity.Reset.WithTruncateTables", truncated)
+            : truncateSql ? new EventPart("Activity.Reset.WithTruncate")
+            : "";
+        return new AuditResult(
+            $"Pipeline {pipelineId} reseteado{withTruncate} " +
+            $"({result.TablesTruncated.Count} tabla(s) truncada(s), {result.ParquetArtifactsDeleted} parquet(s) borrado(s)).",
+            MessageKey: "Activity.Reset.Done",
+            MessageArgs: [pipelineId, withTruncatePart, result.TablesTruncated.Count, result.ParquetArtifactsDeleted]);
+    }
 
     public bool IsHistoryAtRisk() =>
         !_settings.TryGet(out var settings)
@@ -142,6 +166,8 @@ public sealed class PipelineResetService : IPipelineResetService
             var schema = _sqlFactory.GetSchema(pipeline.DestinationId);
             await using var connection = await _sqlFactory.OpenAsync(pipeline.DestinationId, cancellationToken);
 
+            // Desde el primer truncado el reset ya no se corta (ver el borrado de parquets).
+            cancellationToken = CancellationToken.None;
             foreach (var entity in entities)
             {
                 try
@@ -174,6 +200,11 @@ public sealed class PipelineResetService : IPipelineResetService
         }
 
         var artifacts = await _parquet.ListAsync(pipelineId, cancellationToken);
+
+        // Desde el primer paso que no se deshace (truncar o borrar), el reset sigue aunque el cliente
+        // cierre la petición: cortado a medias dejaba SQL truncado, parquets borrados a medias y el
+        // estado sin resetear.
+        cancellationToken = CancellationToken.None;
         var deleted = 0;
         foreach (var artifact in artifacts)
         {

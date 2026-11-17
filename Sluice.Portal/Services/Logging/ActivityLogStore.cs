@@ -25,7 +25,7 @@ public interface IActivityLog
 }
 
 // Auditoría de las acciones que mutan algo: la llaman los servicios (no las páginas), con el actor
-// que pasó el llamador. El nivel sale del outcome (Ok=info, Rejected=warning, Error=error) salvo que
+// que pasó el llamador. El nivel sale del outcome (Ok=info, Rejected y Cancelled=warning, Error=error) salvo que
 // se indique otro: un Ok que merece atención (p. ej. desactivar el dry-run de la retención) es warning.
 public interface IAuditLog
 {
@@ -94,7 +94,7 @@ public sealed class ActivityLogStore : IActivityLog, IAuditLog
     {
         level ??= outcome switch
         {
-            AuditOutcome.Rejected => "warning",
+            AuditOutcome.Rejected or AuditOutcome.Cancelled => "warning",
             AuditOutcome.Error => "error",
             _ => "info",
         };

@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
@@ -141,7 +142,8 @@ public sealed class OrchestrationService : IOrchestrationService
                     MessageKey: "Activity.Job.NotRunning", MessageArgs: [jobId]),
             $"No se pudo cancelar el job {jobId}",
             failureKey: "Activity.Failed.JobCancel", failureArgs: [jobId],
-            jobId: jobId);
+            jobId: jobId,
+            cancellationToken: cancellationToken);
 
     private async Task<bool> CancelCoreAsync(string jobId, CancellationToken cancellationToken)
     {
@@ -190,7 +192,8 @@ public sealed class OrchestrationService : IOrchestrationService
             job => new AuditResult($"Ejecución {type} del pipeline {pipelineId} (job {job.Id}).", job.Id,
                 MessageKey: "Activity.Pipeline.Run", MessageArgs: [type.ToString(), pipelineId, job.Id]),
             $"No se pudo iniciar {type} en {pipelineId}",
-            failureKey: "Activity.Failed.PipelineRun", failureArgs: [type.ToString(), pipelineId]);
+            failureKey: "Activity.Failed.PipelineRun", failureArgs: [type.ToString(), pipelineId],
+            cancellationToken: cancellationToken);
 
     public async Task<bool> IsBusyAsync(string pipelineId, CancellationToken cancellationToken = default)
     {
@@ -260,7 +263,8 @@ public sealed class OrchestrationService : IOrchestrationService
                 MessageKey: "Activity.Queue.Started",
                 MessageArgs: [queued.Type.ToString(), pipelineId, job.Id, (object?)queued.RequestedBy?.Label ?? new EventPart("Activity.Queue.UnknownActor")]),
             $"No se pudo lanzar {queued.Type} en cola del pipeline {pipelineId}",
-            failureKey: "Activity.Failed.QueueStart", failureArgs: [queued.Type.ToString(), pipelineId]);
+            failureKey: "Activity.Failed.QueueStart", failureArgs: [queued.Type.ToString(), pipelineId],
+            cancellationToken: cancellationToken);
 
     // Comparación de valores bajo demanda: de una tabla o, sin entity, de todas las del pipeline.
     public Task<Job> CompareValuesAsync(AuditActor actor, string pipelineId, string? entity, CancellationToken cancellationToken = default)
@@ -275,7 +279,8 @@ public sealed class OrchestrationService : IOrchestrationService
                 MessageKey: "Activity.Compare.Started", MessageArgs: [(object?)entity ?? new EventPart("Activity.Compare.AllTables"), job.Id]),
             "No se pudo iniciar la comparación de valores",
             failureKey: "Activity.Failed.Compare",
-            target: entity);
+            target: entity,
+            cancellationToken: cancellationToken);
     }
 
     private async Task<Job> StartAsync(AuditActor actor, string pipelineId, JobType type, string? entity, CancellationToken cancellationToken)
@@ -367,7 +372,8 @@ public sealed class OrchestrationService : IOrchestrationService
                 MessageKey: "Activity.Job.Retried", MessageArgs: [jobId, job.Id]),
             $"No se pudo reintentar el job {jobId}",
             failureKey: "Activity.Failed.JobRetry", failureArgs: [jobId],
-            target: jobId);
+            target: jobId,
+            cancellationToken: cancellationToken);
 
     private async Task<Job> RetryCoreAsync(AuditActor actor, string jobId, CancellationToken cancellationToken)
     {
@@ -438,7 +444,8 @@ public sealed class OrchestrationService : IOrchestrationService
                 MessageKey: "Activity.Resync.Started", MessageArgs: [mode.ToString(), string.Join(", ", entities), pipelineId, job.Id]),
             $"No se pudo iniciar el re-sync de {string.Join(", ", entities)}",
             failureKey: "Activity.Failed.Resync", failureArgs: [string.Join(", ", entities)],
-            target: string.Join(",", entities));
+            target: string.Join(",", entities),
+            cancellationToken: cancellationToken);
 
     private async Task<Job> ResyncTablesCoreAsync(AuditActor actor, string pipelineId, IReadOnlyList<string> entities, ResyncMode mode, CancellationToken cancellationToken)
     {
@@ -470,24 +477,41 @@ public sealed class OrchestrationService : IOrchestrationService
     // consolidado deduplica por Id) y ninguna tabla ya movida pierde filas. Solo se recargan en SQL
     // las tablas que volvieron atrás. Todo bajo el lock de ejecución: entre mover ficheros y encolar
     // el re-sync no puede arrancar otro job.
-    public Task<Job?> RestorePointAsync(AuditActor actor, string pipelineId, string snapshot, CancellationToken cancellationToken = default) =>
-        _audit.AuditAsync(
+    public async Task<Job?> RestorePointAsync(AuditActor actor, string pipelineId, string snapshot, CancellationToken cancellationToken = default)
+    {
+        var restored = await _audit.AuditAsync(
             actor,
             "pipeline.restore",
             pipelineId,
             () => RestorePointCoreAsync(actor, pipelineId, snapshot, cancellationToken),
-            job => new AuditResult(
-                job is null
-                    ? $"Restaurado el punto {snapshot} en {pipelineId}, sin tablas que recargar en SQL."
-                    : $"Restaurado el punto {snapshot} en {pipelineId}; recarga en SQL en el job {job.Id}.",
-                job?.Id,
-                MessageKey: job is null ? "Activity.Restore.NoReload" : "Activity.Restore.WithReload",
-                MessageArgs: [snapshot, pipelineId, job?.Id]),
+            result => result.ReloadError is { } error
+                ? new AuditResult(
+                    $"Restaurado el punto {snapshot} en {pipelineId}, pero no se pudo lanzar la recarga en SQL de {string.Join(", ", result.Reload)}: {error.SourceException.Message}",
+                    Outcome: AuditOutcome.Error,
+                    MessageKey: "Activity.Restore.ReloadFailed",
+                    MessageArgs: [snapshot, pipelineId, string.Join(", ", result.Reload), error.SourceException.Message])
+                : new AuditResult(
+                    result.Job is null
+                        ? $"Restaurado el punto {snapshot} en {pipelineId}, sin tablas que recargar en SQL."
+                        : $"Restaurado el punto {snapshot} en {pipelineId}; recarga en SQL en el job {result.Job.Id}.",
+                    result.Job?.Id,
+                    MessageKey: result.Job is null ? "Activity.Restore.NoReload" : "Activity.Restore.WithReload",
+                    MessageArgs: [snapshot, pipelineId, result.Job?.Id]),
             $"No se pudo restaurar el punto {snapshot} en {pipelineId}",
             failureKey: "Activity.Failed.Restore", failureArgs: [snapshot, pipelineId],
-            target: snapshot);
+            target: snapshot,
+            cancellationToken: cancellationToken);
 
-    private async Task<Job?> RestorePointCoreAsync(AuditActor actor, string pipelineId, string snapshot, CancellationToken cancellationToken)
+        // Para quien lo pidió, la recarga que no se pudo encolar sigue siendo un fallo.
+        restored.ReloadError?.Throw();
+        return restored.Job;
+    }
+
+    // ReloadError: los ficheros ya volvieron al punto y el estado está rebobinado, pero no se pudo
+    // encolar la recarga en SQL de Reload (siguen en PendingReload).
+    private sealed record RestoreResult(Job? Job, IReadOnlyList<string> Reload, ExceptionDispatchInfo? ReloadError = null);
+
+    private async Task<RestoreResult> RestorePointCoreAsync(AuditActor actor, string pipelineId, string snapshot, CancellationToken cancellationToken)
     {
         var pipeline = _pipelines.Get(pipelineId)
             ?? throw new LocalizedException("Pipeline not found.", "Error.PipelineNotFound");
@@ -513,6 +537,8 @@ public sealed class OrchestrationService : IOrchestrationService
         var fromBackfill = state.RestoreInProgress?.FromPendingBackfill ?? state.PendingBackfill;
         if (state.PendingRestore.Count > 0)
         {
+            // Termina un restore que ya movió ficheros: tampoco se corta a medias (ver más abajo).
+            cancellationToken = CancellationToken.None;
             state = await FinishPendingRestoreAsync(stateStore, pipelineId, state, from, fromBackfill, cancellationToken);
         }
 
@@ -559,11 +585,15 @@ public sealed class OrchestrationService : IOrchestrationService
             if (state.RestoreInProgress is not null)
             {
                 stateStore.Save(state with { RestoreInProgress = null });
-                return null;
+                return new RestoreResult(null, []);
             }
 
             throw new LocalizedException($"El pipeline ya está en el punto {snapshot}.", "Error.AlreadyAtRestorePoint", snapshot);
         }
+
+        // Desde aquí el restore rebobina el estado y mueve ficheros: sigue aunque el cliente cierre la
+        // petición. Cortado a medias, el registro decía que no se restauró con medio pipeline movido.
+        cancellationToken = CancellationToken.None;
 
         // Cada tabla queda pendiente de recarga y marcada (versión y estado de entonces) antes de
         // moverla: si el restore falla después, su versión de entonces ya se consumió y el reintento
@@ -622,12 +652,21 @@ public sealed class OrchestrationService : IOrchestrationService
         var toReload = ParquetVersions.ToReload(plan, state.PendingReload);
         if (toReload.Count == 0)
         {
-            return null;
+            return new RestoreResult(null, []);
         }
 
         // La recarga de SQL vacía PendingReload (SqlExecutor), así que un re-sync fallido las deja
         // pendientes para el siguiente intento.
-        var job = await EnqueueResyncAsync(actor, pipelineId, toReload, ResyncMode.Reload, cancellationToken);
+        Job job;
+        try
+        {
+            job = await EnqueueResyncAsync(actor, pipelineId, toReload, ResyncMode.Reload, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return new RestoreResult(null, toReload, ExceptionDispatchInfo.Capture(ex));
+        }
+
         _jobs.AppendEvent(job.Id, EventLevel.Info,
             $"Restaurado el punto del snapshot {snapshot}: {plan.Restore.Count} tabla(s) vuelven a su versión de entonces"
             + (plan.Archive.Count > 0 ? $" y {plan.Archive.Count} que aún no existían se archivan ({string.Join(", ", plan.Archive)})" : "")
@@ -635,7 +674,7 @@ public sealed class OrchestrationService : IOrchestrationService
             null, "Event.Restore.Done", snapshot, plan.Restore.Count,
             plan.Archive.Count > 0 ? new EventPart("Event.Restore.ArchivedPart", plan.Archive.Count, string.Join(", ", plan.Archive)) : "",
             toReload.Count, string.Join(", ", toReload));
-        return job;
+        return new RestoreResult(job, toReload);
     }
 
     // Termina las tablas que el restore a medias del mismo punto marcó y no llegó a cerrar: si su
@@ -790,7 +829,8 @@ public sealed class OrchestrationService : IOrchestrationService
             job => new AuditResult($"Recarga desde parquet del pipeline {pipelineId} (job {job.Id}).", job.Id,
                 MessageKey: "Activity.Reload.Started", MessageArgs: [pipelineId, job.Id]),
             $"No se pudo iniciar la recarga desde parquet de {pipelineId}",
-            failureKey: "Activity.Failed.Reload", failureArgs: [pipelineId]);
+            failureKey: "Activity.Failed.Reload", failureArgs: [pipelineId],
+            cancellationToken: cancellationToken);
 
     // Recarga SQL completa desde parquet consolidado (sin re-leer CSV de snapshots).
     // Force y reload-from-parquet comparten este camino: el origen durable es el parquet en ADLS.

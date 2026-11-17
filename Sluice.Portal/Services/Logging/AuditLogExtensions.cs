@@ -12,10 +12,12 @@ public readonly record struct AuditResult(
 public static class AuditLogExtensions
 {
     // Ejecuta la acción y registra su resultado una sola vez. Si lanza, se registra Rejected (una
-    // regla: pipeline ocupado, validación) o Error, y la excepción sigue su camino. No se registra:
-    // - una cancelación: quien pidió la acción cortó;
-    // - un pipeline ocupado para el scheduler o la cola: lo reintentan en la siguiente vuelta, y
-    //   registrarlo dejaría un aviso por poll mientras dure el job en curso.
+    // regla: pipeline ocupado, validación), Cancelled o Error, y la excepción sigue su camino.
+    // Cancelled solo si se canceló cancellationToken, el token de quien la pidió: un timeout interno
+    // (interop de JS, Azure SDK) también lanza OperationCanceledException con su propio token
+    // cancelado, y es un fallo. Sin token del llamador, nunca es Cancelled. No se registra un
+    // pipeline ocupado para el scheduler o la cola: lo reintentan en la siguiente vuelta, y
+    // registrarlo dejaría un aviso por poll mientras dure el job en curso.
     public static async Task<T> AuditAsync<T>(
         this IAuditLog audit,
         AuditActor actor,
@@ -27,7 +29,8 @@ public static class AuditLogExtensions
         string? jobId = null,
         string? target = null,
         string? failureKey = null,
-        object?[]? failureArgs = null)
+        object?[]? failureArgs = null,
+        CancellationToken cancellationToken = default)
     {
         T value;
         try
@@ -36,7 +39,7 @@ public static class AuditLogExtensions
         }
         catch (Exception ex) when (ShouldRecord(actor, ex))
         {
-            RecordFailure(audit, actor, action, pipelineId, jobId, target, failure, failureKey, failureArgs, ex);
+            RecordFailure(audit, actor, action, pipelineId, jobId, target, failure, failureKey, failureArgs, ex, cancellationToken);
             throw;
         }
 
@@ -55,7 +58,8 @@ public static class AuditLogExtensions
         string? jobId = null,
         string? target = null,
         string? failureKey = null,
-        object?[]? failureArgs = null)
+        object?[]? failureArgs = null,
+        CancellationToken cancellationToken = default)
     {
         T value;
         try
@@ -64,7 +68,7 @@ public static class AuditLogExtensions
         }
         catch (Exception ex) when (ShouldRecord(actor, ex))
         {
-            RecordFailure(audit, actor, action, pipelineId, jobId, target, failure, failureKey, failureArgs, ex);
+            RecordFailure(audit, actor, action, pipelineId, jobId, target, failure, failureKey, failureArgs, ex, cancellationToken);
             throw;
         }
 
@@ -73,10 +77,27 @@ public static class AuditLogExtensions
     }
 
     // Con clave, "{failure}: {mensaje de la excepción}" se guarda como Activity.Failure con el fallo
-    // como parte (EventPart); la excepción queda en su idioma.
+    // como parte (EventPart); la excepción queda en su idioma. Una cancelación no tiene mensaje útil
+    // ("The operation was canceled."): se guarda como Activity.Cancelled.
     private static void RecordFailure(IAuditLog audit, AuditActor actor, string action, string? pipelineId, string? jobId, string? target,
-        string failure, string? failureKey, object?[]? failureArgs, Exception ex)
+        string failure, string? failureKey, object?[]? failureArgs, Exception ex, CancellationToken cancellationToken)
     {
+        if (ex is OperationCanceledException && cancellationToken.IsCancellationRequested)
+        {
+            var cancelled = $"{failure}: se canceló antes de terminar.";
+            if (failureKey is null)
+            {
+                audit.Record(actor, action, AuditOutcome.Cancelled, pipelineId, jobId, target, cancelled);
+            }
+            else
+            {
+                audit.Record(actor, action, AuditOutcome.Cancelled, pipelineId, jobId, target, cancelled, null,
+                    "Activity.Cancelled", new EventPart(failureKey, failureArgs ?? []));
+            }
+
+            return;
+        }
+
         var message = $"{failure}: {ex.Message}";
         if (failureKey is null)
         {
@@ -110,8 +131,7 @@ public static class AuditLogExtensions
     // medias, o (en el scheduler) con un destino pendiente de campos, no deja una entrada por poll (la
     // retención ya se avisa una vez, ver PipelineSchedulerService).
     private static bool ShouldRecord(AuditActor actor, Exception ex) =>
-        ex is not OperationCanceledException
-        && !(ex is PipelineBusyException && (actor == AuditActor.Scheduler || actor == AuditActor.Queue))
+        !(ex is PipelineBusyException && (actor == AuditActor.Scheduler || actor == AuditActor.Queue))
         && !(ex is RestorePendingException && (actor == AuditActor.Scheduler || actor == AuditActor.Queue))
         && !(ex is ConnectionFieldsRequiredException && actor == AuditActor.Scheduler);
 }

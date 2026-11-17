@@ -978,6 +978,7 @@
   <data name="Activity.Alert.DeliveryRecovered.Lost" xml:space="preserve"><value>The alert webhook ({0}) responds again ({1} alert). {2:N0} delivery attempt(s) failed while it was down: one-shot alerts from that time (job failure, Partial, divergence...) are not resent; deduplicated alerts are retried.</value></data>
   <data name="Activity.Demo.Failed" xml:space="preserve"><value>Could not prepare the demo: {0}</value></data>
   <data name="Activity.Failure" xml:space="preserve"><value>{0}: {1}</value></data>
+  <data name="Activity.Cancelled" xml:space="preserve"><value>{0}: cancelled before it finished.</value></data>
   <data name="Activity.Connection.RoleSource" xml:space="preserve"><value>source</value></data>
   <data name="Activity.Connection.RoleDestination" xml:space="preserve"><value>destination</value></data>
   <data name="Activity.Connection.Created" xml:space="preserve"><value>Connection '{1}' ({0}) created.</value></data>
@@ -1022,12 +1023,15 @@
   <data name="Activity.Resync.Started" xml:space="preserve"><value>{0} re-sync of {1} in {2} (job {3}).</value></data>
   <data name="Activity.Restore.NoReload" xml:space="preserve"><value>Restored point {0} in {1}, with no tables to reload in SQL.</value></data>
   <data name="Activity.Restore.WithReload" xml:space="preserve"><value>Restored point {0} in {1}; SQL reload in job {2}.</value></data>
+  <data name="Activity.Restore.ReloadFailed" xml:space="preserve"><value>Restored point {0} in {1}, but the SQL reload of {2} could not be started: {3}</value></data>
   <data name="Activity.Reload.Started" xml:space="preserve"><value>Reload from Parquet of pipeline {0} (job {1}).</value></data>
   <data name="Activity.Parquet.Deleted" xml:space="preserve"><value>Parquet {0} deleted from pipeline {1}.</value></data>
   <data name="Activity.Parquet.NotInPipeline" xml:space="preserve"><value>Path {0} does not belong to pipeline {1}: it was not deleted.</value></data>
   <data name="Activity.Reset.Done" xml:space="preserve"><value>Pipeline {0} reset{1} ({2:N0} table(s) truncated, {3:N0} Parquet file(s) deleted).</value></data>
   <data name="Activity.Reset.WithTruncate" xml:space="preserve"><value> with SQL truncation</value></data>
+  <data name="Activity.Reset.WithTruncateTables" xml:space="preserve"><value> with SQL truncation of {0}</value></data>
   <data name="Activity.Reset.Stopped" xml:space="preserve"><value>Reset of {0} stopped: could not truncate {1}.</value></data>
+  <data name="Activity.Reset.StoppedAfterTruncate" xml:space="preserve"><value>Reset of {0} stopped: could not truncate {1}; {2} were truncated.</value></data>
   <data name="Activity.Table.SyncChanged" xml:space="preserve"><value>Sync of table '{0}' {1} in pipeline {2}.</value></data>
   <data name="Activity.Table.Resumed" xml:space="preserve"><value>resumed</value></data>
   <data name="Activity.Table.Paused" xml:space="preserve"><value>paused</value></data>
