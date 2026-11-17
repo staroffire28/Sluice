@@ -125,43 +125,40 @@ public sealed class AnalyticsService : IAnalyticsService
         var windowDays = Math.Max(1, days);
         var cutoff = DateTimeOffset.UtcNow.AddDays(-windowDays);
 
-        // La ventana se filtra sobre el índice: solo se leen enteros (con sus tablas) los jobs de
-        // esos días, no todos los del pipeline.
-        var jobsInWindow = _jobs.ListIndex(pipelineId)
-            .Where(e => e.StartedAt >= cutoff)
-            .Select(e => _jobs.Get(e.Id))
-            .OfType<Job>()
-            .OrderBy(j => j.StartedAt)
-            .ToList();
-
-        var perJobEntity = jobsInWindow
-            .Select(j => (Job: j, Entry: j.Entities.FirstOrDefault(e =>
-                string.Equals(e.Entity, entity, StringComparison.OrdinalIgnoreCase))))
-            .Where(x => x.Entry is not null)
-            .ToList();
-
-        // Crecimiento: SqlRows (COUNT(*) real) del último job del día — si hubo 2 corridas ese
-        // día, se queda con la de fin de día porque perJobEntity ya está ordenado ascendente y
-        // el Dictionary sobreescribe con el último valor visto por clave.
+        // La ventana se filtra sobre el índice, y de cada job de esos días solo se lee la fecha y las
+        // filas por tabla (no sus eventos), de uno en uno: se agrega por día mientras se recorren, sin
+        // tener todos los jobs en memoria.
         var growthByDay = new Dictionary<DateOnly, long>();
-        foreach (var (job, entry) in perJobEntity)
+        var loadByDay = new Dictionary<DateOnly, long>();
+        foreach (var indexed in _jobs.ListIndex(pipelineId).Where(e => e.StartedAt >= cutoff).OrderBy(e => e.StartedAt))
         {
-            if (entry!.SqlRows is { } rows)
+            var job = _jobs.GetTableRows(indexed.Id);
+            var entry = job?.Entities.FirstOrDefault(e =>
+                string.Equals(e.Entity, entity, StringComparison.OrdinalIgnoreCase));
+            if (entry is null)
             {
-                growthByDay[Day(job.StartedAt, zone)] = rows;
+                continue;
             }
+
+            var day = Day(job!.StartedAt, zone);
+
+            // Crecimiento: SqlRows (COUNT(*) real) del último job del día — si hubo 2 corridas ese
+            // día, se queda con la de fin de día porque se recorren en orden ascendente y el
+            // Dictionary sobreescribe con el último valor visto por clave.
+            if (entry.SqlRows is { } rows)
+            {
+                growthByDay[day] = rows;
+            }
+
+            // Carga: suma de CsvRows (filas ingeridas, no acumuladas) agrupada por día — proxy
+            // directo de "días con más picos de carga".
+            loadByDay[day] = loadByDay.GetValueOrDefault(day) + entry.CsvRows;
         }
 
         var growth = growthByDay
             .OrderBy(kv => kv.Key)
             .Select(kv => new TableGrowthPoint(kv.Key, kv.Value))
             .ToList();
-
-        // Carga: suma de CsvRows (filas ingeridas, no acumuladas) agrupada por día — proxy
-        // directo de "días con más picos de carga".
-        var loadByDay = perJobEntity
-            .GroupBy(x => Day(x.Job.StartedAt, zone))
-            .ToDictionary(g => g.Key, g => g.Sum(x => (long)x.Entry!.CsvRows));
 
         var dailyLoad = loadByDay
             .OrderBy(kv => kv.Key)
