@@ -16,7 +16,7 @@ You will authenticate to Sluice Portal as an operator, from the browser or from 
 
 3. Confirm you land on the dashboard (`/`) and the header health pill shows **Online**.
 
-**Logout:** use the sign-out button in the top-right header (posts to `/auth/logout` with antiforgery protection).
+**Logout:** use the sign-out button in the top-right header (posts to `/auth/logout` with antiforgery protection). It signs out every session, and portal tabs already open in other browsers or devices go back to `/login` on their next click or refresh, without running that action.
 
 ## Call `/api/*` from a script (JSON login)
 

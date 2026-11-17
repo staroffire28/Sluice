@@ -13,5 +13,16 @@
     [Parameter]
     public string? AuditClient { get; set; }
 
-    protected override void OnInitialized() => AuditActor.Set(AuditClient);
+    [Inject]
+    private Sluice.Portal.Services.Auth.CircuitSessionGuard SessionGuard { get; set; } = default!;
+
+    // Token de la cookie de sesión con el que se abrió el circuito (ver CircuitSessionGuard).
+    [Parameter]
+    public string? SessionToken { get; set; }
+
+    protected override void OnInitialized()
+    {
+        AuditActor.Set(AuditClient);
+        SessionGuard.Capture(SessionToken);
+    }
 }

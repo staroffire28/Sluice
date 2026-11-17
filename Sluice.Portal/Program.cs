@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Localization;
@@ -192,6 +193,9 @@ if (appOptions.DemoMode)
 }
 
 builder.Services.AddSingleton<SessionTokenService>();
+// Una sola instancia por circuito: Routes le entrega el token y Blazor la usa como CircuitHandler.
+builder.Services.AddScoped<CircuitSessionGuard>();
+builder.Services.AddScoped<CircuitHandler>(sp => sp.GetRequiredService<CircuitSessionGuard>());
 builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddSingleton<ReadinessProbe>();
 builder.Services.AddSingleton<IAuthService, AuthService>();
