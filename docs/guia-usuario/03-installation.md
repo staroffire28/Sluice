@@ -171,7 +171,7 @@ Edited in the portal, saved to the volume, applied without restart. If `settings
 | Activity log retention (days) | Days the activity log (the audit trail) is kept, apart from the history retention ([details](04-reference.md#local-volume-data_dir)). Minimum 90. | 90 |
 | Days without data to flag a table | In **Tables**, *Last data* is highlighted when the last load with rows is older (for example, a table removed from the Synapse Link profile). `0` disables it. | 7 |
 | Source snapshot retention (days) | Age past which already-processed CSV folders in the Synapse Link container are purged. `0` disables it. | 30 |
-| Snapshot purge dry run | Logs what would be deleted without deleting anything. | On |
+| Snapshot purge dry run | Logs what would be deleted without deleting anything. Saving with the simulation off and retention on, when it did not delete before, asks you to confirm. | On |
 | Require Parquet before purging | Skips the snapshot purge if any consolidated Parquet of a pipeline reading that source is missing. | On |
 | Alerts | Enable and webhook URL (e.g. an Azure Logic App); **Send test** checks the URL. | Off |
 | Hours behind before alerting | Alerts when a closed snapshot has waited longer than this on a pipeline with the scheduler on ([details](04-reference.md#observability-and-alerts)). `0` disables it. | 6 |

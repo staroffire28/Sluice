@@ -495,6 +495,10 @@
   <data name="Page.Settings.SourceSnapshotRetentionDryRun.Hint" xml:space="preserve"><value>Activo por defecto: registra snapshots elegibles sin borrarlos (snapshot-retention.dry-run). Desactívalo solo tras revisar la vista previa.</value></data>
   <data name="Page.Settings.SourceSnapshotRetentionRequireParquet" xml:space="preserve"><value>Exigir parquet antes de purgar</value></data>
   <data name="Page.Settings.SourceSnapshotRetentionRequireParquet.Hint" xml:space="preserve"><value>No borra snapshots origen si falta algún parquet consolidado. Recomendado activar soft-delete en la storage account para recuperación.</value></data>
+  <data name="Page.Settings.PurgeConfirm.Title" xml:space="preserve"><value>¿Activar el borrado de snapshots del origen?</value></data>
+  <data name="Page.Settings.PurgeConfirm.Warning" xml:space="preserve"><value>Sin la simulación, el siguiente barrido de retención borrará del lago del cliente las carpetas de snapshots ya procesadas con más de {0} días. No se puede deshacer.</value></data>
+  <data name="Page.Settings.PurgeConfirm.Ack" xml:space="preserve"><value>Entiendo que esas carpetas se borran del lago del cliente</value></data>
+  <data name="Page.Settings.PurgeConfirm.Confirm" xml:space="preserve"><value>Activar el borrado</value></data>
   <data name="Page.Snapshots.RetentionEligible" xml:space="preserve"><value>Elegibles purga</value></data>
   <data name="Page.Snapshots.RetentionDryRun" xml:space="preserve"><value>Modo simulación activo — no se borrará nada hasta desactivar dry-run.</value></data>
   <data name="Page.Snapshots.Retention" xml:space="preserve"><value>Retención</value></data>

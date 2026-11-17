@@ -496,6 +496,10 @@
   <data name="Page.Settings.SourceSnapshotRetentionDryRun.Hint" xml:space="preserve"><value>On by default: logs eligible snapshots without deleting (snapshot-retention.dry-run). Disable only after reviewing the preview.</value></data>
   <data name="Page.Settings.SourceSnapshotRetentionRequireParquet" xml:space="preserve"><value>Require parquet before purge</value></data>
   <data name="Page.Settings.SourceSnapshotRetentionRequireParquet.Hint" xml:space="preserve"><value>Skips source snapshot purge if any consolidated parquet is missing. Enable blob soft-delete on the storage account for recovery.</value></data>
+  <data name="Page.Settings.PurgeConfirm.Title" xml:space="preserve"><value>Turn on source snapshot deletion?</value></data>
+  <data name="Page.Settings.PurgeConfirm.Warning" xml:space="preserve"><value>Without the simulation, the next retention sweep will delete from the customer's lake the already processed snapshot folders older than {0} days. This cannot be undone.</value></data>
+  <data name="Page.Settings.PurgeConfirm.Ack" xml:space="preserve"><value>I understand those folders are deleted from the customer's lake</value></data>
+  <data name="Page.Settings.PurgeConfirm.Confirm" xml:space="preserve"><value>Turn on deletion</value></data>
   <data name="Page.Snapshots.RetentionEligible" xml:space="preserve"><value>Eligible purge</value></data>
   <data name="Page.Snapshots.RetentionDryRun" xml:space="preserve"><value>Simulation mode active — nothing is deleted until dry-run is disabled.</value></data>
   <data name="Page.Snapshots.Retention" xml:space="preserve"><value>Retention</value></data>
