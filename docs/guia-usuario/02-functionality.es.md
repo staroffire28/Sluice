@@ -41,7 +41,7 @@ El trabajo fluye por una **cola basada en archivos**: cada tarea es un archivo J
 | Parquet | `/parquet` | Archivos Parquet materializados, en ADLS o en el disco del portal (descargar, eliminar, **Puntos de restauración** del pipeline). |
 | Analítica | `/analytics` | Indicadores y gráficas de rendimiento, de todos los pipelines o de uno (selector *Pipeline*). La cola y los workers son compartidos y no se filtran. |
 | Logs | `/logs` | Registro de actividad (eventos de usuario y de sistema), filtrable por origen, nivel, texto y fechas Desde/Hasta; **Exportar CSV** con todos los registros que cumplen los filtros. |
-| Ajustes | `/settings` | Parámetros operativos globales: scheduler, umbral de divergencia, corrección automática, retención, alertas (webhook) y descarga del paquete de la Logic App de correo. |
+| Ajustes | `/settings` | Parámetros operativos globales: scheduler, umbral de divergencia, corrección automática, retención, alertas (webhook), estado del orquestador (último sondeo del scheduler y espacio libre del volumen de `DATA_DIR`) y descarga del paquete de la Logic App de correo. |
 | Ayuda | `/ayuda` | Esta guía de usuario. |
 
 El menú lateral se puede contraer a un riel de iconos con su botón de contraer; la elección se recuerda en el navegador.

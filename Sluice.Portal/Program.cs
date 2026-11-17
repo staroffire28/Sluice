@@ -179,6 +179,8 @@ builder.Services.AddSingleton<IReconcileExecutor, ReconcileExecutor>();
 builder.Services.AddSingleton<AlertDeliveryStatusStore>();
 builder.Services.AddSingleton<AlertService>();
 builder.Services.AddSingleton<DeadmanService>();
+builder.Services.AddSingleton<SchedulerHeartbeat>();
+builder.Services.AddSingleton<IDiskSpaceProbe, DriveInfoDiskSpaceProbe>();
 
 builder.Services.AddHostedService<WorkerHostService>();
 builder.Services.AddHostedService<PipelineSchedulerService>();

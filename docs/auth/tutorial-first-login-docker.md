@@ -41,7 +41,7 @@ curl http://localhost:58472/health
 Expected output:
 
 ```json
-{"status":"ok"}
+{"status":"ok","scheduler":"ok","disk":"ok"}
 ```
 
 ## Step 3: Sign in

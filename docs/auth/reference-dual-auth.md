@@ -51,11 +51,11 @@ Login page (no session required). Exempt from auth middleware.
 
 ### `GET /health`
 
-Public health check. Returns `{ "status": "ok" }`. Used by the Docker healthcheck, and the only route a worker (`WORKER_STAGE`) answers.
+Public health check. On the orchestrator it returns `{ "status": "ok", "scheduler": "ok", "disk": "ok" }`, with `status` `degraded` (still HTTP 200) when the scheduler stopped polling or the `DATA_DIR` volume runs low; 503 when `DATA_DIR` is not writable. A worker (`WORKER_STAGE`) returns `{ "status": "ok" }`. Used by the Docker healthcheck, and the only route a worker answers.
 
 ### `GET /internal/health`
 
-Anonymous liveness endpoint, same answer as `/health`. Requires no key or session. Orchestrator only.
+Anonymous liveness endpoint: `{ "status": "ok" }` while `DATA_DIR` is writable (503 otherwise), without the scheduler and disk indicators of `/health`. Requires no key or session. Orchestrator only.
 
 ## Session cookie
 

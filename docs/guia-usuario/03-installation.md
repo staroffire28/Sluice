@@ -16,7 +16,7 @@ The portal is light; the heavy systems (SQL Server, ADLS) are external. These fi
 | Minimum (PoC / low volume) | 2 | 4 GB | 20 GB |
 | Recommended (production) | 4–8 | 16 GB | 100 GB+ SSD |
 
-- **Disk** is dominated by the `pipeline-data` volume (jobs, reports, parquet staging). It is bounded by the retention setting (default 90 days), except the local copy of each consolidated Parquet kept in ADLS, which takes as much as those files (see *Local volume* under Retention in the reference). Use SSD for the queue.
+- **Disk** is dominated by the `pipeline-data` volume (jobs, reports, parquet staging). It is bounded by the retention setting (default 90 days), except the local copy of each consolidated Parquet kept in ADLS, which takes as much as those files (see *Local volume* under Retention in the reference). Use SSD for the queue. Sluice alerts when the volume runs low (less than 10 % or 10 GB free, whichever is smaller) and `/health` reports it ([details](04-reference.md#observability-and-alerts)).
 - **RAM** peaks during parquet consolidation (one snapshot at a time). 16 GB is comfortable for parallel pipelines.
 - SQL Server and ADLS run elsewhere and are not counted here.
 
@@ -73,7 +73,7 @@ docker compose -f docker-compose.yml up -d --build
 **3. Verify:**
 
 ```bash
-curl http://localhost:58472/health      # → {"status":"ok"}
+curl http://localhost:58472/health      # → {"status":"ok","scheduler":"ok","disk":"ok"}
 ```
 
 Then open `http://localhost:58472/login`, sign in with your `UI_API_KEY` (with `AUTH_MODE=none`, press **Enter**), and confirm the header health pill reads **Online**.

@@ -41,7 +41,7 @@ Work flows through a **file-based queue**: each task is a JSON file whose folder
 | Parquet | `/parquet` | Materialized Parquet files, in ADLS or on the portal disk (download, delete, the pipeline's **Restore points**). |
 | Analytics | `/analytics` | Performance indicators and charts, for all pipelines or one (*Pipeline* selector). The queue and workers are shared and are not filtered. |
 | Logs | `/logs` | Activity log (user and system events), filterable by source, level, text and From/To dates; **Export CSV** with every record matching the filters. |
-| Settings | `/settings` | Global operational parameters: scheduler, divergence threshold, automatic correction, retention, alerts (webhook) and the download of the email Logic App package. |
+| Settings | `/settings` | Global operational parameters: scheduler, divergence threshold, automatic correction, retention, alerts (webhook), the orchestrator status (last scheduler poll and free space of the `DATA_DIR` volume) and the download of the email Logic App package. |
 | Help | `/ayuda` | This user guide. |
 
 The side menu can be collapsed into an icon rail with its collapse button; the choice is remembered in the browser.

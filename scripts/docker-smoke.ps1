@@ -18,6 +18,11 @@ do {
             Write-Host "Health OK"
             break
         }
+        # 200 con "degraded": el portal arrancó, pero el scheduler o el disco piden atención.
+        if ($health.status -eq "degraded") {
+            Write-Warning "Health degraded (scheduler=$($health.scheduler), disk=$($health.disk))"
+            break
+        }
     }
     catch {
         if ((Get-Date) -gt $deadline) {
