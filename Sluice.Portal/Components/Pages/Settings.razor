@@ -332,7 +332,7 @@
 
         // Se compara con lo guardado ahora (lo mismo que audita SettingsService), no con lo que se
         // cargó al abrir la página. El diálogo guarda este mismo objeto si se confirma.
-        if (StartsDeletingSourceSnapshots(SettingsStore.Get(), settings))
+        if (SettingsStore.StartsDeletingSourceSnapshots(SettingsStore.Get(), settings))
         {
             _pendingPurgeSettings = settings;
             _purgeAck = false;
@@ -359,14 +359,6 @@
         _overwriteConfirmed = true;
         SaveSettings();
     }
-
-    // Borra de verdad: retención de origen activa y sin simulación.
-    private static bool DeletesSourceSnapshots(AppSettings settings) =>
-        settings.SourceSnapshotRetentionDays > 0 && !settings.SourceSnapshotRetentionDryRun;
-
-    // El guardado pasa de no borrar a borrar carpetas del lago del cliente: hay que confirmarlo.
-    internal static bool StartsDeletingSourceSnapshots(AppSettings saved, AppSettings next) =>
-        !DeletesSourceSnapshots(saved) && DeletesSourceSnapshots(next);
 
     private void ConfirmPurge()
     {

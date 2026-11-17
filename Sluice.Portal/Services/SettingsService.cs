@@ -6,7 +6,8 @@ namespace Sluice.Portal.Services;
 
 // Guardar los ajustes con auditoría: queda qué claves cambiaron y de qué valor a cuál. El webhook se
 // nombra sin su URL (lleva la firma sig= de la Logic App). Desactivar el dry-run de la retención de
-// snapshots activa el borrado de carpetas en el lago del cliente: esa entrada sale como warning.
+// snapshots activa el borrado de carpetas en el lago del cliente: esa entrada sale como warning, igual
+// que un guardado que empieza a borrar de verdad (p. ej. activar la retención con el dry-run ya desactivado).
 public sealed class SettingsService(SettingsStore store, IAuditLog audit)
 {
     public void Save(AuditActor actor, AppSettings settings)
@@ -23,7 +24,8 @@ public sealed class SettingsService(SettingsStore store, IAuditLog audit)
             },
             changes => new AuditResult(
                 changes.Count == 0 ? "Ajustes guardados sin cambios." : $"Ajustes guardados: {string.Join("; ", changes)}.",
-                Level: before.SourceSnapshotRetentionDryRun && !settings.SourceSnapshotRetentionDryRun ? "warning" : null,
+                Level: (before.SourceSnapshotRetentionDryRun && !settings.SourceSnapshotRetentionDryRun)
+                    || SettingsStore.StartsDeletingSourceSnapshots(before, settings) ? "warning" : null,
                 MessageKey: changes.Count == 0 ? "Activity.Settings.Unchanged" : "Activity.Settings.Saved",
                 MessageArgs: [string.Join("; ", changes)]),
             "No se pudieron guardar los ajustes",
