@@ -185,6 +185,15 @@ public sealed class SettingsStore
         _ => null,
     };
 
+    // La retención de snapshots del origen borra de verdad: activa y sin simulación.
+    private static bool DeletesSourceSnapshots(AppSettings settings) =>
+        settings.SourceSnapshotRetentionDays > 0 && !settings.SourceSnapshotRetentionDryRun;
+
+    // El guardado pasa de no borrar a borrar carpetas del lago del cliente: Ajustes pide confirmarlo y
+    // el registro de actividad lo anota como aviso.
+    public static bool StartsDeletingSourceSnapshots(AppSettings saved, AppSettings next) =>
+        !DeletesSourceSnapshots(saved) && DeletesSourceSnapshots(next);
+
     public static bool IsHttpsUrl(string url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps;
 

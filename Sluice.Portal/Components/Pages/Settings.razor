@@ -46,9 +46,9 @@
             <p class="field-hint">@L["Page.Settings.StaleTableDays.Hint"]</p>
             <FluentNumberInput TValue="int" @bind-Value="_parquetVersionDays" Label="@L["Page.Settings.ParquetVersionDays"]" data-testid="settings-parquet-version-days" />
             <p class="field-hint">@L["Page.Settings.ParquetVersionDays.Hint"]</p>
-            <FluentNumberInput TValue="int" @bind-Value="_sourceSnapshotRetentionDays" Label="@L["Page.Settings.SourceSnapshotRetentionDays"]" />
+            <FluentNumberInput TValue="int" @bind-Value="_sourceSnapshotRetentionDays" Label="@L["Page.Settings.SourceSnapshotRetentionDays"]" data-testid="settings-source-retention-days" />
             <p class="field-hint">@L["Page.Settings.SourceSnapshotRetentionDays.Hint"]</p>
-            <FluentSwitch @bind-Value="_sourceSnapshotRetentionDryRun" Label="@L["Page.Settings.SourceSnapshotRetentionDryRun"]" />
+            <FluentSwitch @bind-Value="_sourceSnapshotRetentionDryRun" Label="@L["Page.Settings.SourceSnapshotRetentionDryRun"]" data-testid="settings-source-dry-run" />
             <p class="field-hint">@L["Page.Settings.SourceSnapshotRetentionDryRun.Hint"]</p>
             <FluentSwitch @bind-Value="_sourceSnapshotRetentionRequireParquet" Label="@L["Page.Settings.SourceSnapshotRetentionRequireParquet"]" />
             <p class="field-hint">@L["Page.Settings.SourceSnapshotRetentionRequireParquet.Hint"]</p>
@@ -201,6 +201,22 @@
     </div>
 </FluentStack>
 
+@* El guardado haría que la retención de snapshots del origen pase a borrar de verdad carpetas del lago
+   del cliente: no se guarda sin marcar el acuse, como en el reset de un pipeline. *@
+<InlineDialog @bind-Visible="_showPurgeConfirm" Title="@L["Page.Settings.PurgeConfirm.Title"]">
+    <ChildContent>
+    @if (_pendingPurgeSettings is { } pending)
+    {
+        <FluentMessageBar data-testid="settings-purge-warning" Intent="MessageBarIntent.Warning">@L["Page.Settings.PurgeConfirm.Warning", pending.SourceSnapshotRetentionDays]</FluentMessageBar>
+        <FluentCheckbox @bind-Value="_purgeAck" Label="@L["Page.Settings.PurgeConfirm.Ack"]" data-testid="settings-purge-ack" />
+    }
+    </ChildContent>
+    <Actions>
+        <FluentButton data-testid="settings-purge-cancel" OnClick="CancelPurge">@L["Common.Cancel"]</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="settings-purge-confirm" Disabled="@(!_purgeAck)" OnClick="ConfirmPurge">@L["Page.Settings.PurgeConfirm.Confirm"]</FluentButton>
+    </Actions>
+</InlineDialog>
+
 @code {
     private int _pollMinutes = 5;
     private int _leaseSeconds = 120;
@@ -227,6 +243,10 @@
     private bool _unreadable;
     private bool _confirmOverwrite;
     private bool _overwriteConfirmed;
+    // Guardado pendiente de confirmar porque haría que la purga de snapshots del origen borre de verdad.
+    private AppSettings? _pendingPurgeSettings;
+    private bool _showPurgeConfirm;
+    private bool _purgeAck;
     private bool _testingAlert;
     private AlertDeliveryResult? _testResult;
     private AlertDeliveryStatus? _delivery;
@@ -310,6 +330,21 @@
             return;
         }
 
+        // Se compara con lo guardado ahora (lo mismo que audita SettingsService), no con lo que se
+        // cargó al abrir la página. El diálogo guarda este mismo objeto si se confirma.
+        if (SettingsStore.StartsDeletingSourceSnapshots(SettingsStore.Get(), settings))
+        {
+            _pendingPurgeSettings = settings;
+            _purgeAck = false;
+            _showPurgeConfirm = true;
+            return;
+        }
+
+        Save(settings);
+    }
+
+    private void Save(AppSettings settings)
+    {
         SettingsService.Save(Audit.Current, settings);
         _storedWebhookUrl = settings.AlertWebhookUrl;
         _alertWebhookUrl = null;
@@ -323,6 +358,26 @@
     {
         _overwriteConfirmed = true;
         SaveSettings();
+    }
+
+    private void ConfirmPurge()
+    {
+        if (_pendingPurgeSettings is not { } settings || !_purgeAck)
+        {
+            return;
+        }
+
+        _showPurgeConfirm = false;
+        _pendingPurgeSettings = null;
+        Save(settings);
+    }
+
+    // Cancelar no guarda nada y deja el formulario como estaba para corregirlo (Esc solo cierra el
+    // diálogo, que tampoco guarda).
+    private void CancelPurge()
+    {
+        _showPurgeConfirm = false;
+        _pendingPurgeSettings = null;
     }
 
     private async Task TestAlertAsync()

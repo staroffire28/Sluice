@@ -89,7 +89,7 @@ Un segundo janitor purga carpetas CSV **ya procesadas** en el container origen d
 - **Perilla**: `SourceSnapshotRetentionDays` en `/settings` (por defecto 30). `0` o negativo desactiva la purga.
 - **Cadencia**: cada 6 horas, solo en el orquestador; registrado como `snapshot-retention.sweep`.
 - **Recovery tras purga**: usa **Force** (o `POST /api/pipelines/{id}/reload-from-parquet`, mismo camino) para recargar SQL desde parquet consolidado. Incremental sigue leyendo CSV nuevos en ADLS.
-- **Dry-run**: `SourceSnapshotRetentionDryRun` en `/settings` — **activo por defecto**; simula sin borrar. Revisa `/snapshots` (columna Retención) y activity log `snapshot-retention.dry-run` antes de desactivarlo.
+- **Dry-run**: `SourceSnapshotRetentionDryRun` en `/settings` — **activo por defecto**; simula sin borrar. Revisa `/snapshots` (columna Retención) y activity log `snapshot-retention.dry-run` antes de desactivarlo. Si al guardar la purga pasa a borrar de verdad (desactivar la simulación con la retención activa, o activar la retención con la simulación ya desactivada), Ajustes no guarda directamente: un diálogo avisa de que el siguiente barrido borrará del lago del cliente las carpetas ya procesadas más antiguas que esos días, sin vuelta atrás, y pide marcar que lo entiendes antes de confirmar. Cancelar no guarda nada.
 - **Certificación parquet**: `SourceSnapshotRetentionRequireParquet` (default activo) — no purga si falta algún `{pipeline}/{entity}.parquet` de cualquier pipeline que lea la fuente.
 - **Soft-delete**: habilita blob soft-delete en la storage account de Azure para recuperar carpetas borradas por error (configuración fuera del portal).
 
