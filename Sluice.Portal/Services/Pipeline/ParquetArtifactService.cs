@@ -121,17 +121,28 @@ public sealed class ParquetArtifactService : IParquetArtifactService
             return false;
         }
 
-        var listedPath = listed.Path.Replace('\\', '/').TrimStart('/');
-        var liveTable = _pipelines.GetState(pipelineId).Tables.Keys.FirstOrDefault(entity =>
-            string.Equals(listedPath, IngestManifestStore.GetConsolidatedBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase)
-            || string.Equals(listedPath, IngestManifestStore.GetConsolidatedSchemaBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase));
-        if (liveTable is not null)
+        if (LiveTableOf(pipelineId, listed.Path, _pipelines.GetState(pipelineId).Tables.Keys) is { } liveTable)
         {
-            throw new InvalidOperationException(
-                $"{liveTable} sigue en el pipeline: su consolidado no se puede borrar. Para recargarla, restaura un punto o resetea el pipeline.");
+            throw new LocalizedException(
+                $"{liveTable} sigue en el pipeline: su consolidado no se puede borrar. Para recargarla, restaura un punto o resetea el pipeline.",
+                "Error.Parquet.TableInPipeline", liveTable);
         }
 
         return await DeleteUnauditedAsync(pipelineId, blobPath, cancellationToken);
+    }
+
+    // Las reglas fijas del borrado a mano (las que no dependen del momento, como un job en curso):
+    // la ruta es del pipeline y no es el consolidado ni el schema de una tabla del estado. La página
+    // Parquet la usa para no ofrecer Eliminar donde el borrado lo rechazaría siempre.
+    public static bool CanDelete(string pipelineId, string blobPath, IEnumerable<string> tables) =>
+        IsWithinPipeline(pipelineId, blobPath) && LiveTableOf(pipelineId, blobPath, tables) is null;
+
+    private static string? LiveTableOf(string pipelineId, string blobPath, IEnumerable<string> tables)
+    {
+        var path = blobPath.Replace('\\', '/').TrimStart('/');
+        return tables.FirstOrDefault(entity =>
+            string.Equals(path, IngestManifestStore.GetConsolidatedBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase)
+            || string.Equals(path, IngestManifestStore.GetConsolidatedSchemaBlobPath(pipelineId, entity), StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task<bool> DeleteUnauditedAsync(string pipelineId, string blobPath, CancellationToken cancellationToken = default)

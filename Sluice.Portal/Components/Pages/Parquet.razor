@@ -71,7 +71,8 @@
                                           Title="@L["Common.Download"]"
                                           aria-label="@($"{L["Common.Download"]} {context.Path}")" />
                         }
-                        @if (!context.Missing)
+                        @* Como Descargar en las filas sin consolidado: sin Eliminar donde el servicio lo rechazaría siempre. *@
+                        @if (!context.Missing && context.CanDelete)
                         {
                             <FluentButton Appearance="ButtonAppearance.Subtle"
                                           IconStart="@(new Icons.Regular.Size20.Delete())"
@@ -305,6 +306,7 @@
                 Path = a.Path,
                 Size = FormatSize(a.SizeBytes),
                 ModifiedAt = a.LastModified,
+                CanDelete = ParquetArtifactService.CanDelete(_pipelineId, a.Path, tables.Keys),
             })
             .ToList();
         var paths = rows.Select(r => r.Path).ToHashSet(StringComparer.Ordinal);
@@ -363,12 +365,17 @@
 
         try
         {
-            await ParquetService.DeleteAsync(Audit.Current, _pipelineId, path);
+            // false: el fichero ya no estaba en el listado (lo borró otro entre medias).
+            if (!await ParquetService.DeleteAsync(Audit.Current, _pipelineId, path))
+            {
+                await NotificationService.ShowWarningToastAsync(L["Page.Parquet.NothingDeleted", path].Value);
+            }
+
             await Reload();
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _error = ErrorText.Render(L, ex);
         }
     }
 
@@ -457,6 +464,7 @@
         public string Modified { get; init; } = "-";
         public DateTimeOffset? ModifiedAt { get; init; }
         public bool Missing { get; init; }
+        public bool CanDelete { get; init; }
     }
 
     // Reload: tablas que se recargan en SQL, incluidas las de un restore anterior que no terminó.
