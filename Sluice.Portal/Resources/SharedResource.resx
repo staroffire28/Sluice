@@ -487,6 +487,8 @@
   <data name="Page.Settings.AutoRemediate.Hint" xml:space="preserve"><value>Al terminar una corrida con tablas que superan el umbral de divergencia (o con diferencias en «Comparar valores»), lanza una re-sincronización (recarga) de esas tablas. Un solo intento: si la diferencia persiste, se alerta. Las tablas aceptadas no se corrigen.</value></data>
   <data name="Page.Settings.RetentionDays" xml:space="preserve"><value>Retención de histórico (días)</value></data>
   <data name="Page.Settings.RetentionDays.Hint" xml:space="preserve"><value>Purga jobs y sus reportes/runs más antiguos que este umbral. Siempre conserva los últimos 50 por pipeline. 0 o negativo desactiva la purga.</value></data>
+  <data name="Page.Settings.AuditRetentionDays" xml:space="preserve"><value>Retención del registro de actividad (días)</value></data>
+  <data name="Page.Settings.AuditRetentionDays.Hint" xml:space="preserve"><value>Días que se guarda el registro de actividad (la traza de auditoría), aparte de la retención de jobs. Mínimo 90.</value></data>
   <data name="Page.Settings.SourceSnapshotRetentionDays" xml:space="preserve"><value>Retención de snapshots origen (días)</value></data>
   <data name="Page.Settings.SourceSnapshotRetentionDays.Hint" xml:space="preserve"><value>Purga carpetas CSV de Synapse Link ya procesadas y más antiguas que este umbral. Siempre conserva las últimas 14 procesadas. 0 o negativo desactiva la purga.</value></data>
   <data name="Page.Settings.SourceSnapshotRetentionDryRun" xml:space="preserve"><value>Simulación de purga (dry-run)</value></data>
@@ -509,6 +511,7 @@
   <data name="Page.Settings.Validation.PollMinutes" xml:space="preserve"><value>El intervalo del scheduler debe ser de al menos 1 minuto.</value></data>
   <data name="Page.Settings.Validation.LeaseSeconds" xml:space="preserve"><value>El lease de tareas debe ser de al menos 30 segundos; con menos, las tareas en curso se darían por vencidas.</value></data>
   <data name="Page.Settings.Validation.Divergence" xml:space="preserve"><value>El umbral de divergencia debe estar entre 0 y 100 %.</value></data>
+  <data name="Page.Settings.Validation.AuditRetentionDays" xml:space="preserve"><value>La retención del registro de actividad debe ser de al menos 90 días.</value></data>
   <data name="Page.Settings.Validation.WebhookHttps" xml:space="preserve"><value>La URL del webhook debe ser una dirección https:// completa.</value></data>
   <data name="Page.Settings.Validation.SourceRetentionBelowVersions" xml:space="preserve"><value>Con la simulación desactivada, la retención de snapshots de origen debe ser de al menos los días de versiones del parquet: si no, restaurar un punto necesitaría snapshots que ya se borraron.</value></data>
   <data name="Page.Settings.Alerts.Enabled" xml:space="preserve"><value>Activar alertas</value></data>

@@ -488,6 +488,8 @@
   <data name="Page.Settings.AutoRemediate.Hint" xml:space="preserve"><value>When a run ends with tables above the divergence threshold (or with differences in “Compare values”), a re-sync (reload) of those tables is started. One attempt only: if the difference persists, an alert is sent. Accepted tables are not corrected.</value></data>
   <data name="Page.Settings.RetentionDays" xml:space="preserve"><value>History retention (days)</value></data>
   <data name="Page.Settings.RetentionDays.Hint" xml:space="preserve"><value>Purges jobs and their reports/runs older than this threshold. Always keeps the last 50 per pipeline. 0 or negative disables purging.</value></data>
+  <data name="Page.Settings.AuditRetentionDays" xml:space="preserve"><value>Activity log retention (days)</value></data>
+  <data name="Page.Settings.AuditRetentionDays.Hint" xml:space="preserve"><value>Days the activity log (the audit trail) is kept, apart from the job retention. Minimum 90.</value></data>
   <data name="Page.Settings.SourceSnapshotRetentionDays" xml:space="preserve"><value>Source snapshot retention (days)</value></data>
   <data name="Page.Settings.SourceSnapshotRetentionDays.Hint" xml:space="preserve"><value>Purges processed Synapse Link CSV folders older than this threshold. Always keeps the last 14 processed. 0 or negative disables purging.</value></data>
   <data name="Page.Settings.SourceSnapshotRetentionDryRun" xml:space="preserve"><value>Purge simulation (dry-run)</value></data>
@@ -510,6 +512,7 @@
   <data name="Page.Settings.Validation.PollMinutes" xml:space="preserve"><value>The scheduler interval must be at least 1 minute.</value></data>
   <data name="Page.Settings.Validation.LeaseSeconds" xml:space="preserve"><value>The task lease must be at least 30 seconds; with less, running tasks would be treated as expired.</value></data>
   <data name="Page.Settings.Validation.Divergence" xml:space="preserve"><value>The divergence threshold must be between 0 and 100%.</value></data>
+  <data name="Page.Settings.Validation.AuditRetentionDays" xml:space="preserve"><value>The activity log retention must be at least 90 days.</value></data>
   <data name="Page.Settings.Validation.WebhookHttps" xml:space="preserve"><value>The webhook URL must be a full https:// address.</value></data>
   <data name="Page.Settings.Validation.SourceRetentionBelowVersions" xml:space="preserve"><value>With dry-run off, source snapshot retention must be at least the parquet version days; otherwise restoring a point would need snapshots that were already deleted.</value></data>
   <data name="Page.Settings.Alerts.Enabled" xml:space="preserve"><value>Enable alerts</value></data>

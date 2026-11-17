@@ -22,6 +22,11 @@ public sealed record AppSettings
     // (últimos K por pipeline) es constante en RetentionService.
     public int RetentionDays { get; init; } = 90;
 
+    // Días que se guarda el registro de actividad (la traza de auditoría), aparte de RetentionDays.
+    // Nunca menos de SettingsStore.MinAuditRetentionDays: Validate lo rechaza y la purga usa ese
+    // mínimo aunque settings.json diga otra cosa.
+    public int AuditRetentionDays { get; init; } = SettingsStore.MinAuditRetentionDays;
+
     // Tablas: la columna "Último dato" se resalta si la última carga con filas es más antigua que
     // estos días (una tabla que dejó de llegar, p. ej. quitada del perfil de Synapse Link). 0 o
     // negativo lo desactiva.
@@ -151,12 +156,18 @@ public sealed class SettingsStore
             PipelineLagAlertHours = root.TryGetProperty("pipelineLagAlertHours", out _)
                 ? settings.PipelineLagAlertHours
                 : defaults.PipelineLagAlertHours,
+            AuditRetentionDays = root.TryGetProperty("auditRetentionDays", out _)
+                ? settings.AuditRetentionDays
+                : defaults.AuditRetentionDays,
         };
     }
 
     // Con un lease menor el heartbeat (un tercio del lease, mínimo 5 s) apenas cabe: las tareas en
     // curso se darían por vencidas y otra réplica las reclamaría.
     public const int MinTaskLeaseSeconds = 30;
+
+    // Mínimo fijo de la traza de auditoría: desde el portal se puede subir, nunca bajar de aquí.
+    public const int MinAuditRetentionDays = 90;
 
     // Devuelve la clave de recurso (SharedResource) del primer valor fuera de rango, o null si
     // todo es válido. La UI la muestra localizada; Save la usa para rechazar el guardado.
@@ -165,6 +176,7 @@ public sealed class SettingsStore
         { SchedulerPollMinutes: < 1 } => "Page.Settings.Validation.PollMinutes",
         { TaskLeaseSeconds: < MinTaskLeaseSeconds } => "Page.Settings.Validation.LeaseSeconds",
         { ReconDivergencePct: < 0 or > 100 } => "Page.Settings.Validation.Divergence",
+        { AuditRetentionDays: < MinAuditRetentionDays } => "Page.Settings.Validation.AuditRetentionDays",
         { AlertWebhookUrl: { } url } when !IsHttpsUrl(url) => "Page.Settings.Validation.WebhookHttps",
         // Borrando de verdad, la retención de origen no puede ser más corta que las versiones del
         // parquet: restaurar un punto (o resetear) necesita releer los snapshots posteriores a él.

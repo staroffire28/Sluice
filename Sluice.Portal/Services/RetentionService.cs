@@ -47,10 +47,15 @@ public sealed class RetentionService
         var (jobs, unreadableJobIds) = LoadJobs();
 
         // RetentionDays <= 0 desactiva la purga: no se borra nada, salvo el staging de los jobs
-        // fallidos o cancelados, que se purga siempre (FailedStagingRetention).
+        // fallidos o cancelados, que se purga siempre (FailedStagingRetention), y el registro de
+        // actividad, que tiene su propia retención (AuditRetentionDays).
         if (settings.RetentionDays <= 0)
         {
-            return new RetentionPlan { StagingDirectories = OrphanStagingDirectories(null, FailedJobIds(jobs, now)) };
+            return new RetentionPlan
+            {
+                StagingDirectories = OrphanStagingDirectories(null, FailedJobIds(jobs, now)),
+                ActivityLogFiles = OldActivityLogFiles(now, settings),
+            };
         }
 
         var cutoff = now - TimeSpan.FromDays(settings.RetentionDays);
@@ -96,7 +101,7 @@ public sealed class RetentionService
             TaskFiles = OrphanTerminalTaskFiles(orphans),
             RunDirectories = OrphanRunDirectories(orphans),
             StagingDirectories = OrphanStagingDirectories(orphans, FailedJobIds(jobs, now)),
-            ActivityLogFiles = OldActivityLogFiles(cutoff),
+            ActivityLogFiles = OldActivityLogFiles(now, settings),
         };
     }
 
@@ -274,10 +279,12 @@ public sealed class RetentionService
         return result;
     }
 
-    // logs/activity-*.jsonl (incluye los .1 rotados): el nombre no lleva fecha, así que se purgan
-    // por la última escritura. Cubre también los archivos de réplicas que ya no existen. El archivo
-    // activo de este proceso nunca se borra.
-    private List<string> OldActivityLogFiles(DateTimeOffset cutoff)
+    // logs/activity-*.jsonl, con su propia retención (AuditRetentionDays, nunca menos de
+    // SettingsStore.MinAuditRetentionDays): bajar o desactivar RetentionDays no borra la traza. Los
+    // diarios se purgan cuando su día entero queda antes del corte, así que el del día en curso (en
+    // el que escribe el propio barrido) nunca; los de antes del nombre por día (y sus .1 rotados),
+    // por la última escritura. Cubre también los archivos de réplicas que ya no existen.
+    private List<string> OldActivityLogFiles(DateTimeOffset now, AppSettings settings)
     {
         var result = new List<string>();
         var logsDir = Path.Combine(_options.DataDir, "logs");
@@ -286,11 +293,13 @@ public sealed class RetentionService
             return result;
         }
 
-        var active = ActivityLogStore.GetCurrentFilePath(logsDir);
+        var cutoff = (now - TimeSpan.FromDays(Math.Max(SettingsStore.MinAuditRetentionDays, settings.AuditRetentionDays))).UtcDateTime;
         foreach (var file in Directory.GetFiles(logsDir, "activity-*.jsonl"))
         {
-            if (!string.Equals(file, active, StringComparison.OrdinalIgnoreCase)
-                && new DateTimeOffset(File.GetLastWriteTimeUtc(file), TimeSpan.Zero) < cutoff)
+            var old = ActivityLogStore.DayOf(file) is { } day
+                ? day.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc) <= cutoff
+                : File.GetLastWriteTimeUtc(file) < cutoff;
+            if (old)
             {
                 result.Add(file);
             }
