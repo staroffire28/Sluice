@@ -674,6 +674,13 @@ fluent-button[appearance="subtle"]:not([icon-only])[disabled] {
     overflow-wrap: normal;
 }
 
+/* Tablas: a 1366px, con una tabla en pausa (interruptor + insignia), un nombre largo y fechas
+   anchas, todas las columnas quedan en su ancho mínimo y aun así sobraban ~10px. Se recorta solo
+   el relleno final de las celdas (el inicial sigue alineado con el título de la cabecera). */
+.page-shell .fluent-data-grid.data-panel--tables td {
+    padding-inline-end: 14px;
+}
+
 /* Rutas (PathText): cada tramo entero; solo se corta tras el separador. */
 .cell-path > span {
     white-space: nowrap;
