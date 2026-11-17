@@ -44,7 +44,7 @@
 
 La documentación completa de autenticación (tutorial, guía práctica, referencia y explicación) está en `docs/auth/` del repositorio.
 
-- **`UI_API_KEY`** protege la interfaz y la API de gestión (`/api/*`). Inicia sesión en `/login` (clave compartida + cookie `sluice_session`). Fuera de Development, el portal se niega a arrancar sin ella, salvo con `AUTH_MODE=none` (acceso abierto a propósito: la landing ofrece **Entrar** sin clave y la cabecera muestra **Acceso abierto**).
+- **`UI_API_KEY`** protege la interfaz y la API de gestión (`/api/*`). Inicia sesión en `/login` (clave compartida + cookie `sluice_session`). Cambiar `UI_API_KEY` y reiniciar el portal cierra todas las sesiones abiertas. Fuera de Development, el portal se niega a arrancar sin ella, salvo con `AUTH_MODE=none` (acceso abierto a propósito: la landing ofrece **Entrar** sin clave y la cabecera muestra **Acceso abierto**).
 - Los workers no se autentican contra el portal: no hay API entre ellos, comparten la cola de tareas en el volumen de `DATA_DIR`.
 - **Clave placeholder** (`changeme-ui`) se rechaza fuera de Development — define un valor real en `.env` antes de desplegar.
 - **Login/logout por formulario** requieren token antiforgery; el `POST /auth/login` JSON (scripts/automatización) queda exento.

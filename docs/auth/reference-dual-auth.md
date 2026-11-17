@@ -63,13 +63,13 @@ Anonymous liveness endpoint: `{ "status": "ok" }` while `DATA_DIR` and its `logs
 |----------|-------|
 | Name | `sluice_session` |
 | Format | `{epoch}.{expiryUnix}.{hmacSha256Hex}` |
-| Signing key | Random 32-byte key generated on first start, stored in `DATA_DIR/auth/session.json` (independent of `UI_API_KEY`) |
+| Signing key | `HMAC-SHA256(randomKey, UI_API_KEY)`, computed in memory; `randomKey` is a 32-byte key generated on first start and stored in `DATA_DIR/auth/session.json` |
 | `HttpOnly` | `true` |
 | `SameSite` | `Strict` |
 | `Secure` | Always outside Development (the portal runs behind a TLS-terminating proxy); in Development only when `Request.IsHttps` |
 | `Path` | `/` |
 
-There is no per-session store. `DATA_DIR/auth/session.json` holds the signing key and an `epoch`: logout increments the epoch, so every token issued before stops validating. Outside Development the app also sends HSTS.
+There is no per-session store. `DATA_DIR/auth/session.json` holds the random key and an `epoch`, never anything derived from `UI_API_KEY`: logout increments the epoch, so every token issued before stops validating, and rotating `UI_API_KEY` and restarting signs out every open session. Outside Development the app also sends HSTS.
 
 ## Path routing (`DualAuthMiddleware`)
 
