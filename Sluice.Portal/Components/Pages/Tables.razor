@@ -38,7 +38,7 @@
     <PageSection>
     <PanelState IsEmpty="@(string.IsNullOrWhiteSpace(_pipelineId))" EmptyText="@L["Page.Tables.SelectPipeline"]">
         <PanelState IsEmpty="@(_allRows.Count == 0)" EmptyText="@L["Page.Tables.NoTables"]">
-            <FluentDataGrid Class="data-panel" MultiLine="true"
+            <FluentDataGrid Class="data-panel data-panel--tables" MultiLine="true"
                             GridTemplateColumns="minmax(max-content, 1.6fr) 0.8fr 1.4fr 1.2fr 0.9fr 0.8fr 1fr max-content"
                             Items="@_rows.AsQueryable()" TGridItem="TableRow">
                 <PropertyColumn Property="@(r => r.Entity)" Title="@L["Common.Entity"]" Class="cell-nowrap" />
@@ -79,7 +79,9 @@
                     <StatusBadge Status="@context.Status" />
                 </TemplateColumn>
                 <TemplateColumn Title="@L["Page.Tables.Sync"]">
-                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                    @* Wrap: si no hay sitio (1366px con una tabla de nombre largo y datos anchos), la
+                       insignia "Pausada" baja debajo del interruptor en vez de desplazar la tabla. *@
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalGap="4" Wrap="true" VerticalAlignment="VerticalAlignment.Center">
                         <FluentSwitch TValue="bool" data-testid="@($"sync-{context.Entity}")" Value="@(!context.Paused)"
                                       AriaLabel="@L["Page.Tables.SyncAria", context.Entity]"
                                       ValueChanged="@(active => TogglePaused(context.Entity, !active))" />
