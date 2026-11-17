@@ -68,15 +68,28 @@ public sealed class ActivityLogStore : IActivityLog, IAuditLog
     // Reintentos cortos ante locks transitorios de Windows (mismo espíritu que TaskStore).
     private const int MaxWriteAttempts = 3;
 
+    // Mientras no se pueda escribir, un error en el log del proceso al primer fallo y después como
+    // mucho cada este intervalo, con las entradas perdidas desde el anterior: sin inundar el log.
+    public static readonly TimeSpan WriteFailureLogInterval = TimeSpan.FromMinutes(5);
+
     private readonly AppOptions _options;
     private readonly TimeProvider _time;
+    private readonly ILogger<ActivityLogStore>? _logger;
     private readonly object _writeLock = new();
+    private readonly object _failureLock = new();
+    private volatile bool _failing;
+    private DateTimeOffset? _lastFailureLoggedAt;
+    private int _lostSinceLastLog;
 
-    public ActivityLogStore(IOptions<AppOptions> options, TimeProvider? time = null)
+    public ActivityLogStore(IOptions<AppOptions> options, TimeProvider? time = null, ILogger<ActivityLogStore>? logger = null)
     {
         _options = options.Value;
         _time = time ?? TimeProvider.System;
+        _logger = logger;
     }
+
+    // La espera antes de reintentar; internal para que los tests la controlen.
+    internal Action RetryWait { get; init; } = () => Thread.Sleep(25);
 
     public void LogSystem(string action, string message, string? pipelineId = null, string? jobId = null, string level = "info") =>
         Append(NewEntry("system", level, action, message, pipelineId, jobId));
@@ -130,37 +143,96 @@ public sealed class ActivityLogStore : IActivityLog, IAuditLog
 
     private void Append(ActivityLogEntry entry)
     {
-        // El logging NUNCA debe romper la acción que lo invoca: todo va envuelto y se traga.
+        // El logging NUNCA debe romper la acción que lo invoca: un fallo no se propaga al llamador,
+        // pero queda en el log del proceso (ReportWriteFailure).
         try
         {
-
             // Una línea = un ActivityLogEntry; sin saltos de línea internos.
             var line = JsonSerializer.Serialize(entry, JsonDefaults.Options).Replace("\r", "").Replace("\n", " ") + Environment.NewLine;
+            var dir = GetLogDirectory();
+            var path = GetDailyFilePath(dir, entry.Timestamp);
 
-            lock (_writeLock)
+            for (var attempt = 1; ; attempt++)
             {
-                var dir = GetLogDirectory();
-                Directory.CreateDirectory(dir);
-                var path = GetDailyFilePath(dir, entry.Timestamp);
-
-                for (var attempt = 1; ; attempt++)
+                try
                 {
-                    try
+                    lock (_writeLock)
                     {
+                        Directory.CreateDirectory(dir);
                         File.AppendAllText(path, line, Encoding.UTF8);
-                        return;
                     }
-                    catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && attempt < MaxWriteAttempts)
-                    {
-                        // Lock transitorio (otro lector/escritor); breve espera y reintento.
-                        Thread.Sleep(25);
-                    }
+
+                    break;
                 }
+                catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && attempt < MaxWriteAttempts)
+                {
+                    // Lock transitorio (otro lector/escritor): breve espera fuera del lock, para no
+                    // frenar las demás escrituras del proceso, y reintento.
+                    RetryWait();
+                }
+            }
+
+            if (_failing)
+            {
+                ReportRecovery();
+            }
+        }
+        catch (Exception ex)
+        {
+            ReportWriteFailure(ex);
+        }
+    }
+
+    // Con el disco lleno o de solo lectura no quedaba constancia de nada: un error al primer fallo y
+    // otro cada WriteFailureLogInterval mientras siga fallando, con las entradas perdidas (la que
+    // acaba de fallar incluida).
+    private void ReportWriteFailure(Exception ex)
+    {
+        try
+        {
+            lock (_failureLock)
+            {
+                _failing = true;
+                _lostSinceLastLog++;
+                var now = _time.GetUtcNow();
+                if (_lastFailureLoggedAt is { } last && now - last < WriteFailureLogInterval)
+                {
+                    return;
+                }
+
+                _logger?.LogError(ex, "No se puede escribir el registro de actividad en {Directory}: {Lost} entrada(s) perdida(s) desde el último aviso.",
+                    GetLogDirectory(), _lostSinceLastLog);
+                _lastFailureLoggedAt = now;
+                _lostSinceLastLog = 0;
             }
         }
         catch
         {
-            // Tragado a propósito: el audit log no debe propagar errores al llamador.
+            // Ni siquiera el aviso puede llegar al llamador.
+        }
+    }
+
+    // La primera escritura buena tras un fallo rearma el aviso: el siguiente fallo avisa de inmediato.
+    // Las entradas perdidas que el intervalo dejó sin avisar se cuentan aquí, para que ninguna se
+    // pierda sin constancia.
+    private void ReportRecovery()
+    {
+        lock (_failureLock)
+        {
+            if (!_failing)
+            {
+                return;
+            }
+
+            if (_lostSinceLastLog > 0)
+            {
+                _logger?.LogWarning("El registro de actividad vuelve a escribirse en {Directory}: {Lost} entrada(s) perdida(s) desde el último aviso.",
+                    GetLogDirectory(), _lostSinceLastLog);
+            }
+
+            _failing = false;
+            _lastFailureLoggedAt = null;
+            _lostSinceLastLog = 0;
         }
     }
 
@@ -367,7 +439,7 @@ public sealed class ActivityLogStore : IActivityLog, IAuditLog
     }
 
     // El nombre de máquina puede traer caracteres no válidos para un path en algún entorno.
-    private static string Sanitize(string value)
+    internal static string Sanitize(string value)
     {
         var invalid = Path.GetInvalidFileNameChars();
         var sb = new StringBuilder(value.Length);

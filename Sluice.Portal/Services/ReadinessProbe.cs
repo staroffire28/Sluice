@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Services.Adls;
+using Sluice.Portal.Services.Logging;
 using Sluice.Portal.Services.Pipeline;
 
 namespace Sluice.Portal.Services;
@@ -102,20 +103,35 @@ public sealed class ReadinessProbe
 
 public static class DataDirProbe
 {
-    // null si DATA_DIR es escribible; si no, el motivo (solo para el log, no para la respuesta).
+    // Nombre fijo por máquina y proceso (no casa con activity-*.jsonl, lo que purga la retención de
+    // logs/): si el proceso muere entre escribirlo y borrarlo, la siguiente sonda lo sobrescribe y lo
+    // borra, en vez de dejar uno nuevo por intento. Las sondas del proceso se turnan (Gate).
+    internal static readonly string ProbeFileName = $".health-{ActivityLogStore.Sanitize(Environment.MachineName)}-{Environment.ProcessId}.tmp";
+
+    private static readonly object Gate = new();
+
+    // null si DATA_DIR y su logs/ (el registro de actividad) son escribibles; si no, el motivo (solo
+    // para el log, no para la respuesta).
     public static string? CheckWritable(string dataDir)
     {
-        try
+        lock (Gate)
         {
-            Directory.CreateDirectory(dataDir);
-            var probe = Path.Combine(dataDir, $".health-{Guid.NewGuid():N}.tmp");
-            File.WriteAllText(probe, "ok");
-            File.Delete(probe);
+            foreach (var (dir, name) in new[] { (dataDir, "DATA_DIR"), (Path.Combine(dataDir, "logs"), "DATA_DIR/logs") })
+            {
+                try
+                {
+                    Directory.CreateDirectory(dir);
+                    var probe = Path.Combine(dir, ProbeFileName);
+                    File.WriteAllText(probe, "ok");
+                    File.Delete(probe);
+                }
+                catch (Exception ex)
+                {
+                    return $"{name} not writable: {ex.Message}";
+                }
+            }
+
             return null;
-        }
-        catch (Exception ex)
-        {
-            return $"DATA_DIR not writable: {ex.Message}";
         }
     }
 }
