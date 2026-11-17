@@ -1030,7 +1030,7 @@
   <data name="Activity.Reset.WithTruncate" xml:space="preserve"><value> con truncado de SQL</value></data>
   <data name="Activity.Reset.WithTruncateTables" xml:space="preserve"><value> con truncado de SQL de {0}</value></data>
   <data name="Activity.Reset.Stopped" xml:space="preserve"><value>Reset de {0} detenido: fallo al truncar {1}.</value></data>
-  <data name="Activity.Reset.StoppedAfterTruncate" xml:space="preserve"><value>Reset de {0} detenido: fallo al truncar {1}; ya se habían truncado {2}.</value></data>
+  <data name="Activity.Reset.StoppedAfterTruncate" xml:space="preserve"><value>Reset de {0} detenido: fallo al truncar {1}; se truncaron {2}.</value></data>
   <data name="Activity.Table.SyncChanged" xml:space="preserve"><value>Sincronización de la tabla '{0}' {1} en el pipeline {2}.</value></data>
   <data name="Activity.Table.Resumed" xml:space="preserve"><value>reanudada</value></data>
   <data name="Activity.Table.Paused" xml:space="preserve"><value>pausada</value></data>

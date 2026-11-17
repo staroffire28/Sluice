@@ -107,7 +107,7 @@ public sealed class PipelineResetService : IPipelineResetService
                     MessageKey: "Activity.Reset.Stopped",
                     MessageArgs: [pipelineId, failed])
                 : new AuditResult(
-                    $"Reset de {pipelineId} detenido: fallo al truncar {failed}; ya se habían truncado {truncated}.",
+                    $"Reset de {pipelineId} detenido: fallo al truncar {failed}; se truncaron {truncated}.",
                     Outcome: AuditOutcome.Error,
                     MessageKey: "Activity.Reset.StoppedAfterTruncate",
                     MessageArgs: [pipelineId, failed, truncated]);
