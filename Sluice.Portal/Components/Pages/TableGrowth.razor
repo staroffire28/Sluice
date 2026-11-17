@@ -122,14 +122,25 @@
 
     public void Dispose() => ThemeState.Changed -= OnThemeChanged;
 
-    protected override void OnParametersSet() => Load();
+    // La primera carga espera a la zona del navegador (OnAfterRenderAsync); aquí solo se vuelve a
+    // cargar cuando cambian los parámetros con la página ya cargada.
+    protected override void OnParametersSet()
+    {
+        if (_loads > 0)
+        {
+            Load();
+        }
+    }
 
-    // Los días van en la zona del navegador, que solo se conoce con el circuito conectado: al
-    // conocerla se vuelve a cargar.
+    // Los días van en la zona del navegador, que solo se conoce con el circuito conectado: se carga
+    // una sola vez, al conocerla (o al no poder leerla), y el prerender muestra "cargando". Antes se
+    // cargaba en el prerender, al conectar el circuito y otra vez al conocer la zona, y cada carga
+    // recorre los jobs de la ventana.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && await Time.InitAsync())
+        if (firstRender)
         {
+            await Time.InitAsync();
             Load();
             StateHasChanged();
         }

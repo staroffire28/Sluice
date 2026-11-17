@@ -90,6 +90,25 @@ public sealed class JobStore : JsonFileStore<Job>
 
     public Job? GetById(string id) => Get(id);
 
+    // La fecha y las filas por tabla de un job, sin materializar sus eventos ni el resto de campos
+    // (la analítica de una tabla). Como GetById, un id no válido o un fichero que no existe dan null.
+    public JobTableRows? GetTableRows(string id)
+    {
+        if (!EntityIds.IsValid(id))
+        {
+            return null;
+        }
+
+        var path = GetPath(id);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        using var stream = File.OpenRead(path);
+        return System.Text.Json.JsonSerializer.Deserialize<JobTableRows>(stream, JsonDefaults.Options);
+    }
+
     // Una escritura de este proceso invalida su entrada: la fecha del fichero podría no cambiar si dos
     // escrituras caen en el mismo instante.
     public void Save(Job job)
@@ -167,3 +186,17 @@ public sealed class JobStore : JsonFileStore<Job>
 
 // Lo que necesitan los listados para filtrar y ordenar, sin los eventos ni las tablas del job.
 public sealed record JobIndexEntry(string Id, string PipelineId, JobType Type, JobStatus Status, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt);
+
+// Lo que la analítica de una tabla lee de un job: su fecha y las filas de cada tabla, sin los eventos.
+public sealed record JobTableRows
+{
+    public DateTimeOffset StartedAt { get; init; }
+    public List<JobTableRowsEntry> Entities { get; init; } = [];
+}
+
+public sealed record JobTableRowsEntry
+{
+    public string Entity { get; init; } = "";
+    public int CsvRows { get; init; }
+    public int? SqlRows { get; init; }
+}

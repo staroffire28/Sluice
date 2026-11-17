@@ -26,6 +26,18 @@ public interface IJobService
             .ToList();
 
     Job? Get(string id);
+
+    // La fecha y las filas por tabla del job, sin leerlo entero (la analítica de una tabla). Por
+    // defecto se derivan de Get, para los dobles de test.
+    JobTableRows? GetTableRows(string id) =>
+        Get(id) is { } job
+            ? new JobTableRows
+            {
+                StartedAt = job.StartedAt,
+                Entities = job.Entities.Select(e => new JobTableRowsEntry { Entity = e.Entity, CsvRows = e.CsvRows, SqlRows = e.SqlRows }).ToList(),
+            }
+            : null;
+
     Job Create(Job job);
     Job? Update(string id, Job job);
     void AppendEvent(string jobId, EventLevel level, string message);
@@ -97,6 +109,8 @@ public sealed class JobService : IJobService
         Filter(pipelineId, status, range).ToList();
 
     public Job? Get(string id) => _store.GetById(id);
+
+    public JobTableRows? GetTableRows(string id) => _store.GetTableRows(id);
 
     public Job Create(Job job)
     {
