@@ -82,7 +82,11 @@ public abstract class JsonFileStore<T>
         _logger.LogWarning(ex, "Fichero ilegible omitido del listado: {Path}", path);
     }
 
-    public T? Get(string id)
+    public T? Get(string id) => ReadLocked(id, Read);
+
+    // Lee el fichero de un id con el lector dado bajo el mismo lock que Save (p. ej. un tipo más
+    // ligero que T). Un id no válido o un fichero que no existe dan default.
+    protected TRead? ReadLocked<TRead>(string id, Func<string, TRead?> read)
     {
         if (!EntityIds.IsValid(id))
         {
@@ -92,7 +96,7 @@ public abstract class JsonFileStore<T>
         lock (_lock)
         {
             var path = GetPath(id);
-            return File.Exists(path) ? Read(path) : default;
+            return File.Exists(path) ? read(path) : default;
         }
     }
 

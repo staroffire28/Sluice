@@ -91,23 +91,14 @@ public sealed class JobStore : JsonFileStore<Job>
     public Job? GetById(string id) => Get(id);
 
     // La fecha y las filas por tabla de un job, sin materializar sus eventos ni el resto de campos
-    // (la analítica de una tabla). Como GetById, un id no válido o un fichero que no existe dan null.
-    public JobTableRows? GetTableRows(string id)
-    {
-        if (!EntityIds.IsValid(id))
+    // (la analítica de una tabla). Como GetById, bajo el lock del almacén (no se cruza con un Save del
+    // mismo job en este proceso), y un id no válido o un fichero que no existe dan null.
+    public JobTableRows? GetTableRows(string id) =>
+        ReadLocked(id, path =>
         {
-            return null;
-        }
-
-        var path = GetPath(id);
-        if (!File.Exists(path))
-        {
-            return null;
-        }
-
-        using var stream = File.OpenRead(path);
-        return System.Text.Json.JsonSerializer.Deserialize<JobTableRows>(stream, JsonDefaults.Options);
-    }
+            using var stream = File.OpenRead(path);
+            return System.Text.Json.JsonSerializer.Deserialize<JobTableRows>(stream, JsonDefaults.Options);
+        });
 
     // Una escritura de este proceso invalida su entrada: la fecha del fichero podría no cambiar si dos
     // escrituras caen en el mismo instante.
