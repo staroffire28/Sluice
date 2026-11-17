@@ -217,22 +217,30 @@ public sealed class ActivityLogStore : IActivityLog, IAuditLog
     // pierda sin constancia.
     private void ReportRecovery()
     {
-        lock (_failureLock)
+        try
         {
-            if (!_failing)
+            lock (_failureLock)
             {
-                return;
-            }
+                if (!_failing)
+                {
+                    return;
+                }
 
-            if (_lostSinceLastLog > 0)
-            {
-                _logger?.LogWarning("El registro de actividad vuelve a escribirse en {Directory}: {Lost} entrada(s) perdida(s) desde el último aviso.",
-                    GetLogDirectory(), _lostSinceLastLog);
-            }
+                var lost = _lostSinceLastLog;
+                _failing = false;
+                _lastFailureLoggedAt = null;
+                _lostSinceLastLog = 0;
 
-            _failing = false;
-            _lastFailureLoggedAt = null;
-            _lostSinceLastLog = 0;
+                if (lost > 0)
+                {
+                    _logger?.LogWarning("El registro de actividad vuelve a escribirse en {Directory}: {Lost} entrada(s) perdida(s) desde el último aviso.",
+                        GetLogDirectory(), lost);
+                }
+            }
+        }
+        catch
+        {
+            // Ni siquiera el aviso puede llegar al llamador.
         }
     }
 
