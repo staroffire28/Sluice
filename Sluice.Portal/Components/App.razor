@@ -35,7 +35,7 @@
     @* Render interactivo a nivel de router: MainLayout y sus providers
        (FluentProviders) deben ser interactivos o los toasts y los diálogos
        de DialogService no se pintan. *@
-    <Routes @rendermode="InteractiveServer" AuditClient="@AuditClient" />
+    <Routes @rendermode="InteractiveServer" AuditClient="@AuditClient" SessionToken="@SessionToken" />
     <script src="@Versioned("app-ui.js")"></script>
     <script src="@Versioned("sluice-flow.js")"></script>
     <script src="_framework/blazor.web.js"></script>
@@ -51,6 +51,10 @@
     private HttpContext? HttpContext { get; set; }
 
     private string? AuditClient => HttpContext is null ? null : AuditActor.DescribeClient(HttpContext);
+
+    // Igual con la sesión: el circuito la vuelve a validar en cada actividad (ver CircuitSessionGuard).
+    // Viaja en el marcador del componente, que Blazor cifra: la cookie no queda en claro en la página.
+    private string? SessionToken => HttpContext?.Request.Cookies[Sluice.Portal.Services.Auth.AuthConstants.SessionCookieName];
 
     // Versión de assets propios: cambia en cada build/deploy para invalidar el
     // caché del navegador. Los estáticos de wwwroot y el bundle scoped se

@@ -71,6 +71,8 @@ Anonymous liveness endpoint: `{ "status": "ok" }` while `DATA_DIR` and its `logs
 
 There is no per-session store. `DATA_DIR/auth/session.json` holds the random key and an `epoch`, never anything derived from `UI_API_KEY`: logout increments the epoch, so every token issued before stops validating, and rotating `UI_API_KEY` and restarting signs out every open session. Outside Development the app also sends HSTS.
 
+Open Blazor pages (circuits) follow the same rules: each one keeps the token it was opened with and validates it again before handling anything the browser sends (UI events, JS interop, navigation, render acknowledgements). When it no longer validates, the event is dropped and the page reloads to `/login`. A page that only refreshes on a server timer gets there on its next refresh (the browser acknowledges it), so it may show that one refresh first.
+
 ## Path routing (`DualAuthMiddleware`)
 
 ```

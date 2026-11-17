@@ -46,6 +46,8 @@ signingKey = HMAC-SHA256(randomKey, UI_API_KEY)
 
 The random key lives in `DATA_DIR/auth/session.json`. The signing key is derived from it and the current `UI_API_KEY` in memory, and nothing derived from `UI_API_KEY` is written to disk. A captured cookie alone cannot be used to brute-force the UI key offline (the random key is missing), and rotating `UI_API_KEY` and restarting signs out every open session, so a cookie obtained with a leaked key stops working. Validation checks epoch, expiry and signature. Signing out increments the epoch: every token issued before (any browser, any script) stops working.
 
+Pages already open are cut off too. A Blazor tab talks to the server over a long-lived websocket (the circuit), and the cookie is only checked when that websocket opens. So the circuit keeps the token it was opened with and validates it again on every message the browser sends (a click, a navigation, the acknowledgement of a server-side refresh). Once the session is gone (signed out elsewhere, expired, or the key rotated and the portal restarted), the action is not run and the tab reloads to `/login`.
+
 This fits a single shared operator key and a small team. It avoids Redis or DB session tables on a portal that already persists everything as JSON files.
 
 ## CSRF and automation
