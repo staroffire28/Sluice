@@ -40,10 +40,11 @@ Earlier versions also had internal HTTP task endpoints (claim, heartbeat, comple
 Sessions are **HMAC tokens**, not rows in a database:
 
 ```
-token = {epoch}.{unixExpiry}.{HMAC-SHA256(signingKey, epoch.expiry)}
+token      = {epoch}.{unixExpiry}.{HMAC-SHA256(signingKey, epoch.expiry)}
+signingKey = HMAC-SHA256(randomKey, UI_API_KEY)
 ```
 
-The signing key is random and lives in `DATA_DIR/auth/session.json` — it is not `UI_API_KEY`, so a captured cookie cannot be used to brute-force the UI key offline. Validation checks epoch, expiry and signature. Signing out increments the epoch: every token issued before (any browser, any script) stops working.
+The random key lives in `DATA_DIR/auth/session.json`. The signing key is derived from it and the current `UI_API_KEY` in memory, and nothing derived from `UI_API_KEY` is written to disk. A captured cookie alone cannot be used to brute-force the UI key offline (the random key is missing), and rotating `UI_API_KEY` and restarting signs out every open session, so a cookie obtained with a leaked key stops working. Validation checks epoch, expiry and signature. Signing out increments the epoch: every token issued before (any browser, any script) stops working.
 
 This fits a single shared operator key and a small team. It avoids Redis or DB session tables on a portal that already persists everything as JSON files.
 

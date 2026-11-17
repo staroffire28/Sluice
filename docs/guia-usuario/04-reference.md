@@ -44,7 +44,7 @@
 
 The full authentication documentation (tutorial, how-to, reference and explanation) is in `docs/auth/` in the repository.
 
-- **`UI_API_KEY`** protects the UI and management API (`/api/*`). Sign in at `/login` (shared key + session cookie `sluice_session`). Outside Development, the portal refuses to start without it, unless `AUTH_MODE=none` (open access on purpose: the landing offers **Enter** without a key and the header shows **Open access**).
+- **`UI_API_KEY`** protects the UI and management API (`/api/*`). Sign in at `/login` (shared key + session cookie `sluice_session`). Changing `UI_API_KEY` and restarting the portal signs out every open session. Outside Development, the portal refuses to start without it, unless `AUTH_MODE=none` (open access on purpose: the landing offers **Enter** without a key and the header shows **Open access**).
 - Workers do not authenticate against the portal: there is no API between them, they share the task queue on the `DATA_DIR` volume.
 - **Placeholder key** (`changeme-ui`) is rejected outside Development — set a real value in `.env` before deploy.
 - **Form login/logout** require an antiforgery token; JSON `POST /auth/login` (automation/scripts) is exempt.

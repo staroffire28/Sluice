@@ -9,8 +9,13 @@ using Sluice.Portal.Services.Stores;
 namespace Sluice.Portal.Services.Auth;
 
 // Token de sesión: {epoch}.{expiryUnix}.{hmac(epoch.expiry)}.
-// - La clave de firma es aleatoria y vive en DATA_DIR/auth/session.json. Antes se firmaba con la
-//   propia UI_API_KEY, y una cookie capturada permitía atacar esa clave por fuerza bruta offline.
+// - La clave aleatoria vive en DATA_DIR/auth/session.json. Antes se firmaba con la propia
+//   UI_API_KEY, y una cookie capturada permitía atacar esa clave por fuerza bruta offline.
+// - La clave de firma es HMAC-SHA256(clave aleatoria, UI_API_KEY vigente): rotar UI_API_KEY y
+//   reiniciar invalida todas las sesiones emitidas con la anterior (si se filtró, la cookie que ya
+//   obtuvo el atacante deja de valer). Quien solo tiene la cookie sigue sin poder atacar la clave
+//   offline: le falta la clave aleatoria. Y no se guarda en disco nada derivado de UI_API_KEY:
+//   DATA_DIR entra en los backups y una huella permitiría ese mismo ataque desde un backup.
 // - El epoch permite revocar: cerrar sesión lo incrementa y todos los tokens emitidos antes dejan
 //   de valer. Antes el logout solo borraba la cookie y una robada seguía válida hasta expirar.
 // Solo el nodo api valida sesiones de UI: el estado se carga una vez y se mantiene en memoria.
@@ -130,9 +135,12 @@ public sealed class SessionTokenService
         }
     }
 
-    private static string Sign(SessionState state, long epoch, long expiryUnix)
+    private string Sign(SessionState state, long epoch, long expiryUnix)
     {
-        var key = Convert.FromBase64String(state.SigningKey);
+        // Sin UI_API_KEY (Development o AUTH_MODE=none) no se emiten ni validan sesiones.
+        var key = HMACSHA256.HashData(
+            Convert.FromBase64String(state.SigningKey),
+            Encoding.UTF8.GetBytes(_options.UiApiKey ?? string.Empty));
         var payload = Encoding.UTF8.GetBytes(string.Create(CultureInfo.InvariantCulture, $"{epoch}.{expiryUnix}"));
         return Convert.ToHexString(HMACSHA256.HashData(key, payload)).ToLowerInvariant();
     }
