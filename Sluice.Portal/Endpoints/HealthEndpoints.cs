@@ -11,7 +11,7 @@ public static class HealthEndpoints
     {
         // Liveness: rápido a propósito (polling cada 60s del HealthPill, healthcheck de Docker
         // cada 30s, y arranque de e2e tests que esperan /health en un loop ajustado). Solo
-        // confirma que el proceso responde y que DATA_DIR es escribible — nunca toca SQL/ADLS. En el
+        // confirma que el proceso responde y que DATA_DIR y su logs/ son escribibles — nunca toca SQL/ADLS. En el
         // orquestador añade, solo como indicadores, si el scheduler sigue sondeando y si queda poco
         // disco: "degraded" sigue siendo 200 (el contenedor no está caído, hay que mirarlo).
         app.MapGet("/health", (IOptions<AppOptions> options, SettingsStore settings, SchedulerHeartbeat heartbeat, IDiskSpaceProbe disk) =>
