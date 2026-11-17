@@ -94,7 +94,8 @@ public sealed class PipelineService : IPipelineService
                     ? new AuditResult($"Pipeline {done.After.Name} actualizado: {changes.Text}.", MessageKey: "Activity.Pipeline.UpdatedChanges", MessageArgs: [done.After.Name, changes.Part])
                     : new AuditResult($"Pipeline {done.After.Name} actualizado.", MessageKey: "Activity.Pipeline.Updated", MessageArgs: [done.After.Name]),
             $"No se pudo guardar el pipeline {pipeline.Name}",
-            failureKey: "Activity.Failed.PipelineSave", failureArgs: [pipeline.Name]))?.After;
+            failureKey: "Activity.Failed.PipelineSave", failureArgs: [pipeline.Name],
+            cancellationToken: cancellationToken))?.After;
 
     public PipelineModel? SetScheduler(AuditActor actor, string id, bool enabled) =>
         _audit.Audit(
@@ -159,7 +160,8 @@ public sealed class PipelineService : IPipelineService
                 : new AuditResult($"No se borró el pipeline {id}: {error}", Outcome: AuditOutcome.Rejected,
                     MessageKey: "Activity.Pipeline.NotDeleted", MessageArgs: [id, error]),
             $"No se pudo borrar el pipeline {id}",
-            failureKey: "Activity.Failed.PipelineDelete", failureArgs: [id]);
+            failureKey: "Activity.Failed.PipelineDelete", failureArgs: [id],
+            cancellationToken: cancellationToken);
 
     private async Task<string?> DeleteCoreAsync(AuditActor actor, string id, bool wipeState, CancellationToken cancellationToken)
     {

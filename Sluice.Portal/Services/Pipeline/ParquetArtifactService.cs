@@ -95,7 +95,8 @@ public sealed class ParquetArtifactService : IParquetArtifactService
                     MessageKey: "Activity.Parquet.NotInPipeline", MessageArgs: [blobPath, pipelineId]),
             $"No se pudo borrar el parquet {blobPath}",
             failureKey: "Activity.Failed.ParquetDelete", failureArgs: [blobPath],
-            target: blobPath);
+            target: blobPath,
+            cancellationToken: cancellationToken);
 
     // Borrado a mano: con el lock de ejecución y sin job en curso, que podría consolidar contra el
     // fichero o volver a publicarlo. El consolidado y el schema de una tabla que sigue en el estado
