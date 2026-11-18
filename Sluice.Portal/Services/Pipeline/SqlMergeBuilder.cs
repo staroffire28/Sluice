@@ -112,11 +112,20 @@ public static class SqlMergeBuilder
         var insertVals = string.Join(", ", entity.Attributes.Select(a => $"source.{Quote(a.Name)}"));
         var wm = Quote(CdmSchemaParser.WatermarkColumn);
         var ver = Quote(CdmSchemaParser.VersionColumn);
+        var wmAttr = entity.Attributes.FirstOrDefault(a => string.Equals(a.Name, CdmSchemaParser.WatermarkColumn, StringComparison.OrdinalIgnoreCase));
+        // Watermark DATETIMEOFFSET: se compara la hora de reloj, no el instante. Las filas cargadas
+        // antes en un host fuera de UTC guardan la hora UTC con el offset del host; las nuevas, la
+        // misma hora con offset cero. La hora de reloj es la misma en las dos convenciones y en
+        // cualquier host; el instante estaría desplazado ese offset y un incremental se saltaría
+        // actualizaciones (o aplicaría versiones viejas).
+        var (srcWm, tgtWm) = wmAttr?.SqlType.StartsWith("DATETIMEOFFSET", StringComparison.OrdinalIgnoreCase) == true
+            ? ($"CAST(source.{wm} AS DATETIME2(7))", $"CAST(target.{wm} AS DATETIME2(7))")
+            : ($"source.{wm}", $"target.{wm}");
         var versionTie = entity.Attributes.Any(a => string.Equals(a.Name, CdmSchemaParser.VersionColumn, StringComparison.OrdinalIgnoreCase))
-            ? $" OR (source.{wm} = target.{wm} AND source.{ver} IS NOT NULL AND (target.{ver} IS NULL OR source.{ver} > target.{ver}))"
+            ? $" OR ({srcWm} = {tgtWm} AND source.{ver} IS NOT NULL AND (target.{ver} IS NULL OR source.{ver} > target.{ver}))"
             : "";
-        var matched = onlyNewer && entity.Attributes.Any(a => string.Equals(a.Name, CdmSchemaParser.WatermarkColumn, StringComparison.OrdinalIgnoreCase))
-            ? $"WHEN MATCHED AND (target.{wm} IS NULL OR source.{wm} > target.{wm}{versionTie}) THEN UPDATE"
+        var matched = onlyNewer && wmAttr is not null
+            ? $"WHEN MATCHED AND (target.{wm} IS NULL OR {srcWm} > {tgtWm}{versionTie}) THEN UPDATE"
             : "WHEN MATCHED THEN UPDATE";
 
         return $"""

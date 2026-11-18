@@ -105,9 +105,10 @@ public static class ValueComparer
 
         if (Is(sqlType, "DATETIME"))
         {
-            // DATETIME2(7) y DATETIMEOFFSET(7) guardan el tick exacto. El MERGE envía siempre un
-            // DateTime (CoerceForSql: DateTimeOffset → UtcDateTime); en una columna DATETIMEOFFSET
-            // SQL conserva esa hora de reloj, así que al leerla se compara su DateTime, no el UTC.
+            // DATETIME2(7) y DATETIMEOFFSET(7) guardan el tick exacto. En una columna DATETIMEOFFSET
+            // el MERGE envía la hora UTC con offset cero (CoerceForSql); las filas cargadas antes en
+            // un host fuera de UTC tienen esa misma hora de reloj con el offset del host. Al leerla
+            // se compara su hora de reloj (DateTime), no el instante: vale para las dos.
             var ticks = value switch
             {
                 DateTimeOffset dto => dto.DateTime.Ticks,

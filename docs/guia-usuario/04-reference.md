@@ -121,3 +121,7 @@ When a job or a connection test fails with a known error, the portal shows what 
 | ADLS container or path not found (404) | Wrong account or container name. | Check them in Sources. |
 | The Azure credentials are not valid (`AADSTS…`) | Expired or wrong secret, or wrong tenant/client id. | Create a new secret and update it in Sources. |
 | The storage account cannot be found | The account name does not resolve. | Check the name and outbound access to `*.dfs.core.windows.net`. |
+
+## Upgrade notes
+
+- **Date-with-time-zone columns (`DATETIMEOFFSET`) loaded on a host outside UTC**: before this fix, the portal stored the UTC time of these columns with the host's time-zone offset, so the instant was shifted by that offset (for example, 10:00Z was stored as 10:00-05:00 on a UTC-5 host). It only affects portals whose host (or container, through `TZ` or a Windows container that inherits the host zone) is not on UTC, and only tables with date-with-time-zone columns. New loads store the right instant with a zero offset, and rows already loaded keep the old offset until they are rewritten: run **Force** to fix them. Meanwhile, incremental loads and **Compare values** treat both kinds of row correctly.
