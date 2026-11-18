@@ -48,8 +48,10 @@
             else
             {
                 _label = L["Common.Health.Degraded"];
+                // Relleno de aviso: Filled+Brand era del mismo azul que la cabecera (1:1) y Tint+Warning
+                // se funde con ella en oscuro (1,5:1); este queda a 4,1:1 y 5,1:1, texto a 11,9:1.
                 _appearance = BadgeAppearance.Filled;
-                _color = BadgeColor.Brand;
+                _color = BadgeColor.Warning;
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -62,8 +64,10 @@
         {
             _title = null;
             _label = L["Common.Health.Offline"];
-            _appearance = BadgeAppearance.Ghost;
-            _color = BadgeColor.Informative;
+            // Tinte de error: Ghost+Informative era un gris neutro casi igual que "En línea". Texto a
+            // 5,5:1 (claro) y 5,8:1 (oscuro); contra la cabecera, 5,0:1 y 2,4:1 (lo distingue el tono).
+            _appearance = BadgeAppearance.Tint;
+            _color = BadgeColor.Danger;
         }
 
         await InvokeAsync(StateHasChanged);
