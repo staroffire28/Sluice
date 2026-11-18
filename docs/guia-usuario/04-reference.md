@@ -83,14 +83,14 @@ A janitor caps the volume's growth. The **job is the unit of retention**: an old
 
 ### Source snapshots (Synapse Link ADLS container)
 
-A second janitor purges **already processed** CSV folders in the Synapse Link source container. When several pipelines read the same source, a folder counts as processed only once every one of them (enabled or not) has processed it, and nothing is purged while any of them has a running job. Consolidated parquet (in its dedicated container or on the portal disk) is the recovery artifact.
+A second janitor purges **already processed** CSV folders in the Synapse Link source container. When several pipelines read the same source, a folder counts as processed only once every one of them (enabled or not) has processed it, and nothing is purged while any of them has a running job. The same source means the same container in the same storage account, even when it is reached through different sources; a source whose account or container cannot be read (incomplete or invalid configuration) counts as reading all of them, so its pipelines also hold back the purge of the others. Consolidated parquet (in its dedicated container or on the portal disk) is the recovery artifact.
 
 - **Always kept**: the last 14 processed snapshots (floor K), pending or in-export snapshots, every snapshot from the oldest one a resumed table of a pipeline reading the source still has to re-read, `Changelog/`, CDM metadata and any folder not named like a Synapse Link snapshot (`YYYY-MM-DDTHH.MM.SSZ`).
 - **Knob**: `SourceSnapshotRetentionDays` in `/settings` (default 30). `0` or negative disables purging.
 - **Cadence**: every 6 hours, on the orchestrator only; logged as `snapshot-retention.sweep`.
 - **Recovery after purge**: use **Force** (or `POST /api/pipelines/{id}/reload-from-parquet`, same path) to reload SQL from consolidated parquet. Incremental still reads new CSV snapshots from ADLS.
 - **Dry-run**: `SourceSnapshotRetentionDryRun` in `/settings` — **on by default**; simulates without deleting. Check `/snapshots` (Retention column) and activity log `snapshot-retention.dry-run` before disabling. If saving makes the purge delete for real (turning the simulation off with retention on, or turning retention on with the simulation already off), Settings does not save straight away: a dialog warns that the next sweep will delete from the customer's lake the already processed folders older than those days, with no way back, and asks you to tick that you understand before confirming. Cancel saves nothing.
-- **Parquet certification**: `SourceSnapshotRetentionRequireParquet` (default on) — skips purge if any `{pipeline}/{entity}.parquet` is missing for any pipeline that reads the source.
+- **Parquet certification**: `SourceSnapshotRetentionRequireParquet` (default on) — skips purge if any `{pipeline}/{entity}.parquet` is missing for any pipeline that reads the source (each one in its own source's parquet store).
 - **Soft-delete**: enable blob soft-delete on the Azure storage account to recover mistakenly deleted folders (configured outside the portal).
 
 ### Consolidated Parquet versions

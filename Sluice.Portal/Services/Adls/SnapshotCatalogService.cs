@@ -85,10 +85,11 @@ public sealed class SnapshotCatalogService : ISnapshotCatalogService
         var selection = SnapshotSelector.Select(allSnapshots, state.LastProcessedSnapshot, currentFolder);
         var now = DateTimeOffset.UtcNow;
         var appSettings = _settings.Get();
-        // La retención lee el estado de todos los pipelines de la fuente. Si el de otro es ilegible,
+        // La retención lee el estado de todos los pipelines del almacén. Si el de otro es ilegible,
         // el catálogo de este no debe fallar (el scheduler lo pide en cada poll): se muestra sin
         // carpetas elegibles. El barrido real sigue sin purgar mientras ese estado no se lea.
-        var siblingStateUnreadable = HasUnreadableSiblingState(pipeline);
+        var storeSourceIds = SnapshotRetentionService.SameStoreSourceIds(_pipelines, _adlsFactory, pipeline.SourceId);
+        var siblingStateUnreadable = HasUnreadableSiblingState(pipeline, storeSourceIds);
         SnapshotRetentionAnalysis analysis;
         if (siblingStateUnreadable)
         {
@@ -96,14 +97,14 @@ public sealed class SnapshotCatalogService : ISnapshotCatalogService
         }
         else
         {
-            var retentionFloor = SnapshotRetentionService.SharedLastProcessed(_pipelines, pipeline.SourceId);
+            var retentionFloor = SnapshotRetentionService.SharedLastProcessed(_pipelines, storeSourceIds);
             analysis = SnapshotRetentionService.Analyze(
                 now,
                 appSettings,
                 allSnapshots,
                 retentionFloor,
                 SnapshotSelector.Select(allSnapshots, retentionFloor, currentFolder),
-                SnapshotRetentionService.SharedBackfillFrom(_pipelines, pipeline.SourceId));
+                SnapshotRetentionService.SharedBackfillFrom(_pipelines, storeSourceIds));
         }
 
         var entries = allSnapshots
@@ -141,7 +142,8 @@ public sealed class SnapshotCatalogService : ISnapshotCatalogService
         var allSnapshots = await adls.ListSnapshotFoldersAsync(cancellationToken);
         var currentFolder = await adls.GetSettledSnapshotAsync(cancellationToken);
         var state = _pipelines.GetState(pipelineId);
-        var retentionFloor = SnapshotRetentionService.SharedLastProcessed(_pipelines, pipeline.SourceId);
+        var storeSourceIds = SnapshotRetentionService.SameStoreSourceIds(_pipelines, _adlsFactory, pipeline.SourceId);
+        var retentionFloor = SnapshotRetentionService.SharedLastProcessed(_pipelines, storeSourceIds);
         var selection = SnapshotSelector.Select(allSnapshots, retentionFloor, currentFolder);
         var appSettings = _settings.Get();
         var analysis = SnapshotRetentionService.Analyze(
@@ -150,7 +152,7 @@ public sealed class SnapshotCatalogService : ISnapshotCatalogService
             allSnapshots,
             retentionFloor,
             selection,
-            SnapshotRetentionService.SharedBackfillFrom(_pipelines, pipeline.SourceId));
+            SnapshotRetentionService.SharedBackfillFrom(_pipelines, storeSourceIds));
         var cert = await SnapshotRetentionService.CertifyParquetAsync(
             pipelineId,
             parquetStore,
@@ -166,10 +168,10 @@ public sealed class SnapshotCatalogService : ISnapshotCatalogService
             cert.MissingEntities);
     }
 
-    // true si algún pipeline que comparte fuente con este tiene un estado ilegible (lo deja en el log).
-    private bool HasUnreadableSiblingState(Models.Pipeline pipeline)
+    // true si algún pipeline que comparte almacén con este tiene un estado ilegible (lo deja en el log).
+    private bool HasUnreadableSiblingState(Models.Pipeline pipeline, IReadOnlySet<string> storeSourceIds)
     {
-        foreach (var sibling in _pipelines.List().Where(p => p.SourceId == pipeline.SourceId && p.Id != pipeline.Id))
+        foreach (var sibling in _pipelines.List().Where(p => storeSourceIds.Contains(p.SourceId) && p.Id != pipeline.Id))
         {
             try
             {

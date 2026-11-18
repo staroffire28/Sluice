@@ -83,14 +83,14 @@ Un janitor limita el crecimiento del volumen. El **job es la unidad de retenció
 
 ### Snapshots origen (container Synapse Link en ADLS)
 
-Un segundo janitor purga carpetas CSV **ya procesadas** en el container origen de Synapse Link. Si varios pipelines leen la misma fuente, una carpeta solo cuenta como procesada cuando todos ellos (activos o no) la han procesado, y no se purga nada mientras alguno tenga un job en ejecución. El parquet consolidado (en su container dedicado o en el disco del portal) es el artefacto de recovery.
+Un segundo janitor purga carpetas CSV **ya procesadas** en el container origen de Synapse Link. Si varios pipelines leen la misma fuente, una carpeta solo cuenta como procesada cuando todos ellos (activos o no) la han procesado, y no se purga nada mientras alguno tenga un job en ejecución. La misma fuente es el mismo container de la misma cuenta, aunque se llegue a él con orígenes distintos; un origen cuya cuenta o container no se puede leer (configuración incompleta o inválida) cuenta como si leyera todos, así que sus pipelines también frenan la purga de los demás. El parquet consolidado (en su container dedicado o en el disco del portal) es el artefacto de recovery.
 
 - **Siempre se conservan**: las últimas 14 snapshots procesadas (piso K), snapshots pendientes o en export, todas las snapshots desde la más antigua que aún tenga que releer una tabla reanudada de un pipeline que lea la fuente, `Changelog/`, metadatos CDM y cualquier carpeta que no se llame como un snapshot de Synapse Link (`YYYY-MM-DDTHH.MM.SSZ`).
 - **Perilla**: `SourceSnapshotRetentionDays` en `/settings` (por defecto 30). `0` o negativo desactiva la purga.
 - **Cadencia**: cada 6 horas, solo en el orquestador; registrado como `snapshot-retention.sweep`.
 - **Recovery tras purga**: usa **Force** (o `POST /api/pipelines/{id}/reload-from-parquet`, mismo camino) para recargar SQL desde parquet consolidado. Incremental sigue leyendo CSV nuevos en ADLS.
 - **Dry-run**: `SourceSnapshotRetentionDryRun` en `/settings` — **activo por defecto**; simula sin borrar. Revisa `/snapshots` (columna Retención) y activity log `snapshot-retention.dry-run` antes de desactivarlo. Si al guardar la purga pasa a borrar de verdad (desactivar la simulación con la retención activa, o activar la retención con la simulación ya desactivada), Ajustes no guarda directamente: un diálogo avisa de que el siguiente barrido borrará del lago del cliente las carpetas ya procesadas más antiguas que esos días, sin vuelta atrás, y pide marcar que lo entiendes antes de confirmar. Cancelar no guarda nada.
-- **Certificación parquet**: `SourceSnapshotRetentionRequireParquet` (default activo) — no purga si falta algún `{pipeline}/{entity}.parquet` de cualquier pipeline que lea la fuente.
+- **Certificación parquet**: `SourceSnapshotRetentionRequireParquet` (default activo) — no purga si falta algún `{pipeline}/{entity}.parquet` de cualquier pipeline que lea la fuente (cada uno, en el almacén de parquet de su propio origen).
 - **Soft-delete**: habilita blob soft-delete en la storage account de Azure para recuperar carpetas borradas por error (configuración fuera del portal).
 
 ### Versiones del Parquet consolidado

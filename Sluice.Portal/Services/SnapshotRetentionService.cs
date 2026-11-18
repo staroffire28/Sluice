@@ -167,19 +167,23 @@ public sealed class SnapshotRetentionService
         var totalWouldDelete = 0;
         var totalSkipped = 0;
         var totalSkippedCert = 0;
-        var sweptSourceIds = new HashSet<string>(StringComparer.Ordinal);
+        var sweptStores = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var pipeline in _pipelines.List().Where(p => p.Enabled))
         {
-            // La purga es por fuente: una sola pasada por fuente aunque la lean varios pipelines,
-            // también si se omitió por job en ejecución o certificación incompleta.
-            if (!sweptSourceIds.Add(pipeline.SourceId))
+            // La purga es por almacén (cuenta + container): una sola pasada aunque lo lean varios
+            // pipelines o varias conexiones, también si se omitió por job en ejecución o certificación
+            // incompleta. Una conexión irresoluble tiene su propia pasada, que falla al abrirla.
+            if (!sweptStores.Add(_adlsFactory.SnapshotStoreKey(pipeline.SourceId) ?? pipeline.SourceId))
             {
                 continue;
             }
 
-            var sourcePipelineIds = _pipelines.List()
-                .Where(p => p.SourceId == pipeline.SourceId)
+            var storeSourceIds = SameStoreSourceIds(_pipelines, _adlsFactory, pipeline.SourceId);
+            var storePipelines = _pipelines.List()
+                .Where(p => storeSourceIds.Contains(p.SourceId))
+                .ToList();
+            var sourcePipelineIds = storePipelines
                 .Select(p => p.Id)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             if (runningPipelineIds.Overlaps(sourcePipelineIds))
@@ -191,31 +195,32 @@ public sealed class SnapshotRetentionService
             try
             {
                 var adls = await _adlsFactory.CreateAsync(pipeline.SourceId, cancellationToken);
-                var parquetStore = await _adlsFactory.CreateParquetStoreAsync(pipeline.SourceId, cancellationToken);
                 var allSnapshots = await adls.ListSnapshotFoldersAsync(cancellationToken);
                 var currentFolder = await adls.GetSettledSnapshotAsync(cancellationToken);
-                var floor = SharedLastProcessed(_pipelines, pipeline.SourceId);
+                var floor = SharedLastProcessed(_pipelines, storeSourceIds);
                 var selection = SnapshotSelector.Select(
                     allSnapshots,
                     floor,
                     currentFolder);
 
-                var analysis = Analyze(now, settings, allSnapshots, floor, selection, SharedBackfillFrom(_pipelines, pipeline.SourceId));
+                var analysis = Analyze(now, settings, allSnapshots, floor, selection, SharedBackfillFrom(_pipelines, storeSourceIds));
                 if (analysis.EligibleForPurge.Count == 0)
                 {
                     continue;
                 }
 
-                // Las carpetas son de la fuente: cada pipeline que la lee (activo o no) debe tener su
-                // parquet consolidado antes de purgar.
+                // Las carpetas son del almacén: cada pipeline que lo lee (activo o no) debe tener su
+                // parquet consolidado antes de purgar, buscado en el de su propia conexión (otra
+                // conexión al mismo container puede guardar el parquet en otro sitio).
                 if (settings.SourceSnapshotRetentionRequireParquet)
                 {
                     var certified = true;
-                    foreach (var sourcePipelineId in sourcePipelineIds)
+                    foreach (var sourcePipeline in storePipelines)
                     {
+                        var sourcePipelineId = sourcePipeline.Id;
                         var cert = await CertifyParquetAsync(
                             sourcePipelineId,
-                            parquetStore,
+                            await _adlsFactory.CreateParquetStoreAsync(sourcePipeline.SourceId, cancellationToken),
                             _pipelines.GetState(sourcePipelineId),
                             cancellationToken);
                         if (!cert.IsComplete)
@@ -249,12 +254,12 @@ public sealed class SnapshotRetentionService
                         break;
                     }
 
-                    var floorNow = SharedLastProcessed(_pipelines, pipeline.SourceId);
+                    var floorNow = SharedLastProcessed(_pipelines, storeSourceIds);
                     var selectionNow = SnapshotSelector.Select(
                         allSnapshots,
                         floorNow,
                         currentFolder);
-                    if (!Analyze(now, settings, allSnapshots, floorNow, selectionNow, SharedBackfillFrom(_pipelines, pipeline.SourceId))
+                    if (!Analyze(now, settings, allSnapshots, floorNow, selectionNow, SharedBackfillFrom(_pipelines, storeSourceIds))
                         .EligibleForPurge.Contains(folder, StringComparer.Ordinal))
                     {
                         continue;
@@ -345,12 +350,33 @@ public sealed class SnapshotRetentionService
         };
     }
 
-    // Varios pipelines pueden leer la misma fuente: el suelo de la purga es el snapshot procesado
+    // Las conexiones de origen que ven las mismas carpetas de snapshot que sourceId: las que abren la
+    // misma cuenta y container (IAdlsClientFactory.SnapshotStoreKey), aunque sean conexiones distintas.
+    // Una conexión cuya ubicación no se resuelve (borrada, config incompleta o ilegible) podría ser
+    // cualquiera: cuenta en todos los almacenes, para que sus pipelines sigan protegiendo lo que no
+    // han procesado.
+    public static IReadOnlySet<string> SameStoreSourceIds(IPipelineService pipelines, IAdlsClientFactory adlsFactory, string sourceId)
+    {
+        var storeKey = adlsFactory.SnapshotStoreKey(sourceId);
+        var sourceIds = new HashSet<string>(StringComparer.Ordinal) { sourceId };
+        foreach (var otherId in pipelines.List().Select(p => p.SourceId).Distinct(StringComparer.Ordinal))
+        {
+            var otherKey = adlsFactory.SnapshotStoreKey(otherId);
+            if (storeKey is null || otherKey is null || otherKey == storeKey)
+            {
+                sourceIds.Add(otherId);
+            }
+        }
+
+        return sourceIds;
+    }
+
+    // Varios pipelines pueden leer el mismo almacén: el suelo de la purga es el snapshot procesado
     // más antiguo entre todos ellos (activos o no). Si alguno aún no tiene estado, null: no se purga.
-    public static string? SharedLastProcessed(IPipelineService pipelines, string sourceId)
+    public static string? SharedLastProcessed(IPipelineService pipelines, IReadOnlySet<string> sourceIds)
     {
         string? floor = null;
-        foreach (var pipeline in pipelines.List().Where(p => p.SourceId == sourceId))
+        foreach (var pipeline in pipelines.List().Where(p => sourceIds.Contains(p.SourceId)))
         {
             var last = pipelines.GetState(pipeline.Id).LastProcessedSnapshot;
             if (string.IsNullOrWhiteSpace(last))
@@ -368,11 +394,11 @@ public sealed class SnapshotRetentionService
     }
 
     // Segundo suelo: una tabla reanudada relee desde el primer snapshot que se saltó en pausa
-    // (PendingBackfill). El más antiguo de los pipelines que leen la fuente, o null si no hay ninguno.
-    public static string? SharedBackfillFrom(IPipelineService pipelines, string sourceId)
+    // (PendingBackfill). El más antiguo de los pipelines que leen el almacén, o null si no hay ninguno.
+    public static string? SharedBackfillFrom(IPipelineService pipelines, IReadOnlySet<string> sourceIds)
     {
         string? from = null;
-        foreach (var pipeline in pipelines.List().Where(p => p.SourceId == sourceId))
+        foreach (var pipeline in pipelines.List().Where(p => sourceIds.Contains(p.SourceId)))
         {
             foreach (var snapshot in pipelines.GetState(pipeline.Id).PendingBackfill.Values)
             {
