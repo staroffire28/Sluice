@@ -1,7 +1,12 @@
 @* Diálogo declarativo para los formularios de las páginas. Fluent UI v5 eliminó Hidden de
    FluentDialog (se abre con ShowAsync/HideAsync); este envoltorio conserva @bind-Visible para
    que las páginas sigan controlando el diálogo con un bool. *@
-<FluentDialog @ref="_dialog" Modal="true" Class="@Class" OnStateChange="OnStateChangeAsync">
+@* FluentDialog 5.0.0 solo emite OnStateChange para los diálogos abiertos con DialogService: en uno
+   declarativo, el cierre con Esc no llegaba, el bool de la página se quedaba en true y el botón de
+   abrir ya no hacía nada. El evento toggle del fluent-dialog sí sube hasta aquí; display: contents
+   deja el div fuera de la maquetación. *@
+<div style="display: contents" @ondialogtoggle="OnToggleAsync">
+<FluentDialog @ref="_dialog" Modal="true" Class="@Class">
     <FluentDialogBody>
         <TitleTemplate>@Title</TitleTemplate>
         @* Apila el contenido en vertical con un espaciado común: sin esto, los diálogos sencillos
@@ -10,6 +15,7 @@
         <ActionTemplate>@Actions</ActionTemplate>
     </FluentDialogBody>
 </FluentDialog>
+</div>
 
 @code {
     private FluentDialog? _dialog;
@@ -41,9 +47,10 @@
     }
 
     // Cierre desde el propio diálogo (Esc): se avisa a la página para que su bool no quede abierto.
-    private async Task OnStateChangeAsync(DialogEventArgs e)
+    // Solo cuenta el toggle de este diálogo: los de desplegables y menús de dentro también suben aquí.
+    private async Task OnToggleAsync(DialogToggleEventArgs e)
     {
-        if (e.State == DialogState.Closed && _shown)
+        if (e.Id == _dialog?.Id && e.NewState == "closed" && _shown)
         {
             _shown = false;
             await VisibleChanged.InvokeAsync(false);
