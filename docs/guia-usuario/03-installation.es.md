@@ -7,6 +7,8 @@ Hay dos variantes de contenedor; elige la que corre tu host:
 - **Linux containers** — `Dockerfile.linux` + `docker-compose.linux.yml`.
 - **Windows containers** — `Dockerfile` + `docker-compose.yml`.
 
+Con Windows containers también puedes correrlo todo en un solo contenedor, `docker-compose.monolith.yml` (ver [Monolito o distribuido](#monolito-o-distribuido)).
+
 ## Requisitos de hardware
 
 El portal es liviano; los sistemas pesados (SQL Server, ADLS) son externos. Estas cifras son para el host que corre los contenedores.
@@ -27,7 +29,45 @@ El portal es liviano; los sistemas pesados (SQL Server, ADLS) son externos. Esta
 - **Host Windows**: Docker Desktop en modo **Windows containers** (Windows Server 2022 o Windows 11 + Hyper-V).
 - Un valor para `UI_API_KEY` en `.env` (o `AUTH_MODE=none` si quieres el acceso abierto, sin clave; ver Variables de entorno).
 
-Las credenciales de Azure/SQL **no** se ponen aquí: se configuran en el portal después de arrancar.
+Las credenciales de Azure/SQL **no** se ponen aquí: se configuran en el portal después de arrancar. Aquello a lo que apuntan tiene que existir antes: las tres secciones siguientes dicen qué tener listo.
+
+### Almacenamiento de Azure
+
+Sluice lee la exportación de una cuenta de almacenamiento ADLS Gen2 a través de su endpoint `dfs` (`https://<cuenta>.dfs.core.windows.net`). Antes de crear el origen, ten listo:
+
+- **La cuenta de almacenamiento y el contenedor** donde Synapse Link ya exporta (ver [Carpeta de Synapse Link](#carpeta-de-synapse-link)).
+- **Un contenedor para el Parquet**, en la misma cuenta, si guardas el Parquet en ADLS (la opción por defecto). Créalo antes: Sluice crea carpetas dentro, no el contenedor.
+- **Un registro de aplicación (entidad de servicio) en Microsoft Entra ID con un secreto de cliente.** El origen pide su ID de inquilino, su ID de cliente y su secreto; es el único tipo de identidad que admite Sluice (ni identidad administrada, ni clave de cuenta, ni SAS).
+- **El rol Storage Blob Data Contributor** para esa identidad sobre el contenedor de Synapse Link y sobre el de Parquet. Reader no basta: en el contenedor de Parquet Sluice sube, renombra (al archivar una versión) y borra ficheros, y en el de Synapse Link la purga de snapshots borra las carpetas ya procesadas (Ajustes, en simulación por defecto). Si guardas el Parquet en el disco del portal no hace falta contenedor de Parquet, y Sluice solo escribe en ADLS cuando la purga borra. Los cambios de rol pueden tardar unos minutos en aplicarse.
+
+El host necesita salida HTTPS hacia la cuenta y hacia Microsoft Entra ID, donde la identidad obtiene su token.
+
+### Destino SQL Server
+
+- **SQL Server** accesible por TCP desde el host. La página Destinos ofrece SQL Server 2016, 2017, 2019 y 2022, y **Probar conexión** detecta la versión del servidor.
+- **La base de datos, ya creada**: Sluice no la crea. Las tablas van en el esquema `dbo`.
+- **Un inicio de sesión de SQL Server (usuario y contraseña).** Es la única autenticación que admite el destino: no se admiten la autenticación de Windows (`Integrated Security`) ni la de Entra ID.
+- **Los roles `db_ddladmin`, `db_datareader` y `db_datawriter` (o `db_owner`)** para ese usuario en la base de datos; no hacen falta roles de servidor. Sluice los usa para:
+  - crear cada tabla en su primera carga, añadir columnas y ampliar las de texto cuando cambia el esquema del origen, crear un índice único sobre `Id` y vaciar las tablas al restablecer un pipeline (`TRUNCATE`) — `db_ddladmin`;
+  - cargar las filas mediante tablas temporales de staging y `MERGE`, y borrar las filas borradas en F&O y, en un re-sync, las que ya no están en el Parquet — `db_datawriter`;
+  - comprobar si una tabla ya tiene filas o Ids duplicados antes de cargarla, contar filas para la conciliación y leer valores para **Comparar valores** — `db_datareader`.
+- **Cifrado.** La conexión va siempre cifrada y se valida el certificado del servidor, salvo que marques **Confiar en el certificado del servidor**, que es solo para un certificado autofirmado que no puedas sustituir (ver [Conexiones](#conexiones)).
+
+### Carpeta de Synapse Link
+
+Synapse Link tiene que estar ya exportando las tablas al contenedor en CSV con actualizaciones incrementales por carpetas. Sluice espera encontrar en el contenedor:
+
+- **`Changelog/changelog.info`**: su primera línea nombra la carpeta que Synapse Link está escribiendo en ese momento.
+- **Una carpeta por exportación, con su hora UTC como nombre**, en el formato `YYYY-MM-DDTHH.MM.SSZ` (por ejemplo `2026-03-02T14.30.00Z`). Las carpetas con otro nombre no son snapshots y se ignoran. Sluice solo procesa las carpetas estrictamente anteriores a la que nombra el changelog: si el changelog falta, está vacío o nombra una carpeta que no existe, el pipeline espera (un job que se lance entonces termina como Stalled), y hasta que exista una carpeta anterior a esa no hay nada que procesar.
+
+Dentro de cada carpeta de snapshot:
+
+- **`model.json`** (metadatos CDM), cuyas particiones nombran los CSV de las tablas que cambiaron en ese intervalo. Una carpeta con carpetas de tabla pero sin `model.json`, o cuyo `model.json` nombra un fichero que falta o está vacío, cuenta como incompleta, y el pipeline no pasa de ella.
+- **Una carpeta por tabla** con sus ficheros `.csv`: sin fila de cabecera, separados por comas, con comillas dobles en los campos que lo necesitan, en UTF-8 y con las columnas en el orden del esquema de la tabla. Sluice los lee por orden de nombre.
+- **`Microsoft.Athena.TrickleFeedService/<tabla>-model.json`**: las columnas y tipos de cada tabla. Sluice lo busca en ese snapshot, luego en el último snapshot cerrado, luego en cualquier otro y por último en `Microsoft.Athena.TrickleFeedService/` en la raíz del contenedor.
+- **`OptionsetMetadata/GlobalOptionsetMetadata.csv`**: las etiquetas de los enums; solo se usa con `TRANSLATE_ENUMS`.
+
+Las carpetas cuyo nombre empieza por `_`, y `OptionsetMetadata`, `Changelog`, `EntitySyncFailure` y `Microsoft.Athena.TrickleFeedService`, no son tablas. Sluice identifica cada fila por su columna `Id`, se queda con la versión más reciente por `SinkModifiedOn` (y `versionnumber`, si la tabla la tiene) y trata las filas con `IsDelete` como borrados.
 
 ## Pruébalo: modo demo
 
@@ -45,6 +85,22 @@ Después abre `http://localhost:58480` y pulsa **Entrar**. La demo:
 - Cada 5 minutos cierra un snapshot nuevo con altas, cambios y borrados; el scheduler lo procesa, así que puedes ver el Incremental, los borrados y la conciliación. Entre snapshots el scheduler también puede lanzar un Incremental sin nada nuevo; es lo esperado.
 
 La cabecera muestra **Demo** y **Acceso abierto**. **No es para producción**: sin clave, con una contraseña de SQL fija salvo que definas `DEMO_SQL_PASSWORD` y con datos de prueba. El portal solo se publica en este equipo (`127.0.0.1`) y SQL Server solo para el portal. Para quitarla: `docker compose -f docker-compose.demo.yml down -v`. Cambia el puerto con `DEMO_HTTP_PORT` y la cadencia con `DEMO_SNAPSHOT_MINUTES`.
+
+## Monolito o distribuido
+
+`EXECUTION_MODE` en el fichero compose decide cómo corre Sluice:
+
+- **Distribuido** (`distributed`; `docker-compose.yml` con Windows containers, `docker-compose.linux.yml` con Linux): el orquestador (`api`) sirve la UI y agenda, y tres workers (`worker-ingest`, `worker-sql`, `worker-reconcile`) procesan cada uno una etapa de la cola del volumen compartido. Las etapas de jobs distintos corren a la vez, puedes añadir réplicas por etapa (ver [Escalado](#escalado)) y el scheduler avisa cuando una etapa tiene tareas pendientes y ningún worker vivo.
+- **Monolito** (`local`; `docker-compose.monolith.yml`): un solo contenedor, `portal`, sirve la UI, agenda y corre las tres etapas. Toma una tarea cada vez, sea de la etapa que sea, así que los jobs de pipelines distintos se esperan unos a otros.
+
+El monolito sirve para pruebas rápidas y despliegues pequeños: pocos pipelines y tablas que cargan pronto. Para producción con varios pipelines o tablas grandes, usa el modo distribuido. Límites del monolito:
+
+- `docker-compose.monolith.yml` construye la imagen de Windows (`Dockerfile`), así que necesita Docker en modo Windows containers. El repositorio no trae un compose de Linux para él, aunque el modo local en sí no depende de Windows (la demo lo corre sobre la imagen de Linux).
+- No escala: en modo local cada réplica agendaría los pipelines, y el compose publica un puerto fijo.
+- Todo comparte un proceso y 2 CPU, sin límite de memoria: una primera carga grande compite con la UI y el scheduler.
+- `TRANSLATE_ENUMS` viene apagado por defecto (encendido en los compose distribuidos; ver [Variables de entorno](#variables-de-entorno)).
+
+Para arrancarlo, sigue los pasos de abajo con `docker compose -f docker-compose.monolith.yml up -d --build` en el paso 2.
 
 ## Instalación (distribuido)
 
@@ -205,8 +261,8 @@ Las alertas se configuran en **Ajustes** (`/settings`): activa las alertas y peg
 
 Se crean en `/sources` y `/destinations`. Rellena los campos del `Config`; los secretos se cifran at-rest y se muestran como `***`. Si cambias a dónde apunta una conexión (el `host` de SQL, o la `account`, el `tenant_id` o el `client_id` de ADLS), vuelve a escribir su secreto: el guardado no se envía a otro destino. Mientras un pipeline que usa la conexión tenga un job en curso, Sluice no deja cambiar a dónde apunta (tampoco su `database`, `container`, `parquet_container` ni dónde guarda el Parquet). Si cambias el tipo de una conexión existente, no se arrastra su configuración anterior: solo se guardan los campos del tipo nuevo.
 
-- **Origen ADLS:** `account`, `container`, `parquet_container`, `tenant_id`, `client_id`, `client_secret`. La cuenta y los containers deben ser nombres válidos de Azure Storage (minúsculas y dígitos; los containers admiten también guiones).
+- **Origen ADLS:** `account`, `container`, `parquet_container`, `tenant_id`, `client_id`, `client_secret`. La cuenta y los containers deben ser nombres válidos de Azure Storage (minúsculas y dígitos; los containers admiten también guiones). Lo que necesita la identidad está en [Almacenamiento de Azure](#almacenamiento-de-azure).
 - **Dónde guardar el Parquet** (por origen): en un **contenedor de ADLS** (`parquet_container`, por defecto) o en el **disco del portal** (`DATA_DIR/parquet`, el volumen que ya comparten el portal y los workers). En el disco del portal no hace falta contenedor de Parquet ni permiso de escritura en ADLS, pero ahí se guarda el Parquet consolidado de todas las tablas: dimensiona el volumen de `DATA_DIR` para ello (más sus versiones anteriores, ver *Versiones del Parquet consolidado* en la referencia) e inclúyelo en las copias de seguridad. Al cambiarlo, Sluice copia el Parquet consolidado al sitio nuevo antes de usarlo y conserva la copia anterior; si la copia falla, el origen queda como estaba.
-- **Destino SQL:** `host`, `database`, `user`, `password`, **Confiar en el certificado del servidor** (`trust_server_certificate`, desmarcada por defecto: se valida el certificado del servidor; márcala solo para un SQL Server con certificado autofirmado que no puedas sustituir. Los destinos creados antes de esta opción siguen confiando en él) y `sql_version` (versión de SQL Server, default 2022). La versión no hace falta elegirla: **Probar conexión** en el formulario la detecta del servidor y la ajusta (sin guardar), y **Probar** desde la fila corrige la guardada si no coincide. Marcar **Confiar en el certificado del servidor** en un destino guardado pide de nuevo su contraseña: la guardada no se envía a un servidor cuyo certificado ya no se comprueba. Ya no se admite un `connection_string` completo. En el primer arranque tras actualizar, un destino que lo tuviera recibe de él sus campos (host, base de datos, usuario, contraseña y la opción del certificado). Si usaba otras opciones (por ejemplo `Integrated Security` o `Authentication`), la cadena se quita, el registro de actividad dice qué opciones lo impidieron y sus pipelines no arrancan hasta que escribas sus campos en **Destinos**.
+- **Destino SQL:** `host`, `database`, `user`, `password`, **Confiar en el certificado del servidor** (`trust_server_certificate`, desmarcada por defecto: se valida el certificado del servidor; márcala solo para un SQL Server con certificado autofirmado que no puedas sustituir. Los destinos creados antes de esta opción siguen confiando en él) y `sql_version` (versión de SQL Server, default 2022). Los roles que necesita el usuario están en [Destino SQL Server](#destino-sql-server). La versión no hace falta elegirla: **Probar conexión** en el formulario la detecta del servidor y la ajusta (sin guardar), y **Probar** desde la fila corrige la guardada si no coincide. Marcar **Confiar en el certificado del servidor** en un destino guardado pide de nuevo su contraseña: la guardada no se envía a un servidor cuyo certificado ya no se comprueba. Ya no se admite un `connection_string` completo. En el primer arranque tras actualizar, un destino que lo tuviera recibe de él sus campos (host, base de datos, usuario, contraseña y la opción del certificado). Si usaba otras opciones (por ejemplo `Integrated Security` o `Authentication`), la cadena se quita, el registro de actividad dice qué opciones lo impidieron y sus pipelines no arrancan hasta que escribas sus campos en **Destinos**.
 
 Usa **Probar conexión** en el formulario (origen o destino) para validar contra el ADLS/SQL real antes de guardar, o **Probar** desde la fila para una conexión ya guardada, antes de ejecutar un pipeline. En un origen, la prueba comprueba la cuenta, el contenedor y el changelog de Synapse Link. Las sentencias SQL de un pipeline no tienen límite de tiempo.
