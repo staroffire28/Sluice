@@ -253,6 +253,9 @@ public sealed class WorkerHostService : BackgroundService
     {
         using var timer = new PeriodicTimer(interval ?? CurrentHeartbeatInterval(), _time);
         var cancelSignalled = false;
+        // Fallos seguidos de renovación. Un valor < 1 no debe apagar la protección: cuenta como 1.
+        var maxFailures = Math.Max(1, _options.HeartbeatMaxFailures);
+        var consecutiveFailures = 0;
         try
         {
             while (await timer.WaitForNextTickAsync(ct))
@@ -276,6 +279,9 @@ public sealed class WorkerHostService : BackgroundService
                         return;
                     }
 
+                    // Lease renovado: la cuenta se reinicia aquí y no al final del try, para que un
+                    // fallo posterior (Touch, lectura del job) no sume hacia el abandono.
+                    consecutiveFailures = 0;
                     _workers.Touch(workerId);
 
                     // Cancelado desde la UI o la API: la cancelación ya no borra la tarea en vuelo,
@@ -291,6 +297,17 @@ public sealed class WorkerHostService : BackgroundService
                 {
                     // Un fallo puntual (IO transitorio) no debe apagar el latido para siempre: sin
                     // latido el lease vence y otra réplica ejecutaría el mismo stage en paralelo.
+                    // Pero un fallo sostenido sí: al llegar al tope se abandona el stage como con el
+                    // lease perdido, antes de que venza (con el latido a un tercio del lease, el
+                    // defecto de 2 deja un tercio de margen). La tarea queda en claimed/ y se reclama.
+                    consecutiveFailures++;
+                    if (consecutiveFailures >= maxFailures)
+                    {
+                        _logger.LogWarning(ex, "Heartbeat falló {Failures} veces seguidas para la tarea {TaskId} del stage {Stage}: se abandona el stage antes de que venza el lease.", consecutiveFailures, taskId, stage);
+                        onLeaseLost();
+                        return;
+                    }
+
                     _logger.LogWarning(ex, "Heartbeat falló para la tarea {TaskId}; se reintenta en el próximo tick.", taskId);
                 }
             }

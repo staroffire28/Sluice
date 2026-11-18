@@ -8,7 +8,9 @@ public sealed class AppOptions
     // Azure (ADLS) y SQL se configuran POR CONEXIÓN en el portal (Sources/Destinations),
     // no por variables de entorno. Los parámetros operativos editables (poll del scheduler,
     // lease de tareas, % de divergencia de reconcile) viven en /settings (ver SettingsStore).
-    public int HeartbeatMaxFailures { get; set; } = 3;
+    // Fallos seguidos de latido antes de abandonar el stage. 2 y no 3: el latido va a un tercio
+    // del lease, así que con 3 el abandono coincidiría con el vencimiento (margen cero).
+    public int HeartbeatMaxFailures { get; set; } = 2;
     // Default holgado sobre una cadencia real típica de exportación de Synapse Link (~12h,
     // dos volcados al día): con 4h (valor anterior) el banner de "changelog stalled" y la
     // alerta de background (PipelineSchedulerService) se disparaban como falso positivo durante
