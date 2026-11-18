@@ -58,7 +58,7 @@ Form logout without a valid token returns `400`, preventing cross-site logout tr
 
 ## TLS and reverse proxies
 
-Outside Development the session cookie is always `Secure` and the app sends HSTS: the portal is expected behind a TLS-terminating proxy, so plain-HTTP access cannot keep a session (browsers treat `localhost` as secure, scripts do not). The app enables `ForwardedHeaders` (`X-Forwarded-Proto`) so HSTS and `IsHttps` reflect the proxy's scheme.
+Outside Development the session cookie is always `Secure` and the app sends HSTS: the portal is expected behind a TLS-terminating proxy, so plain-HTTP access cannot keep a session (browsers and curl treat `localhost` as secure, PowerShell does not). The app enables `ForwardedHeaders` (`X-Forwarded-Proto`) so HSTS and `IsHttps` reflect the proxy's scheme.
 
 Set `KNOWN_PROXIES` / `KNOWN_NETWORKS` to restrict which proxies may supply `X-Forwarded-For` / `X-Forwarded-Proto`. Without them only loopback is trusted (the app logs a warning at startup): a client that reaches the app directly cannot spoof its IP, but behind a proxy in another container every user shares the proxy's IP in the login throttle.
 

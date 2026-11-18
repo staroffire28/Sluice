@@ -42,12 +42,23 @@ if ([string]::IsNullOrWhiteSpace($ApiKey)) {
     throw "ApiKey is required (UI_API_KEY). Example: -ApiKey `$env:UI_API_KEY"
 }
 
-$login = Invoke-WebRequest -Uri "$BaseUrl/auth/login" -Method Post `
-    -ContentType "application/json" -Body (@{ key = $ApiKey } | ConvertTo-Json) `
-    -WebSession $session -MaximumRedirection 0 -ErrorAction SilentlyContinue
-if ($login.StatusCode -notin 302, 200) {
-    throw "Login failed with status $($login.StatusCode)"
+# Fuera de Development la cookie de sesión es Secure y PowerShell no la devuelve por http (los
+# navegadores sí, en localhost): se copia sin Secure en la sesión para que las llamadas la lleven.
+try {
+    Invoke-WebRequest -Uri "$BaseUrl/auth/login" -Method Post -UseBasicParsing `
+        -ContentType "application/json" -Body (@{ key = $ApiKey } | ConvertTo-Json) `
+        -WebSession $session | Out-Null
 }
+catch {
+    $response = $_.Exception.Response
+    $detail = if ($response) { "HTTP $([int]$response.StatusCode)" } else { $_.Exception.Message }
+    throw "Login failed: $detail"
+}
+$cookie = $session.Cookies.GetCookies([Uri]($BaseUrl -replace '^http:', 'https:'))["sluice_session"]
+if (-not $cookie) {
+    throw "Login failed: no session cookie in the response"
+}
+$session.Cookies.Add([Uri]$BaseUrl, (New-Object System.Net.Cookie "sluice_session", $cookie.Value, "/"))
 
 $snapshots = Invoke-RestMethod -Uri "$BaseUrl/api/pipelines/$PipelineId/snapshots" -WebSession $session -TimeoutSec 60
 Write-Host "Settled snapshot: $($snapshots.settledSnapshot)"

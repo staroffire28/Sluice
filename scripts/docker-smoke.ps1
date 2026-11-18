@@ -33,16 +33,39 @@ do {
 } while ($true)
 
 $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+# Cada llamada obligatoria que falla se anota aquí y el smoke sigue con las demás; al final, si hay
+# alguna, termina con código 1 y el resumen.
+$failures = New-Object System.Collections.Generic.List[string]
+
+function Add-Failure([string]$Call, $ErrorRecord) {
+    $response = $ErrorRecord.Exception.Response
+    $detail = if ($response) { "HTTP $([int]$response.StatusCode)" } else { $ErrorRecord.Exception.Message }
+    $failures.Add("${Call}: $detail")
+    Write-Warning "${Call}: $detail"
+}
 
 if ([string]::IsNullOrWhiteSpace($ApiKey)) {
     throw "ApiKey is required (UI_API_KEY). Example: -ApiKey `$env:UI_API_KEY"
 }
 
-$login = Invoke-WebRequest -Uri "$BaseUrl/auth/login" -Method Post `
-    -ContentType "application/json" -Body (@{ key = $ApiKey } | ConvertTo-Json) `
-    -WebSession $session -MaximumRedirection 0 -ErrorAction SilentlyContinue
-if ($login.StatusCode -notin 302, 200) {
-    throw "Login failed with status $($login.StatusCode)"
+# Fuera de Development la cookie de sesión es Secure y PowerShell no la devuelve por http (los
+# navegadores sí, en localhost): se copia sin Secure en la sesión para que las llamadas la lleven.
+try {
+    Invoke-WebRequest -Uri "$BaseUrl/auth/login" -Method Post -UseBasicParsing `
+        -ContentType "application/json" -Body (@{ key = $ApiKey } | ConvertTo-Json) `
+        -WebSession $session | Out-Null
+    $cookie = $session.Cookies.GetCookies([Uri]($BaseUrl -replace '^http:', 'https:'))["sluice_session"]
+    if ($cookie) {
+        $session.Cookies.Add([Uri]$BaseUrl, (New-Object System.Net.Cookie "sluice_session", $cookie.Value, "/"))
+        Write-Host "Login OK"
+    }
+    else {
+        $failures.Add("Login: no session cookie in the response")
+        Write-Warning "Login: no session cookie in the response"
+    }
+}
+catch {
+    Add-Failure "Login" $_
 }
 
 try {
@@ -50,7 +73,7 @@ try {
     Write-Host "Execution mode: $($mode.mode)"
 }
 catch {
-    Write-Warning "Orchestration API: $($_.Exception.Message)"
+    Add-Failure "Orchestration API" $_
 }
 
 try {
@@ -58,7 +81,7 @@ try {
     Write-Host "Queue snapshot received (ingest pending=$($queue.ingest.pending))"
 }
 catch {
-    Write-Warning "Queue API: $($_.Exception.Message)"
+    Add-Failure "Queue API" $_
 }
 
 try {
@@ -69,7 +92,7 @@ try {
     }
 }
 catch {
-    Write-Warning "Pipelines API: $($_.Exception.Message)"
+    Add-Failure "Pipelines API" $_
 }
 
 if ($PipelineId) {
@@ -78,11 +101,11 @@ if ($PipelineId) {
         Write-Host "Snapshots API OK for $PipelineId (settled=$($snapshots.settledSnapshot), pending=$($snapshots.pendingSnapshots.Count))"
     }
     catch {
-        Write-Warning "Snapshots API: $($_.Exception.Message)"
+        Add-Failure "Snapshots API" $_
     }
 
     try {
-        $reconcileReport = Invoke-RestMethod -Uri "$BaseUrl/api/pipelines/$PipelineId/reports/reconcile" -WebSession $session -TimeoutSec 10 -ErrorAction SilentlyContinue
+        $reconcileReport = Invoke-RestMethod -Uri "$BaseUrl/api/pipelines/$PipelineId/reports/reconcile" -WebSession $session -TimeoutSec 10
         if ($reconcileReport) {
             Write-Host "Latest reconcile report: $($reconcileReport.id)"
         }
@@ -91,8 +114,21 @@ if ($PipelineId) {
         }
     }
     catch {
-        Write-Host "No reconcile report yet (expected on fresh install)"
+        # Solo el 404 es normal (aún no hay reporte); cualquier otro error cuenta como fallo.
+        $response = $_.Exception.Response
+        if ($response -and [int]$response.StatusCode -eq 404) {
+            Write-Host "No reconcile report yet (expected on fresh install)"
+        }
+        else {
+            Add-Failure "Reconcile report API" $_
+        }
     }
+}
+
+if ($failures.Count -gt 0) {
+    Write-Host "Smoke test FAILED ($($failures.Count) call(s)):"
+    $failures | ForEach-Object { Write-Host "  - $_" }
+    exit 1
 }
 
 Write-Host "Smoke test completed."
