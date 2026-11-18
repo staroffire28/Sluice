@@ -124,8 +124,8 @@
         <FluentButton Appearance="ButtonAppearance.Outline" data-testid="src-test-draft" OnClick="TestDraftAsync" Disabled="_testingDraft">
             @(_testingDraft ? L["Common.Testing"] : L["Page.Sources.TestConnection"])
         </FluentButton>
-        <FluentButton data-testid="src-cancel" OnClick="() => _showEditor = false">@L["Common.Cancel"]</FluentButton>
-        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="src-save" OnClick="Save">@L["Common.Save"]</FluentButton>
+        <FluentButton data-testid="src-cancel" Disabled="@_saving" OnClick="() => _showEditor = false">@L["Common.Cancel"]</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary" @ref="_saveButton" data-testid="src-save" Loading="@_saving" OnClick="Save">@L["Common.Save"]</FluentButton>
     </Actions>
 </InlineDialog>
 
@@ -139,6 +139,8 @@
     private bool _showEditor;
     private string? _testingId;
     private bool _testingDraft;
+    private bool _saving;
+    private FluentButton? _saveButton;
     private ConnectionTestResult? _draftTest;
     private string _editorTitle = "";
     // Se renueva en cada apertura: los FluentSelect con opciones a mano conservaban la
@@ -275,7 +277,34 @@
         }
     }
 
+    // Guardar puede esperar el lock de los pipelines o copiar los consolidados a otro almacén: mientras
+    // tanto el botón queda ocupado y un segundo clic o Enter no lanza otro guardado.
     private async Task Save()
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await SaveCoreAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+
+        // Ocupado, el botón se deshabilita y pierde el foco: si el diálogo sigue abierto (error), vuelve a él.
+        if (_showEditor)
+        {
+            StateHasChanged();
+            await _saveButton!.Element.FocusAsync();
+        }
+    }
+
+    private async Task SaveCoreAsync()
     {
         var copied = 0;
         var config = FormConfig();

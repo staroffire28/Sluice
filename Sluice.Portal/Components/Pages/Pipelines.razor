@@ -115,8 +115,8 @@
     </div>
     </ChildContent>
     <Actions>
-        <FluentButton data-testid="pipe-cancel" OnClick="() => _showEditor = false">@L["Common.Cancel"]</FluentButton>
-        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="pipe-save" OnClick="SaveEditor">@L["Common.Save"]</FluentButton>
+        <FluentButton data-testid="pipe-cancel" Disabled="@_saving" OnClick="() => _showEditor = false">@L["Common.Cancel"]</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary" @ref="_saveButton" data-testid="pipe-save" Loading="@_saving" OnClick="SaveEditor">@L["Common.Save"]</FluentButton>
     </Actions>
 </InlineDialog>
 
@@ -128,8 +128,8 @@
     <FluentCheckbox @bind-Value="_wipeState" Label="@L["Page.Pipelines.WipeState"]" />
     </ChildContent>
     <Actions>
-        <FluentButton OnClick="() => _showDelete = false">@L["Common.Cancel"]</FluentButton>
-        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="pipe-delete-confirm" OnClick="DeleteConfirmed">@L["Common.Delete"]</FluentButton>
+        <FluentButton Disabled="@_deleting" OnClick="() => _showDelete = false">@L["Common.Cancel"]</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary" @ref="_deleteButton" data-testid="pipe-delete-confirm" Loading="@_deleting" OnClick="DeleteConfirmed">@L["Common.Delete"]</FluentButton>
     </Actions>
 </InlineDialog>
 
@@ -166,6 +166,10 @@
     private int _totalPages = 1;
     private bool _showEditor;
     private bool _showDelete;
+    private bool _saving;
+    private bool _deleting;
+    private FluentButton? _saveButton;
+    private FluentButton? _deleteButton;
     private string _editorTitle = "";
     private string? _editingId;
     private string? _createdPipelineId;
@@ -295,7 +299,34 @@
         _showEditor = true;
     }
 
+    // Guardar otro origen, destino o modo de borrado espera el lock de ejecución (hasta 15 s): mientras
+    // tanto el botón queda ocupado y un segundo clic o Enter no lanza otro guardado.
     private async Task SaveEditor()
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await SaveEditorCoreAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+
+        // Ocupado, el botón se deshabilita y pierde el foco: si el diálogo sigue abierto (error), vuelve a él.
+        if (_showEditor)
+        {
+            StateHasChanged();
+            await _saveButton!.Element.FocusAsync();
+        }
+    }
+
+    private async Task SaveEditorCoreAsync()
     {
         try
         {
@@ -361,7 +392,34 @@
         _showDelete = true;
     }
 
+    // Borrar espera el lock de ejecución (hasta 15 s): mientras tanto el botón queda ocupado y un
+    // segundo clic o Enter no lanza otro borrado.
     private async Task DeleteConfirmed()
+    {
+        if (_deleting)
+        {
+            return;
+        }
+
+        _deleting = true;
+        try
+        {
+            await DeleteConfirmedCoreAsync();
+        }
+        finally
+        {
+            _deleting = false;
+        }
+
+        // Ocupado, el botón se deshabilita y pierde el foco: si el diálogo sigue abierto (error), vuelve a él.
+        if (_showDelete)
+        {
+            StateHasChanged();
+            await _deleteButton!.Element.FocusAsync();
+        }
+    }
+
+    private async Task DeleteConfirmedCoreAsync()
     {
         if (_deleteId is null)
         {
