@@ -40,7 +40,7 @@ curl -b /tmp/sluice-cookies.txt "$BASE/api/status"
 curl -b /tmp/sluice-cookies.txt -H "X-Sluice-Client: script" -X POST "$BASE/api/pipelines/<id>/run"
 ```
 
-With plain `http`, curl sends the session cookie back only to `localhost`: outside Development the cookie is `Secure`, so use `localhost` (not `127.0.0.1`) or `https`.
+Outside Development the session cookie is `Secure`: with plain `http`, curl sends it back to `localhost` as in the example; from another machine use `https`.
 
 PowerShell (same pattern as `scripts/docker-smoke.ps1`). Outside Development PowerShell never sends the `Secure` session cookie over plain `http`, so the example copies it without `Secure` into the session:
 
@@ -95,7 +95,7 @@ Rotating `UI_API_KEY` and restarting signs out every open session: cookies issue
 |---------|-------|-----|
 | Portal won't start in Production | Missing or placeholder key | Set a real `UI_API_KEY` in `.env` |
 | Form login shows "session expired" | Missing/expired antiforgery token | Reload `/login` and submit again |
-| `401` on API after login | Cookie not sent (outside Development it is `Secure`) | curl: use `-b cookies.txt` and `localhost`, not `127.0.0.1`. PowerShell: copy the cookie without `Secure` into the `-WebSession`, as in the example above |
+| `401` on API after login | Cookie not sent (outside Development it is `Secure`) | curl: use `-b cookies.txt` and `localhost` (or `https`). PowerShell: copy the cookie without `Secure` into the `-WebSession`, as in the example above |
 | Cookie not marked Secure behind proxy | Proxy not forwarding proto | Ensure `X-Forwarded-Proto: https` reaches the app (and, if `KNOWN_PROXIES` / `KNOWN_NETWORKS` are set, that the proxy is listed) |
 
 ## Related
