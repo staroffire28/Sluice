@@ -7,6 +7,8 @@ There are two container flavors, pick the one your host runs:
 - **Linux containers** — `Dockerfile.linux` + `docker-compose.linux.yml`.
 - **Windows containers** — `Dockerfile` + `docker-compose.yml`.
 
+With Windows containers you can also run everything in a single container, `docker-compose.monolith.yml` (see [Monolith or distributed](#monolith-or-distributed)).
+
 ## Hardware requirements
 
 The portal is light; the heavy systems (SQL Server, ADLS) are external. These figures are for the host running the containers.
@@ -27,7 +29,45 @@ The portal is light; the heavy systems (SQL Server, ADLS) are external. These fi
 - **Windows host**: Docker Desktop in **Windows containers** mode (Windows Server 2022 or Windows 11 + Hyper-V).
 - A value for `UI_API_KEY` in `.env` (or `AUTH_MODE=none` for open access without a key; see Environment variables).
 
-Azure/SQL credentials are **not** set here — you configure them in the portal after it starts.
+Azure/SQL credentials are **not** set here — you configure them in the portal after it starts. What they point to must exist before that: the next three sections say what to have ready.
+
+### Azure storage
+
+Sluice reads the export from an ADLS Gen2 storage account through its `dfs` endpoint (`https://<account>.dfs.core.windows.net`). Before creating the source, have ready:
+
+- **The storage account and the container** where Synapse Link already exports (see [Synapse Link export](#synapse-link-export)).
+- **A container for the Parquet**, in the same account, if you keep the Parquet in ADLS (the default). Create it beforehand: Sluice creates folders inside it, not the container itself.
+- **An app registration (service principal) in Microsoft Entra ID with a client secret.** The source asks for its tenant ID, client ID and client secret; it is the only kind of identity Sluice supports (no managed identity, account key or SAS).
+- **The Storage Blob Data Contributor role** for that identity on the Synapse Link container and on the Parquet container. Reader is not enough: in the Parquet container Sluice uploads, renames (when it archives a version) and deletes files, and in the Synapse Link container the snapshot purge deletes processed folders (Settings, dry run by default). If you keep the Parquet on the portal disk you need no Parquet container, and Sluice only writes to ADLS when the purge deletes. Role changes can take a few minutes to apply.
+
+The host needs outbound HTTPS access to the account and to Microsoft Entra ID, where the identity gets its token.
+
+### SQL Server destination
+
+- **SQL Server** reachable over TCP from the host. The Destinations page offers SQL Server 2016, 2017, 2019 and 2022, and **Test connection** detects the version from the server.
+- **The database, already created**: Sluice does not create it. The tables go in the `dbo` schema.
+- **A SQL Server login (user and password).** It is the only authentication the destination accepts: Windows authentication (`Integrated Security`) and Entra ID authentication are not supported.
+- **Roles `db_ddladmin`, `db_datareader` and `db_datawriter` (or `db_owner`)** for that user in the database; no server roles are needed. Sluice uses them to:
+  - create each table on its first load, add columns and widen text columns when the source schema changes, create a unique index on `Id`, and empty the tables when you reset a pipeline (`TRUNCATE`) — `db_ddladmin`;
+  - load rows through temporary staging tables and `MERGE`, and delete the rows deleted in F&O and, on a re-sync, the rows no longer in the Parquet — `db_datawriter`;
+  - check whether a table already has rows or duplicate Ids before loading it, count rows for Reconcile and read values for **Compare values** — `db_datareader`.
+- **Encryption.** The connection is always encrypted and the server certificate is validated unless you tick **Trust the server certificate**, which is only for a self-signed certificate you cannot replace (see [Connections](#connections)).
+
+### Synapse Link export
+
+Synapse Link must already be exporting the tables to the container as CSV with incremental folder updates. Sluice expects this in the container:
+
+- **`Changelog/changelog.info`**: its first line names the folder Synapse Link is writing now.
+- **One folder per export, named with its UTC time** as `YYYY-MM-DDTHH.MM.SSZ` (for example `2026-03-02T14.30.00Z`). Folders with other names are not snapshots and are ignored. Sluice only processes folders strictly older than the one the changelog names: with the changelog missing or empty, or naming a folder that does not exist, the pipeline waits (a job started then ends as Stalled), and until a folder older than that one exists there is nothing to process.
+
+Inside each snapshot folder:
+
+- **`model.json`** (CDM metadata), whose partitions name the CSV files of the tables that changed in that interval. A folder with table folders but no `model.json`, or whose `model.json` names a missing or empty file, counts as incomplete, and the pipeline does not go past it.
+- **One folder per table** with its `.csv` files: no header row, comma-separated, double quotes around the fields that need them, UTF-8, with the columns in the order of the table schema. Sluice reads them in name order.
+- **`Microsoft.Athena.TrickleFeedService/<table>-model.json`**: the columns and types of each table. Sluice looks for it in that snapshot, then in the last closed snapshot, then in any other, and last in `Microsoft.Athena.TrickleFeedService/` at the container root.
+- **`OptionsetMetadata/GlobalOptionsetMetadata.csv`**: enum labels, used only with `TRANSLATE_ENUMS`.
+
+Folders whose name starts with `_`, and `OptionsetMetadata`, `Changelog`, `EntitySyncFailure` and `Microsoft.Athena.TrickleFeedService`, are not tables. Sluice identifies each row by its `Id` column, keeps the newest version by `SinkModifiedOn` (and `versionnumber`, when the table has it), and treats the rows with `IsDelete` as deletions.
 
 ## Try it: demo mode
 
@@ -45,6 +85,22 @@ Then open `http://localhost:58480` and press **Enter**. The demo:
 - Every 5 minutes closes a new snapshot with inserts, updates and deletes; the scheduler processes it, so you can watch Incremental, the deletes and Reconcile. Between snapshots the scheduler may also run an Incremental with nothing new; that is expected.
 
 The header shows **Demo** and **Open access**. It is **not for production**: no key, a fixed SQL password unless you set `DEMO_SQL_PASSWORD`, and test data. The portal is published only on this machine (`127.0.0.1`), and SQL Server only to the portal. Remove it with `docker compose -f docker-compose.demo.yml down -v`. Change the port with `DEMO_HTTP_PORT` and the cadence with `DEMO_SNAPSHOT_MINUTES`.
+
+## Monolith or distributed
+
+`EXECUTION_MODE` in the compose file sets how Sluice runs:
+
+- **Distributed** (`distributed`; `docker-compose.yml` with Windows containers, `docker-compose.linux.yml` with Linux): the orchestrator (`api`) serves the UI and schedules, and three workers (`worker-ingest`, `worker-sql`, `worker-reconcile`) each process one stage from the queue on the shared volume. Stages of different jobs run at the same time, you can add replicas per stage (see [Scaling](#scaling)), and the scheduler alerts when a stage has pending tasks and no live worker.
+- **Monolith** (`local`; `docker-compose.monolith.yml`): a single container, `portal`, serves the UI, schedules and runs the three stages. It takes one task at a time, whatever its stage, so jobs of different pipelines wait for each other.
+
+The monolith suits smoke tests and small deployments: few pipelines and tables that load quickly. For production with several pipelines or large tables, use distributed mode. Limits of the monolith:
+
+- `docker-compose.monolith.yml` builds the Windows image (`Dockerfile`), so it needs Docker in Windows containers mode. The repository has no Linux compose file for it, although local mode itself is not tied to Windows (the demo runs it on the Linux image).
+- It does not scale: in local mode every replica would schedule the pipelines, and the compose file publishes a fixed port.
+- Everything shares one process and 2 CPUs, with no memory limit: a large first load competes with the UI and the scheduler.
+- `TRANSLATE_ENUMS` is off by default (on in the distributed compose files; see [Environment variables](#environment-variables)).
+
+To start it, follow the steps below with `docker compose -f docker-compose.monolith.yml up -d --build` in step 2.
 
 ## Install (distributed)
 
@@ -205,8 +261,8 @@ Alerts are configured in **Settings** (`/settings`): enable alerts and paste you
 
 Created in `/sources` and `/destinations`. Fill the `Config` fields; secrets are encrypted at rest and shown as `***`. If you change where a connection points (the SQL `host`, or the ADLS `account`, `tenant_id` or `client_id`), type its secret again: the saved one is not sent to a different target. While a pipeline that uses the connection has a job running, Sluice refuses to change where it points (also its `database`, `container`, `parquet_container` or where it keeps the Parquet). Changing the type of an existing connection does not carry over its previous configuration: only the fields of the new type are saved.
 
-- **Source ADLS:** `account`, `container`, `parquet_container`, `tenant_id`, `client_id`, `client_secret`. The account and container names must be valid Azure Storage names (lowercase letters and digits; containers may also use hyphens).
+- **Source ADLS:** `account`, `container`, `parquet_container`, `tenant_id`, `client_id`, `client_secret`. The account and container names must be valid Azure Storage names (lowercase letters and digits; containers may also use hyphens). What the identity needs is in [Azure storage](#azure-storage).
 - **Where to keep the Parquet** (per source): in an **ADLS container** (`parquet_container`, the default) or on the **portal disk** (`DATA_DIR/parquet`, the volume the portal and the workers already share). The portal disk needs no Parquet container and no write access to ADLS, but the consolidated Parquet of every table is stored there: size the `DATA_DIR` volume for it (plus its earlier versions, see *Consolidated Parquet versions* in the reference) and include it in your backups. When you change it, Sluice copies the consolidated Parquet to the new place before using it and keeps the old copy; if the copy fails, the source stays as it was.
-- **Destination SQL:** `host`, `database`, `user`, `password`, **Trust the server certificate** (`trust_server_certificate`, off by default: the server certificate is validated; tick it only for a SQL Server with a self-signed certificate you cannot replace. Destinations created before this option keep trusting it), and `sql_version` (SQL Server version, default 2022). You don't need to pick the version: **Test connection** in the form detects it from the server and sets it (without saving), and **Test** from the row fixes the saved one if it doesn't match. Ticking **Trust the server certificate** on a saved destination asks for its password again: the saved one is not sent to a server whose certificate is no longer checked. A full `connection_string` is no longer accepted. On the first start after the update, a destination that had one gets its fields from it (host, database, user, password and the certificate option). If it used other options (for example `Integrated Security` or `Authentication`), the string is removed, the activity log says which options blocked it, and its pipelines don't start until you fill in its fields in **Destinations**.
+- **Destination SQL:** `host`, `database`, `user`, `password`, **Trust the server certificate** (`trust_server_certificate`, off by default: the server certificate is validated; tick it only for a SQL Server with a self-signed certificate you cannot replace. Destinations created before this option keep trusting it), and `sql_version` (SQL Server version, default 2022). The roles the user needs are in [SQL Server destination](#sql-server-destination). You don't need to pick the version: **Test connection** in the form detects it from the server and sets it (without saving), and **Test** from the row fixes the saved one if it doesn't match. Ticking **Trust the server certificate** on a saved destination asks for its password again: the saved one is not sent to a server whose certificate is no longer checked. A full `connection_string` is no longer accepted. On the first start after the update, a destination that had one gets its fields from it (host, database, user, password and the certificate option). If it used other options (for example `Integrated Security` or `Authentication`), the string is removed, the activity log says which options blocked it, and its pipelines don't start until you fill in its fields in **Destinations**.
 
 Use **Test connection** in the form (source or destination) to validate against the real ADLS/SQL before saving, or **Test** from the row for a saved connection, before running a pipeline. For a source, the test checks the account, the container and the Synapse Link changelog. SQL statements of a pipeline have no time limit.

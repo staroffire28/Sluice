@@ -109,7 +109,7 @@ When a job or a connection test fails with a known error, the portal shows what 
 | Error | Usual cause | What to do |
 |---|---|---|
 | Could not sign in to SQL Server (18456) | Wrong destination user or password, or disabled login. | Fix them in Destinations and press Test connection. |
-| The destination database does not exist (4060) | The database does not exist or the user cannot access it. | Create it (Sluice does not) or fix its name, and grant access. |
+| The destination database does not exist (4060) | The database does not exist or the user cannot access it. | Create it (Sluice does not) or fix its name, and grant access ([roles](03-installation.md#sql-server-destination)). |
 | SQL Server cannot be reached | Host does not resolve, port closed or blocked by a firewall. | Check host and port (1433 by default) and that TCP connections are allowed. |
 | SQL Server took too long to respond | Slow network, or a busy or blocked server. | Check load and blocking, then Retry. |
 | Deadlock in SQL Server (1205) | Another session locked the same rows. | Retry; if it repeats, check concurrent writers. |
@@ -117,7 +117,7 @@ When a job or a connection test fails with a known error, the portal shows what 
 | Duplicate Id in the destination table (2627/2601) | The table already has a row with that Id. | Re-sync the table from Tables (Reload). |
 | A value does not fit in the destination column (8152/2628) | A column type was changed by hand. | Restore the type (or drop the table) and run Force. |
 | The MERGE received the same Id twice (8672) | The consolidated Parquet has duplicate Ids. | Reset the pipeline and run it. |
-| No permission on the ADLS storage (403) | The identity lacks a role on a container. | Give it **Storage Blob Data Contributor** on the Synapse Link and Parquet containers. |
+| No permission on the ADLS storage (403) | The identity lacks a role on a container. | Give it **Storage Blob Data Contributor** on the Synapse Link and Parquet containers ([details](03-installation.md#azure-storage)). |
 | ADLS container or path not found (404) | Wrong account or container name. | Check them in Sources. |
 | The Azure credentials are not valid (`AADSTS…`) | Expired or wrong secret, or wrong tenant/client id. | Create a new secret and update it in Sources. |
 | The storage account cannot be found | The account name does not resolve. | Check the name and outbound access to `*.dfs.core.windows.net`. |

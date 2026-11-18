@@ -109,7 +109,7 @@ Cuando un job o una prueba de conexión falla con un error conocido, el portal m
 | Error | Causa habitual | Qué hacer |
 |---|---|---|
 | No se pudo iniciar sesión en SQL Server (18456) | Usuario o contraseña del destino incorrectos, o login deshabilitado. | Corrígelos en Destinos y pulsa Probar conexión. |
-| No existe la base de datos de destino (4060) | La base no existe o el usuario no tiene acceso. | Créala (Sluice no la crea) o corrige su nombre, y da acceso. |
+| No existe la base de datos de destino (4060) | La base no existe o el usuario no tiene acceso. | Créala (Sluice no la crea) o corrige su nombre, y da acceso ([roles](03-installation.es.md#destino-sql-server)). |
 | No se puede llegar al servidor SQL | El host no se resuelve, el puerto está cerrado o un firewall lo bloquea. | Revisa host y puerto (1433 por defecto) y que se permitan conexiones TCP. |
 | SQL Server tardó demasiado en responder | Red lenta, o servidor saturado o bloqueado. | Revisa la carga y los bloqueos, y usa Reintentar. |
 | Interbloqueo en SQL Server (1205) | Otra sesión bloqueó las mismas filas. | Reintentar; si se repite, revisa quién escribe a la vez. |
@@ -117,7 +117,7 @@ Cuando un job o una prueba de conexión falla con un error conocido, el portal m
 | Id duplicado en la tabla de destino (2627/2601) | La tabla ya tiene una fila con ese Id. | Re-sincroniza la tabla desde Tablas (Reload). |
 | Un valor no cabe en la columna de destino (8152/2628) | Se cambió a mano el tipo de una columna. | Restaura el tipo (o borra la tabla) y ejecuta Forzar. |
 | El MERGE recibió el mismo Id dos veces (8672) | El Parquet consolidado tiene Ids duplicados. | Restablece el pipeline y ejecútalo. |
-| Sin permiso en el almacenamiento ADLS (403) | A la identidad le falta un rol sobre un contenedor. | Asígnale **Storage Blob Data Contributor** sobre los contenedores de Synapse Link y de Parquet. |
+| Sin permiso en el almacenamiento ADLS (403) | A la identidad le falta un rol sobre un contenedor. | Asígnale **Storage Blob Data Contributor** sobre los contenedores de Synapse Link y de Parquet ([detalle](03-installation.es.md#almacenamiento-de-azure)). |
 | No se encuentra el contenedor o la ruta en ADLS (404) | Nombre de cuenta o de contenedor incorrecto. | Revísalos en Orígenes. |
 | Las credenciales de Azure no son válidas (`AADSTS…`) | Secreto caducado o incorrecto, o tenant/client id erróneos. | Genera un secreto nuevo y actualízalo en Orígenes. |
 | No se encuentra la cuenta de almacenamiento | El nombre de la cuenta no se resuelve. | Revisa el nombre y la salida hacia `*.dfs.core.windows.net`. |
