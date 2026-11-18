@@ -300,7 +300,14 @@
         if (_showEditor)
         {
             StateHasChanged();
-            await _saveButton!.Element.FocusAsync();
+            try
+            {
+                await _saveButton!.Element.FocusAsync();
+            }
+            catch (JSException)
+            {
+                // La página puede ya no estar en pantalla: el usuario navegó a otra mientras corría la acción.
+            }
         }
     }
 

@@ -350,7 +350,14 @@
         if (!started && _showColumns)
         {
             StateHasChanged();
-            await _resyncButton!.Element.FocusAsync();
+            try
+            {
+                await _resyncButton!.Element.FocusAsync();
+            }
+            catch (JSException)
+            {
+                // La página puede ya no estar en pantalla: el usuario navegó a otra mientras corría la acción.
+            }
         }
     }
 }
