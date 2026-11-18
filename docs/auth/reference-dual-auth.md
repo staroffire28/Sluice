@@ -109,8 +109,10 @@ Any other path — including any other `/internal/...` path — requires a valid
 curl -c cookies.txt -X POST http://localhost:58472/auth/login \
   -H "Content-Type: application/json" \
   -d '{"Key":"your-ui-key"}' \
-  -L -o /dev/null -w "%{http_code}\n"
+  -o /dev/null -w "%{http_code}\n"
 ```
+
+Prints `302` when signed in, `401` for a wrong key.
 
 ### Authenticated API call
 

@@ -26,11 +26,11 @@ Automation and smoke scripts use JSON login; antiforgery is not required for `ap
 BASE=http://localhost:58472
 UI_KEY=your-ui-key
 
-# Login (follow redirect, save cookie)
+# Login (save cookie; 302 = signed in, 401 = wrong key)
 curl -c /tmp/sluice-cookies.txt -X POST "$BASE/auth/login" \
   -H "Content-Type: application/json" \
   -d "{\"Key\":\"$UI_KEY\"}" \
-  -L -o /dev/null -s -w "login: %{http_code}\n"
+  -o /dev/null -s -w "login: %{http_code}\n"
 
 # Authenticated API call
 curl -b /tmp/sluice-cookies.txt "$BASE/api/status"
@@ -40,15 +40,20 @@ curl -b /tmp/sluice-cookies.txt "$BASE/api/status"
 curl -b /tmp/sluice-cookies.txt -H "X-Sluice-Client: script" -X POST "$BASE/api/pipelines/<id>/run"
 ```
 
-PowerShell (same pattern as `scripts/docker-smoke.ps1`):
+Outside Development the session cookie is `Secure`: with plain `http`, curl sends it back to `localhost` as in the example; from another machine use `https`.
+
+PowerShell (same pattern as `scripts/docker-smoke.ps1`). Outside Development PowerShell never sends the `Secure` session cookie over plain `http`, so the example copies it without `Secure` into the session:
 
 ```powershell
+$base = "http://localhost:58472"
 $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-Invoke-WebRequest -Uri "http://localhost:58472/auth/login" -Method Post `
+Invoke-WebRequest -Uri "$base/auth/login" -Method Post -UseBasicParsing `
   -ContentType "application/json" -Body (@{ Key = $env:UI_API_KEY } | ConvertTo-Json) `
-  -WebSession $session -MaximumRedirection 0 -ErrorAction SilentlyContinue
-Invoke-RestMethod -Uri "http://localhost:58472/api/orchestration/mode" -WebSession $session
-Invoke-RestMethod -Uri "http://localhost:58472/api/pipelines/<id>/run" -Method Post `
+  -WebSession $session | Out-Null
+$cookie = $session.Cookies.GetCookies([Uri]($base -replace '^http:', 'https:'))["sluice_session"]
+$session.Cookies.Add([Uri]$base, (New-Object System.Net.Cookie "sluice_session", $cookie.Value, "/"))
+Invoke-RestMethod -Uri "$base/api/orchestration/mode" -WebSession $session
+Invoke-RestMethod -Uri "$base/api/pipelines/<id>/run" -Method Post `
   -Headers @{ 'X-Sluice-Client' = 'script' } -WebSession $session
 ```
 
@@ -90,7 +95,7 @@ Rotating `UI_API_KEY` and restarting signs out every open session: cookies issue
 |---------|-------|-----|
 | Portal won't start in Production | Missing or placeholder key | Set a real `UI_API_KEY` in `.env` |
 | Form login shows "session expired" | Missing/expired antiforgery token | Reload `/login` and submit again |
-| `401` on API after login | Cookie not sent | Use `-b cookies.txt` (curl) or `-WebSession` (PowerShell) |
+| `401` on API after login | Cookie not sent (outside Development it is `Secure`) | curl: use `-b cookies.txt` and `localhost` (or `https`). PowerShell: copy the cookie without `Secure` into the `-WebSession`, as in the example above |
 | Cookie not marked Secure behind proxy | Proxy not forwarding proto | Ensure `X-Forwarded-Proto: https` reaches the app (and, if `KNOWN_PROXIES` / `KNOWN_NETWORKS` are set, that the proxy is listed) |
 
 ## Related
