@@ -121,3 +121,7 @@ Cuando un job o una prueba de conexión falla con un error conocido, el portal m
 | No se encuentra el contenedor o la ruta en ADLS (404) | Nombre de cuenta o de contenedor incorrecto. | Revísalos en Orígenes. |
 | Las credenciales de Azure no son válidas (`AADSTS…`) | Secreto caducado o incorrecto, o tenant/client id erróneos. | Genera un secreto nuevo y actualízalo en Orígenes. |
 | No se encuentra la cuenta de almacenamiento | El nombre de la cuenta no se resuelve. | Revisa el nombre y la salida hacia `*.dfs.core.windows.net`. |
+
+## Notas de actualización
+
+- **Columnas de fecha con zona horaria (`DATETIMEOFFSET`) cargadas en un host fuera de UTC**: antes de este arreglo, el portal guardaba la hora UTC de estas columnas con el offset de la zona horaria del host, así que el instante quedaba desplazado ese offset (por ejemplo, 10:00Z se guardaba como 10:00-05:00 en un host en UTC-5). Solo afecta a portales cuyo host (o contenedor, por `TZ` o por un contenedor Windows que hereda la zona del host) no está en UTC, y solo a tablas con columnas de fecha con zona. Las cargas nuevas guardan el instante correcto con offset cero, y las filas ya cargadas conservan el offset viejo hasta que se reescriben: ejecuta **Forzar** para corregirlas. Mientras tanto, los incrementales y **Comparar valores** tratan bien los dos tipos de fila.

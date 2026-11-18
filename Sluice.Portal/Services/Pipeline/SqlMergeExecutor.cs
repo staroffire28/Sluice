@@ -1,4 +1,5 @@
 using System.Data;
+using System.Globalization;
 using Microsoft.Data.SqlClient;
 using Sluice.Portal.Models;
 using Sluice.Portal.Services.Adls;
@@ -739,7 +740,7 @@ public sealed class SqlMergeExecutor : ISqlMergeExecutor
         return map.TryGetValue(option, out var label) ? label : null;
     }
 
-    private static object? CoerceForSql(object? value, string sqlType)
+    internal static object? CoerceForSql(object? value, string sqlType)
     {
         if (value is null)
         {
@@ -749,6 +750,21 @@ public sealed class SqlMergeExecutor : ISqlMergeExecutor
         if (sqlType.StartsWith("UNIQUEIDENTIFIER", StringComparison.OrdinalIgnoreCase))
         {
             return value is Guid g ? g : Guid.Parse(value.ToString()!);
+        }
+
+        // DATETIMEOFFSET antes que el prefijo DATETIME: un DateTime en esa columna hace que SqlBulkCopy
+        // le ponga el offset local del proceso (hora UTC con el offset del host: instante desplazado).
+        // Se envía el mismo instante con offset cero. El parquet trae la hora UTC como DateTime (con
+        // Kind Utc o sin Kind): se toman sus ticks tal cual, sin pasar por la zona del host.
+        if (sqlType.StartsWith("DATETIMEOFFSET", StringComparison.OrdinalIgnoreCase))
+        {
+            return value switch
+            {
+                DateTimeOffset dto => dto.ToUniversalTime(),
+                DateTime dt => new DateTimeOffset(dt.Ticks, TimeSpan.Zero),
+                string s => DateTimeOffset.Parse(s, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal).ToUniversalTime(),
+                _ => null,
+            };
         }
 
         if (sqlType.StartsWith("DATETIME", StringComparison.OrdinalIgnoreCase))
@@ -770,11 +786,16 @@ public sealed class SqlMergeExecutor : ISqlMergeExecutor
         return value;
     }
 
-    private static Type MapClrType(string sqlType)
+    internal static Type MapClrType(string sqlType)
     {
         if (sqlType.StartsWith("UNIQUEIDENTIFIER", StringComparison.OrdinalIgnoreCase))
         {
             return typeof(Guid);
+        }
+
+        if (sqlType.StartsWith("DATETIMEOFFSET", StringComparison.OrdinalIgnoreCase))
+        {
+            return typeof(DateTimeOffset);
         }
 
         if (sqlType.StartsWith("DATETIME", StringComparison.OrdinalIgnoreCase))
