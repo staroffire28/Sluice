@@ -734,6 +734,48 @@ fluent-button[appearance="subtle"]:not([icon-only])[disabled] {
     overflow-wrap: anywhere;
 }
 
+/* Diálogos de detalle (Logs, comparación de valores): el texto completo que en la tabla se recorta,
+   en varias líneas y respetando sus saltos. */
+.detail-list {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 0.375rem 1rem;
+    margin: 0;
+}
+.detail-list dt {
+    font-weight: 600;
+}
+.detail-list dd,
+.detail-text {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+/* Texto de celda que abre un detalle (mensaje de Logs): un botón nativo con el aspecto del texto,
+   una línea con ellipsis. El anillo de foco va por dentro: la celda compacta recorta lo que sobresale. */
+.cell-button {
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+}
+.cell-button:hover {
+    text-decoration: underline;
+}
+.cell-button:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2, #000);
+    outline-offset: -2px;
+}
+.detail-ids {
+    margin: 0;
+    padding-inline-start: 1.25rem;
+    overflow-wrap: anywhere;
+}
+
 .cell-ellipsis {
     display: block;
     max-width: 100%;

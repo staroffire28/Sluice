@@ -71,7 +71,10 @@
                 <span class="cell-ellipsis" title="@context.Action">@context.Action</span>
             </TemplateColumn>
             <TemplateColumn Title="@L["Page.Logs.Col.Message"]">
-                <span class="cell-ellipsis" title="@RenderMessage(context)">@RenderMessage(context)</span>
+                @* Los tooltips no se leen en móvil ni con teclado: el mensaje es un botón que abre la
+                   entrada completa en un diálogo. Su nombre es el propio texto (sin aria-label). *@
+                <button type="button" class="cell-ellipsis cell-button" title="@RenderMessage(context)" aria-haspopup="dialog"
+                        data-testid="log-detail" @onclick="@(() => _detail = context)">@(RenderMessage(context) is { Length: > 0 } message ? message : "—")</button>
             </TemplateColumn>
             <TemplateColumn Title="@L["Page.Logs.Col.Pipeline"]">
                 @* El nombre del pipeline; el id, en el tooltip. *@
@@ -88,6 +91,38 @@
     </PageSection>
 </FluentStack>
 
+@* Un solo diálogo para la entrada elegida: todos los campos completos, como texto seleccionable. *@
+<InlineDialog Visible="@(_detail is not null)" VisibleChanged="@(v => { if (!v) _detail = null; })" Title="@L["Page.Logs.Detail.Title"]" Class="dialog-wide">
+    <ChildContent>
+        @if (_detail is { } e)
+        {
+            <dl class="detail-list">
+                <dt>@L["Page.Logs.Col.Date"]</dt>
+                <dd data-testid="log-detail-date">@Time.Format(e.Timestamp, "G")</dd>
+                <dt>@L["Page.Logs.Col.Source"]</dt>
+                <dd>@(e.Source == "user" ? L["Page.Logs.Source.User"] : L["Page.Logs.Source.System"])</dd>
+                <dt>@L["Page.Logs.Col.Actor"]</dt>
+                <dd>@(e.ActorLabel ?? "—")</dd>
+                <dt>@L["Page.Logs.Col.Host"]</dt>
+                <dd data-testid="log-detail-host">@(e.HostName ?? "—")</dd>
+                <dt>@L["Page.Logs.Col.Level"]</dt>
+                <dd>@EventLevelLabels.Get(L, e.Level)</dd>
+                <dt>@L["Page.Logs.Col.Action"]</dt>
+                <dd data-testid="log-detail-action">@e.Action</dd>
+                <dt>@L["Page.Logs.Col.Message"]</dt>
+                <dd data-testid="log-detail-message">@RenderMessage(e)</dd>
+                <dt>@L["Page.Logs.Col.Pipeline"]</dt>
+                <dd data-testid="log-detail-pipeline">@(e.PipelineId is { } pipelineId ? $"{PipelineName(pipelineId)} ({pipelineId})" : "—")</dd>
+                <dt>@L["Page.Logs.Col.Job"]</dt>
+                <dd data-testid="log-detail-job">@(e.JobId ?? "—")</dd>
+            </dl>
+        }
+    </ChildContent>
+    <Actions>
+        <FluentButton Appearance="ButtonAppearance.Subtle" data-testid="log-detail-close" OnClick="@(() => _detail = null)">@L["Common.Close"]</FluentButton>
+    </Actions>
+</InlineDialog>
+
 @code {
     private List<ActivityLogEntry> _entries = [];
     private Dictionary<string, string> _pipelineNames = [];
@@ -99,6 +134,7 @@
     private const int PageSize = 25;
     private int _totalCount;
     private int _totalPages = 1;
+    private ActivityLogEntry? _detail;
 
     protected override void OnInitialized() => Load();
 
