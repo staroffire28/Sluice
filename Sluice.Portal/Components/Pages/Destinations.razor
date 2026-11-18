@@ -116,8 +116,8 @@
         <FluentButton Appearance="ButtonAppearance.Outline" data-testid="dst-detect" OnClick="DetectVersionAsync" Disabled="_detecting">
             @(_detecting ? L["Common.Testing"] : L["Page.Destinations.TestConnection"])
         </FluentButton>
-        <FluentButton data-testid="dst-cancel" OnClick="() => _showEditor = false">@L["Common.Cancel"]</FluentButton>
-        <FluentButton Appearance="ButtonAppearance.Primary" data-testid="dst-save" OnClick="Save">@L["Common.Save"]</FluentButton>
+        <FluentButton data-testid="dst-cancel" Disabled="@_saving" OnClick="() => _showEditor = false">@L["Common.Cancel"]</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary" @ref="_saveButton" data-testid="dst-save" Loading="@_saving" OnClick="Save">@L["Common.Save"]</FluentButton>
     </Actions>
 </InlineDialog>
 
@@ -144,6 +144,8 @@
     private string _password = "";
     private bool _trustServerCertificate;
     private bool _detecting;
+    private bool _saving;
+    private FluentButton? _saveButton;
     private SqlVersionDetection? _detection;
     private Guid _versionKey = Guid.NewGuid();
 
@@ -260,7 +262,41 @@
         _showEditor = true;
     }
 
+    // Guardar puede esperar el lock de los pipelines que usan el destino: mientras tanto el botón
+    // queda ocupado y un segundo clic o Enter no lanza otro guardado.
     private async Task Save()
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await SaveCoreAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+
+        // Ocupado, el botón se deshabilita y pierde el foco: si el diálogo sigue abierto (error), vuelve a él.
+        if (_showEditor)
+        {
+            StateHasChanged();
+            try
+            {
+                await _saveButton!.Element.FocusAsync();
+            }
+            catch (JSException)
+            {
+                // La página puede ya no estar en pantalla: el usuario navegó a otra mientras corría la acción.
+            }
+        }
+    }
+
+    private async Task SaveCoreAsync()
     {
         var config = new Dictionary<string, string?>
         {

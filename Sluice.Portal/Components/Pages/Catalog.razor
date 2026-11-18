@@ -100,8 +100,8 @@
     <Actions>
         @if (_resyncOffer is { Count: > 0 })
         {
-            <FluentButton Appearance="ButtonAppearance.Primary" data-testid="catalog-resync" OnClick="ResyncAsync">@L["Page.Catalog.ResyncNow"]</FluentButton>
-            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@(() => _showColumns = false)">@L["Page.Catalog.Later"]</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Primary" @ref="_resyncButton" data-testid="catalog-resync" Loading="@_resyncing" OnClick="ResyncAsync">@L["Page.Catalog.ResyncNow"]</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@_resyncing" OnClick="@(() => _showColumns = false)">@L["Page.Catalog.Later"]</FluentButton>
         }
         else
         {
@@ -131,6 +131,8 @@
     private HashSet<string> _excluded = new(StringComparer.OrdinalIgnoreCase);
     private string? _columnSearch;
     private IReadOnlyList<string>? _resyncOffer;
+    private bool _resyncing;
+    private FluentButton? _resyncButton;
 
     // Cambiar de pipeline (o salir) cancela la lectura del lago en curso, como en Parquet.
     private CancellationTokenSource? _loadCts;
@@ -321,14 +323,41 @@
 
     private async Task ResyncAsync()
     {
+        // Lanzar el re-sync espera el lock de ejecución (hasta 15 s): un segundo clic o Enter no lanza otro.
+        if (_resyncing)
+        {
+            return;
+        }
+
+        _resyncing = true;
+        var started = false;
         try
         {
             var job = await Orchestration.ResyncTableAsync(Audit.Current, _pipelineId, _columnsTable!.Name, ResyncMode.Reload);
             Nav.NavigateTo($"/jobs/{Uri.EscapeDataString(job.Id)}");
+            started = true;
         }
         catch (Exception ex)
         {
             await NotificationService.ShowErrorToastAsync(ErrorText.Render(L, ex));
+        }
+        finally
+        {
+            _resyncing = false;
+        }
+
+        // Ocupado, el botón se deshabilita y pierde el foco: si el diálogo sigue abierto (error), vuelve a él.
+        if (!started && _showColumns)
+        {
+            StateHasChanged();
+            try
+            {
+                await _resyncButton!.Element.FocusAsync();
+            }
+            catch (JSException)
+            {
+                // La página puede ya no estar en pantalla: el usuario navegó a otra mientras corría la acción.
+            }
         }
     }
 }
