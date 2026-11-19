@@ -207,10 +207,6 @@
 </FluentStack>
 
 @code {
-    // Paleta de marca: primaria #1B365D y grises corporativos.
-    private static readonly List<string> BrandPalette =
-        ["#1B365D", "#5e5d59", "#87867f", "#b0aea5"];
-
     private AnalyticsSnapshot? _snapshot;
     private string _pipelineFilter = "";
     private Mode _themeMode = Mode.Light;
@@ -278,6 +274,10 @@
         var snapshot = _snapshot;
 
         _donutOptions = BrandOptions<LabeledValue>(_themeMode);
+        // Donut: el color va con el estado (el de su insignia), no con la posición de la porción.
+        _donutOptions.Colors = snapshot?.StatusDistribution
+            .Select(s => ChartPalette.ForStatus(Enum.Parse<JobStatus>(s.Label), _themeMode))
+            .ToList() ?? _donutOptions.Colors;
         _barRowsOptions = BrandOptions<LabeledValue>(_themeMode, snapshot?.MergedRowsByPipeline.Select(r => r.Value).DefaultIfEmpty().Max() ?? 0);
         _lineJobsOptions = BrandOptions<DailyJobCount>(_themeMode, snapshot?.JobsPerDay.Select(d => (double)Math.Max(d.Success, d.Error)).DefaultIfEmpty().Max() ?? 0);
         _lineDivergenceOptions = BrandOptions<DivergencePoint>(_themeMode);
@@ -290,7 +290,7 @@
     // es de cantidades (jobs, filas) y no lleva decimales.
     private static ApexChartOptions<TItem> BrandOptions<TItem>(Mode mode, double? countMax = null) where TItem : class => new()
     {
-        Colors = new List<string>(BrandPalette),
+        Colors = ChartPalette.Series(mode),
         Chart = new Chart { Height = 280, Background = "transparent", FontFamily = "inherit" },
         Theme = new ApexCharts.Theme { Mode = mode },
         Yaxis = countMax is { } max ? [ChartAxes.Count(max)] : null,
