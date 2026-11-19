@@ -463,6 +463,7 @@
   <data name="Page.Logs.Col.Host" xml:space="preserve"><value>Máquina</value></data>
   <data name="Page.Logs.Col.Outcome" xml:space="preserve"><value>Resultado</value></data>
   <data name="Page.Logs.Col.Target" xml:space="preserve"><value>Objetivo</value></data>
+  <data name="Page.Logs.Detail.Title" xml:space="preserve"><value>Entrada del registro</value></data>
   <data name="Page.Settings.Title" xml:space="preserve"><value>Ajustes</value></data>
   <data name="Page.Settings.Subtitle" xml:space="preserve"><value>Parámetros operativos globales del scheduler y la conciliación.</value></data>
   <data name="Page.Settings.Scheduler.Title" xml:space="preserve"><value>Scheduler y cola</value></data>
@@ -585,6 +586,9 @@
   <data name="Page.Reconcile.Values.Extra" xml:space="preserve"><value>Sobran en SQL</value></data>
   <data name="Page.Reconcile.Values.Error" xml:space="preserve"><value>No comparada</value></data>
   <data name="Page.Reconcile.Values.Started" xml:space="preserve"><value>Comparación de valores en marcha (job {0}). El resultado aparece aquí al terminar.</value></data>
+  <data name="Page.Reconcile.Values.Detail" xml:space="preserve"><value>Ver detalle</value></data>
+  <data name="Page.Reconcile.Values.DetailTitle" xml:space="preserve"><value>Comparación de valores: {0}</value></data>
+  <data name="Page.Reconcile.Values.SampleHint" xml:space="preserve"><value>Muestra de los Id encontrados (hasta 20 por lista).</value></data>
   <data name="Page.Reconcile.Origin" xml:space="preserve"><value>Origen</value></data>
   <data name="Page.Reconcile.Origin.Auto" xml:space="preserve"><value>Automática</value></data>
   <data name="Page.Reconcile.Origin.User" xml:space="preserve"><value>Manual</value></data>

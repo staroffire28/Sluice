@@ -464,6 +464,7 @@
   <data name="Page.Logs.Col.Host" xml:space="preserve"><value>Host</value></data>
   <data name="Page.Logs.Col.Outcome" xml:space="preserve"><value>Outcome</value></data>
   <data name="Page.Logs.Col.Target" xml:space="preserve"><value>Target</value></data>
+  <data name="Page.Logs.Detail.Title" xml:space="preserve"><value>Log entry</value></data>
   <data name="Page.Settings.Title" xml:space="preserve"><value>Settings</value></data>
   <data name="Page.Settings.Subtitle" xml:space="preserve"><value>Global operational parameters for the scheduler and reconciliation.</value></data>
   <data name="Page.Settings.Scheduler.Title" xml:space="preserve"><value>Scheduler and queue</value></data>
@@ -586,6 +587,9 @@
   <data name="Page.Reconcile.Values.Extra" xml:space="preserve"><value>Extra in SQL</value></data>
   <data name="Page.Reconcile.Values.Error" xml:space="preserve"><value>Not compared</value></data>
   <data name="Page.Reconcile.Values.Started" xml:space="preserve"><value>Value comparison started (job {0}). The result shows up here when it finishes.</value></data>
+  <data name="Page.Reconcile.Values.Detail" xml:space="preserve"><value>View details</value></data>
+  <data name="Page.Reconcile.Values.DetailTitle" xml:space="preserve"><value>Value comparison: {0}</value></data>
+  <data name="Page.Reconcile.Values.SampleHint" xml:space="preserve"><value>Sample of the Ids found (up to 20 per list).</value></data>
   <data name="Page.Reconcile.Origin" xml:space="preserve"><value>Origin</value></data>
   <data name="Page.Reconcile.Origin.Auto" xml:space="preserve"><value>Automatic</value></data>
   <data name="Page.Reconcile.Origin.User" xml:space="preserve"><value>Manual</value></data>

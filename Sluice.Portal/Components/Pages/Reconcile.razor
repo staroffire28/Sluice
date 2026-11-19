@@ -128,7 +128,7 @@
                             </TemplateColumn>
                             <PropertyColumn Property="@(r => r.SourceRows)" Title="@L["Page.Reconcile.Source"]" />
                             <PropertyColumn Property="@(r => r.DestinationRows)" Title="@L["Page.Reconcile.Destination"]" />
-                            @* Las muestras de Id (hasta 20) van en el tooltip de cada contador. *@
+                            @* Las muestras de Id (hasta 20) van en el tooltip de cada contador y en el diálogo de detalle. *@
                             <TemplateColumn Title="@L["Page.Reconcile.Values.Different"]">
                                 <span data-testid="@($"values-different-{context.Entity}")" title="@string.Join("\n", context.SampleDifferent)">@context.Different</span>
                             </TemplateColumn>
@@ -150,6 +150,12 @@
                                                       Title="@L["Common.Actions"]" aria-label="@($"{L["Common.Actions"]} {context.Entity}")"
                                                       data-testid="@($"values-actions-{context.Entity}")" />
                                         <FluentMenuList>
+                                            @* Las muestras y el error solo estaban en tooltips: en un diálogo se leen en móvil y con teclado. *@
+                                            @if (HasValuesDetail(context))
+                                            {
+                                                <FluentMenuItem data-testid="@($"values-detail-{context.Entity}")" IconStart="@(new Icons.Regular.Size20.Info())"
+                                                                OnClick="@(() => _valuesDetail = context)">@L["Page.Reconcile.Values.Detail"]</FluentMenuItem>
+                                            }
                                             @if (context.Error is null)
                                             {
                                                 <ResyncTableButton PipelineId="@_pipelineId" Entity="@context.Entity"
@@ -191,6 +197,45 @@
     }
 </FluentStack>
 
+<InlineDialog Visible="@(_valuesDetail is not null)" VisibleChanged="@(v => { if (!v) _valuesDetail = null; })"
+              Title="@string.Format(L["Page.Reconcile.Values.DetailTitle"].Value, _valuesDetail?.Entity)" Class="dialog-wide">
+    <ChildContent>
+        @if (_valuesDetail is { } d)
+        {
+            @if (d.Error is not null)
+            {
+                <h3 class="dialog-form-subtitle">@L["Page.Reconcile.Values.Error"]</h3>
+                <p class="detail-text" data-testid="values-detail-error">@d.Error</p>
+            }
+            @if (d.SampleDifferent.Count + d.SampleMissing.Count + d.SampleExtra.Count > 0)
+            {
+                <p class="field-hint">@L["Page.Reconcile.Values.SampleHint"]</p>
+            }
+            @foreach (var (label, count, ids, testId) in new[]
+            {
+                (L["Page.Reconcile.Values.Different"].Value, d.Different, d.SampleDifferent, "values-detail-different"),
+                (L["Page.Reconcile.Values.Missing"].Value, d.MissingInDestination, d.SampleMissing, "values-detail-missing"),
+                (L["Page.Reconcile.Values.Extra"].Value, d.ExtraInDestination, d.SampleExtra, "values-detail-extra"),
+            })
+            {
+                if (ids.Count > 0)
+                {
+                    <h3 class="dialog-form-subtitle">@label (@count)</h3>
+                    <ul class="detail-ids cell-mono" data-testid="@testId">
+                        @foreach (var id in ids)
+                        {
+                            <li>@id</li>
+                        }
+                    </ul>
+                }
+            }
+        }
+    </ChildContent>
+    <Actions>
+        <FluentButton Appearance="ButtonAppearance.Subtle" data-testid="values-detail-close" OnClick="@(() => _valuesDetail = null)">@L["Common.Close"]</FluentButton>
+    </Actions>
+</InlineDialog>
+
 @code {
     private string _pipelineId = "";
     private ReconcileReport? _report;
@@ -200,6 +245,7 @@
     private ValueCompareReport? _values;
     private List<ValueCompareEntityResult> _valueRows = [];
     private bool _autoRemediate;
+    private ValueCompareEntityResult? _valuesDetail;
     private int _page = 1;
     private const int PageSize = 20;
     private int _totalCount;
@@ -289,6 +335,9 @@
         _page = page;
         ApplyPaging();
     }
+
+    private static bool HasValuesDetail(ValueCompareEntityResult r) =>
+        r.Error is not null || r.SampleDifferent.Count + r.SampleMissing.Count + r.SampleExtra.Count > 0;
 
     private string DirectionLabel(ReconRow row) =>
         row.SourceRows > row.DestinationRows ? L["Page.Reconcile.DirSourceGtDest"].Value
