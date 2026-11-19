@@ -49,25 +49,29 @@ public sealed class JobStore : JsonFileStore<Job>
                 return [];
             }
 
-            var files = directory.EnumerateFiles("*.json").Select(file => (Id: Path.GetFileNameWithoutExtension(file.Name), File: file)).ToList();
+            // La fecha y el tamaño se toman aquí, fuera de _indexLock: en Linux el FileInfo de la
+            // enumeración no los trae y su primer acceso es un stat por fichero.
+            var files = directory.EnumerateFiles("*.json")
+                .Select(file => (Id: Path.GetFileNameWithoutExtension(file.Name), Path: file.FullName, WriteTime: file.LastWriteTimeUtc, Length: file.Length))
+                .ToList();
             var seen = files.Select(f => f.Id).ToHashSet(StringComparer.Ordinal);
-            List<(string Id, FileInfo File)> stale;
+            List<(string Id, string Path, DateTime WriteTime, long Length)> stale;
             lock (_indexLock)
             {
                 _forgotten = new HashSet<string>(StringComparer.Ordinal);
                 stale = files.Where(f => !_index.TryGetValue(f.Id, out var cached)
-                    || cached.WriteTime != f.File.LastWriteTimeUtc || cached.Length != f.File.Length).ToList();
+                    || cached.WriteTime != f.WriteTime || cached.Length != f.Length).ToList();
             }
 
             // Se lee el Job entero (no solo los campos del índice): su deserialización es la que valida
             // el fichero, y un job ilegible como Job no debe entrar en los listados.
-            var read = new List<(string Id, FileInfo File, JobIndexEntry? Entry)>(stale.Count);
-            foreach (var (id, file) in stale)
+            var read = new List<(string Id, DateTime WriteTime, long Length, JobIndexEntry? Entry)>(stale.Count);
+            foreach (var (id, path, writeTime, length) in stale)
             {
                 Job? job;
                 try
                 {
-                    job = Read(file.FullName);
+                    job = Read(path);
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
@@ -79,12 +83,12 @@ public sealed class JobStore : JsonFileStore<Job>
                 catch (System.Text.Json.JsonException ex)
                 {
                     // Corrupto: se omite, como en ListAll.
-                    WarnUnreadable(file.FullName, ex);
+                    WarnUnreadable(path, ex);
                     job = null;
                 }
 
                 // Solo se guarda la entrada: retener los Job enteros hasta el volcado serían GB en frío.
-                read.Add((id, file, job is null ? null
+                read.Add((id, writeTime, length, job is null ? null
                     : new JobIndexEntry(job.Id, job.PipelineId, job.Type, job.Status, job.StartedAt, job.FinishedAt)));
             }
 
@@ -93,7 +97,7 @@ public sealed class JobStore : JsonFileStore<Job>
             {
                 var forgotten = _forgotten!;
                 _forgotten = null;
-                foreach (var (id, file, entry) in read)
+                foreach (var (id, writeTime, length, entry) in read)
                 {
                     if (entry is null)
                     {
@@ -103,7 +107,7 @@ public sealed class JobStore : JsonFileStore<Job>
 
                     // Si este proceso lo guardó mientras se leía, lo leído puede ser anterior a esa
                     // escritura con la misma fecha y tamaño: se devuelve, pero queda invalidado.
-                    _index[id] = (forgotten.Contains(id) ? default : file.LastWriteTimeUtc, file.Length, entry);
+                    _index[id] = (forgotten.Contains(id) ? default : writeTime, length, entry);
                 }
 
                 foreach (var gone in _index.Keys.Where(id => !seen.Contains(id)).ToList())
