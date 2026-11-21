@@ -72,7 +72,7 @@ public sealed class WorkerHostService : BackgroundService
 
         // Registro inicial como ocioso: Touch solo refresca un fichero que ya existe, así que sin
         // esto un worker recién arrancado no aparecía en el Panel hasta reclamar su primera tarea.
-        _workers.SetIdle(workerId, stages[0]);
+        UpdateRegistry(workerId, () => _workers.SetIdle(workerId, stages[0]));
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
         var lastTouch = DateTimeOffset.MinValue;
@@ -84,7 +84,11 @@ public sealed class WorkerHostService : BackgroundService
             // purga los que llevan StaleAfter sin ella). Con trabajo, la da el latido de la tarea.
             if (DateTimeOffset.UtcNow - lastTouch >= TimeSpan.FromSeconds(30))
             {
-                _workers.Touch(workerId);
+                // Con el registro fallando se reescribe entero: Touch no crea el fichero, así que si la
+                // escritura que falló era la que lo creaba, el worker no volvería al Panel al repararse.
+                UpdateRegistry(workerId, _registryFailing
+                    ? () => _workers.SetIdle(workerId, stages[0])
+                    : () => _workers.Touch(workerId));
                 lastTouch = DateTimeOffset.UtcNow;
             }
 
@@ -141,7 +145,7 @@ public sealed class WorkerHostService : BackgroundService
             return;
         }
 
-        _workers.RegisterHeartbeat(workerId, stage, task.Id, task.PipelineId, task.JobId);
+        UpdateRegistry(workerId, () => _workers.RegisterHeartbeat(workerId, stage, task.Id, task.PipelineId, task.JobId));
 
         // Latido del lease mientras corre el stage: un stage largo (ingest full) no debe
         // perder su lease y ser reclamado por otra réplica. Si el latido detecta que la tarea
@@ -236,7 +240,35 @@ public sealed class WorkerHostService : BackgroundService
         finally
         {
             await StopHeartbeatAsync();
-            _workers.SetIdle(workerId, stage);
+            UpdateRegistry(workerId, () => _workers.SetIdle(workerId, stage));
+        }
+    }
+
+    // El registro de workers es solo la señal de vida del Panel (no participa en la cola ni en los
+    // leases): un fallo al escribirlo (p. ej. DATA_DIR restaurado sin chown) no debe tumbar el host
+    // (BackgroundService con StopHost: en modo local cae el portal entero), ni impedir que se ejecute
+    // una tarea ya reclamada, ni enmascarar el resultado de la etapa. Se avisa una vez por racha de
+    // fallos, no en cada escritura (Touch cada 30 s y dos escrituras por tarea llenarían el log).
+    private bool _registryFailing;
+
+    private void UpdateRegistry(string workerId, Action write)
+    {
+        try
+        {
+            write();
+            if (_registryFailing)
+            {
+                _registryFailing = false;
+                _logger.LogInformation("El registro del worker {WorkerId} vuelve a escribirse.", workerId);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            if (!_registryFailing)
+            {
+                _registryFailing = true;
+                _logger.LogWarning(ex, "No se pudo escribir el registro del worker {WorkerId}; el Panel no mostrará su estado hasta que se recupere. Se sigue procesando tareas.", workerId);
+            }
         }
     }
 
@@ -282,7 +314,13 @@ public sealed class WorkerHostService : BackgroundService
                     // Lease renovado: la cuenta se reinicia aquí y no al final del try, para que un
                     // fallo posterior (Touch, lectura del job) no sume hacia el abandono.
                     consecutiveFailures = 0;
-                    _workers.Touch(workerId);
+                    // Fuera del catch del latido: un Touch fallido no es un fallo del lease y saltaba
+                    // la comprobación de job cancelado. Con el registro ya fallando no se toca: un
+                    // Touch sin fichero no hace nada y se tomaría por una recuperación.
+                    if (!_registryFailing)
+                    {
+                        UpdateRegistry(workerId, () => _workers.Touch(workerId));
+                    }
 
                     // Cancelado desde la UI o la API: la cancelación ya no borra la tarea en vuelo,
                     // es el latido quien la ve y detiene el stage. Sigue renovando el lease hasta que
