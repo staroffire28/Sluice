@@ -72,8 +72,16 @@ public static class AppOptionsConfiguration
             KnownNetworks = SplitList(configuration, "KNOWN_NETWORKS")
                 .Select(item => System.Net.IPNetwork.TryParse(item, out var network) ? network : throw Invalid("KNOWN_NETWORKS", item))
                 .ToList(),
+            // Solo el nombre: con esquema, puerto o un "*" suelto no coincidiría nunca y el portal
+            // respondería 400 sin que se viera por qué.
+            AllowedHosts = SplitList(configuration, "ALLOWED_HOSTS")
+                .Select(item => IsHostName(item.StartsWith("*.", StringComparison.Ordinal) ? item[2..] : item) ? item : throw Invalid("ALLOWED_HOSTS", item))
+                .ToList(),
         };
     }
+
+    private static bool IsHostName(string name) =>
+        Uri.CheckHostName(name) is UriHostNameType.Dns or UriHostNameType.IPv4 or UriHostNameType.IPv6;
 
     // Lista separada por comas. Un elemento inválido hace fallar el arranque: mejor que
     // ignorarlo y acabar confiando en cualquier proxy sin saberlo.
