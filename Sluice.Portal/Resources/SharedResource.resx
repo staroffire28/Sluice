@@ -982,6 +982,8 @@
   <data name="Activity.SnapshotRetention.DeleteFailed" xml:space="preserve"><value>Pipeline {0}: no se pudo borrar snapshot {1}: {2}</value></data>
   <data name="Activity.SnapshotRetention.DryRun" xml:space="preserve"><value>Pipeline {0}: {1:N0} snapshot(s) elegibles (simulación, sin borrar).</value></data>
   <data name="Activity.SnapshotRetention.Sweep" xml:space="preserve"><value>Pipeline {0}: {1:N0} snapshot(s) origen eliminados (antigüedad {2}d, piso {3}).</value></data>
+  <data name="Activity.SnapshotRetention.SweepOne" xml:space="preserve"><value>Pipeline {0}: 1 snapshot origen eliminado, {1} (antigüedad {2}d, piso {3}).</value></data>
+  <data name="Activity.SnapshotRetention.SweepRange" xml:space="preserve"><value>Pipeline {0}: {1:N0} snapshot(s) origen eliminados, de {2} a {3} (antigüedad {4}d, piso {5}).</value></data>
   <data name="Activity.SnapshotRetention.PipelineFailed" xml:space="preserve"><value>Barrido de snapshots falló en pipeline {0}: {1}</value></data>
   <data name="Activity.SnapshotRetention.DryRunTotal" xml:space="preserve"><value>Simulación global: {0:N0} snapshot(s) elegibles para purga (antigüedad {1}d).</value></data>
   <data name="Activity.SnapshotRetention.SweepTotal" xml:space="preserve"><value>Retención snapshots origen: {0:N0} carpeta(s) eliminadas (antigüedad {1}d, piso {2}).</value></data>

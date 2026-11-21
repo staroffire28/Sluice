@@ -172,6 +172,12 @@ public sealed class SnapshotRetentionService
 
         foreach (var pipeline in _pipelines.List().Where(p => p.Enabled))
         {
+            // Apagado (redeploy): no se empieza otro almacén.
+            if (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+
             // La purga es por almacén (cuenta + container): una sola pasada aunque lo lean varios
             // pipelines o varias conexiones, también si se omitió por job en ejecución o certificación
             // incompleta. Una conexión irresoluble tiene su propia pasada, que falla al abrirla.
@@ -267,9 +273,19 @@ public sealed class SnapshotRetentionService
                     }
                 }
 
+                // Las carpetas se borran en orden (su nombre es la fecha): la primera y la última
+                // borradas dan el rango que queda anotado; la lista exacta va al log de la aplicación.
                 var deleted = 0;
+                string? firstDeleted = null;
+                string? lastDeleted = null;
                 foreach (var folder in analysis.EligibleForPurge)
                 {
+                    // Apagado entre borrados: se deja de borrar y se anota lo ya borrado.
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        break;
+                    }
+
                     if (_jobs.ListRunning().Any(j => sourcePipelineIds.Contains(j.PipelineId)))
                     {
                         _logger.LogInformation(
@@ -299,6 +315,18 @@ public sealed class SnapshotRetentionService
                     {
                         await adls.DeleteSnapshotFolderAsync(folder, cancellationToken);
                         deleted++;
+                        firstDeleted ??= folder;
+                        lastDeleted = folder;
+                        _logger.LogInformation(
+                            "Retención snapshots: borrada {Folder} en pipeline {PipelineId}",
+                            folder,
+                            pipeline.Id);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        // Apagado durante el borrado: no es un fallo de la carpeta. Una cancelación con
+                        // el token vivo (timeout de red) sí lo es y cae en el catch de abajo.
+                        break;
                     }
                     catch (Exception ex)
                     {
@@ -324,16 +352,33 @@ public sealed class SnapshotRetentionService
                         pipeline.Id, null, "info",
                         "Activity.SnapshotRetention.DryRun", pipeline.Id, analysis.EligibleForPurge.Count);
                 }
-                else if (deleted > 0)
+                else if (deleted == 1)
                 {
                     _activity.LogSystem(
                         "snapshot-retention.sweep",
-                        $"Pipeline {pipeline.Id}: {deleted} snapshot(s) origen eliminados " +
+                        $"Pipeline {pipeline.Id}: 1 snapshot origen eliminado, {firstDeleted} " +
                         $"(antigüedad {settings.SourceSnapshotRetentionDays}d, piso {KeepLastProcessedSnapshots}).",
                         pipeline.Id, null, "info",
-                        "Activity.SnapshotRetention.Sweep", pipeline.Id, deleted, settings.SourceSnapshotRetentionDays, KeepLastProcessedSnapshots);
+                        "Activity.SnapshotRetention.SweepOne", pipeline.Id, firstDeleted, settings.SourceSnapshotRetentionDays, KeepLastProcessedSnapshots);
                     totalDeleted += deleted;
                 }
+                else if (deleted > 1)
+                {
+                    // Clave nueva (no Sweep): las entradas ya guardadas con Sweep tienen menos argumentos.
+                    _activity.LogSystem(
+                        "snapshot-retention.sweep",
+                        $"Pipeline {pipeline.Id}: {deleted} snapshot(s) origen eliminados, de {firstDeleted} a {lastDeleted} " +
+                        $"(antigüedad {settings.SourceSnapshotRetentionDays}d, piso {KeepLastProcessedSnapshots}).",
+                        pipeline.Id, null, "info",
+                        "Activity.SnapshotRetention.SweepRange", pipeline.Id, deleted, firstDeleted, lastDeleted, settings.SourceSnapshotRetentionDays, KeepLastProcessedSnapshots);
+                    totalDeleted += deleted;
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Apagado a mitad de un almacén (abrirlo, listar, certificar): no es un fallo ni se
+                // sigue con otros.
+                break;
             }
             catch (Exception ex)
             {
