@@ -13,6 +13,11 @@ public sealed class JobStore : JsonFileStore<Job>
     private readonly string _locksDir;
     private readonly object _indexLock = new();
     private readonly Dictionary<string, (DateTime WriteTime, long Length, JobIndexEntry Entry)> _index = new(StringComparer.Ordinal);
+    private readonly object _listLock = new();
+    // Ids que Save/Delete invalidaron mientras un ListIndex lee los ficheros: cubre los jobs que aún
+    // no están en _index, que Forget no tiene dónde marcar. Null fuera de esa ventana, para que no
+    // crezca en un proceso que guarda jobs sin listarlos nunca (un worker de SQL).
+    private HashSet<string>? _forgotten;
 
     public JobStore(IOptions<AppOptions> options, ILogger<JobStore>? logger = null) : base(options, "jobs", logger)
     {
@@ -30,9 +35,13 @@ public sealed class JobStore : JsonFileStore<Job>
     // y el Dashboard, el scheduler y las guardas lo hacían en cada consulta. El índice solo vuelve a
     // leer los ficheros cuya fecha o tamaño cambió, así que también ve lo que escriben otros procesos
     // (los workers) sobre el mismo DATA_DIR. Quien necesite el job completo lo pide con GetById.
+    //
+    // La lectura de los ficheros va fuera de _indexLock: en frío (tras arrancar, con decenas de miles
+    // de jobs) son segundos, y Save/Delete toman ese lock para invalidar su entrada. _listLock solo
+    // serializa los listados entre sí, para que dos en frío no lean todo dos veces.
     public IReadOnlyList<JobIndexEntry> ListIndex()
     {
-        lock (_indexLock)
+        lock (_listLock)
         {
             var directory = new DirectoryInfo(GetDirectory());
             if (!directory.Exists)
@@ -40,20 +49,29 @@ public sealed class JobStore : JsonFileStore<Job>
                 return [];
             }
 
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var file in directory.EnumerateFiles("*.json"))
+            // La fecha y el tamaño se toman aquí, fuera de _indexLock: en Linux el FileInfo de la
+            // enumeración no los trae y su primer acceso es un stat por fichero.
+            var files = directory.EnumerateFiles("*.json")
+                .Select(file => (Id: Path.GetFileNameWithoutExtension(file.Name), Path: file.FullName, WriteTime: file.LastWriteTimeUtc, Length: file.Length))
+                .ToList();
+            var seen = files.Select(f => f.Id).ToHashSet(StringComparer.Ordinal);
+            List<(string Id, string Path, DateTime WriteTime, long Length)> stale;
+            lock (_indexLock)
             {
-                var id = Path.GetFileNameWithoutExtension(file.Name);
-                seen.Add(id);
-                if (_index.TryGetValue(id, out var cached) && cached.WriteTime == file.LastWriteTimeUtc && cached.Length == file.Length)
-                {
-                    continue;
-                }
+                _forgotten = new HashSet<string>(StringComparer.Ordinal);
+                stale = files.Where(f => !_index.TryGetValue(f.Id, out var cached)
+                    || cached.WriteTime != f.WriteTime || cached.Length != f.Length).ToList();
+            }
 
+            // Se lee el Job entero (no solo los campos del índice): su deserialización es la que valida
+            // el fichero, y un job ilegible como Job no debe entrar en los listados.
+            var read = new List<(string Id, DateTime WriteTime, long Length, JobIndexEntry? Entry)>(stale.Count);
+            foreach (var (id, path, writeTime, length) in stale)
+            {
                 Job? job;
                 try
                 {
-                    job = Read(file.FullName);
+                    job = Read(path);
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
@@ -65,26 +83,42 @@ public sealed class JobStore : JsonFileStore<Job>
                 catch (System.Text.Json.JsonException ex)
                 {
                     // Corrupto: se omite, como en ListAll.
-                    WarnUnreadable(file.FullName, ex);
+                    WarnUnreadable(path, ex);
                     job = null;
                 }
 
-                if (job is null)
+                // Solo se guarda la entrada: retener los Job enteros hasta el volcado serían GB en frío.
+                read.Add((id, writeTime, length, job is null ? null
+                    : new JobIndexEntry(job.Id, job.PipelineId, job.Type, job.Status, job.StartedAt, job.FinishedAt)));
+            }
+
+            List<JobIndexEntry> entries;
+            lock (_indexLock)
+            {
+                var forgotten = _forgotten!;
+                _forgotten = null;
+                foreach (var (id, writeTime, length, entry) in read)
                 {
-                    _index.Remove(id);
-                    continue;
+                    if (entry is null)
+                    {
+                        _index.Remove(id);
+                        continue;
+                    }
+
+                    // Si este proceso lo guardó mientras se leía, lo leído puede ser anterior a esa
+                    // escritura con la misma fecha y tamaño: se devuelve, pero queda invalidado.
+                    _index[id] = (forgotten.Contains(id) ? default : writeTime, length, entry);
                 }
 
-                _index[id] = (file.LastWriteTimeUtc, file.Length,
-                    new JobIndexEntry(job.Id, job.PipelineId, job.Type, job.Status, job.StartedAt, job.FinishedAt));
+                foreach (var gone in _index.Keys.Where(id => !seen.Contains(id)).ToList())
+                {
+                    _index.Remove(gone);
+                }
+
+                entries = _index.Values.Select(v => v.Entry).ToList();
             }
 
-            foreach (var gone in _index.Keys.Where(id => !seen.Contains(id)).ToList())
-            {
-                _index.Remove(gone);
-            }
-
-            return _index.Values.Select(v => v.Entry).OrderByDescending(e => e.StartedAt).ToList();
+            return entries.OrderByDescending(e => e.StartedAt).ToList();
         }
     }
 
@@ -119,6 +153,7 @@ public sealed class JobStore : JsonFileStore<Job>
     {
         lock (_indexLock)
         {
+            _forgotten?.Add(id);
             // Se invalida sin quitarla: ListIndex la relee, y si no puede leerla en ese momento se
             // queda con la última. Un fichero borrado sale por el barrido de los que ya no están.
             if (_index.TryGetValue(id, out var cached))
