@@ -168,6 +168,7 @@ public sealed class SnapshotRetentionService
         var totalSkipped = 0;
         var totalSkippedCert = 0;
         var sweptStores = new HashSet<string>(StringComparer.Ordinal);
+        var unreadableReported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var pipeline in _pipelines.List().Where(p => p.Enabled))
         {
@@ -218,9 +219,32 @@ public sealed class SnapshotRetentionService
                     foreach (var sourcePipeline in storePipelines)
                     {
                         var sourcePipelineId = sourcePipeline.Id;
+                        IParquetStore parquetStore;
+                        try
+                        {
+                            parquetStore = await _adlsFactory.CreateParquetStoreAsync(sourcePipeline.SourceId, cancellationToken);
+                        }
+                        catch (Exception ex) when (ex is not OperationCanceledException)
+                        {
+                            // Conexión ilegible: sigue bloqueando la purga de este almacén, pero se
+                            // avisa a nombre de su pipeline y una sola vez por barrido.
+                            totalSkippedCert++;
+                            if (unreadableReported.Add(sourcePipelineId))
+                            {
+                                _activity.LogSystem(
+                                    "snapshot-retention.skip",
+                                    $"Pipeline {sourcePipelineId}: purga omitida — no se puede leer su conexión de origen: {ex.Message}",
+                                    sourcePipelineId, null, "warning",
+                                    "Activity.SnapshotRetention.SkipUnreadableSource", sourcePipelineId, ex.Message);
+                            }
+
+                            certified = false;
+                            break;
+                        }
+
                         var cert = await CertifyParquetAsync(
                             sourcePipelineId,
-                            await _adlsFactory.CreateParquetStoreAsync(sourcePipeline.SourceId, cancellationToken),
+                            parquetStore,
                             _pipelines.GetState(sourcePipelineId),
                             cancellationToken);
                         if (!cert.IsComplete)

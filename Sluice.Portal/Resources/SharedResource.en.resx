@@ -975,6 +975,7 @@
   <data name="Activity.Retention.Error" xml:space="preserve"><value>The retention sweep failed: {0}</value></data>
   <data name="Activity.SnapshotRetention.Error" xml:space="preserve"><value>The snapshot retention sweep failed: {0}</value></data>
   <data name="Activity.SnapshotRetention.Skip" xml:space="preserve"><value>Pipeline {0}: purge skipped — consolidated Parquet files are missing: {1}.</value></data>
+  <data name="Activity.SnapshotRetention.SkipUnreadableSource" xml:space="preserve"><value>Pipeline {0}: purge skipped — its source connection cannot be read: {1}</value></data>
   <data name="Activity.SnapshotRetention.DeleteFailed" xml:space="preserve"><value>Pipeline {0}: could not delete snapshot {1}: {2}</value></data>
   <data name="Activity.SnapshotRetention.DryRun" xml:space="preserve"><value>Pipeline {0}: {1:N0} eligible snapshot(s) (dry run, nothing deleted).</value></data>
   <data name="Activity.SnapshotRetention.Sweep" xml:space="preserve"><value>Pipeline {0}: {1:N0} source snapshot(s) deleted (age {2}d, floor {3}).</value></data>

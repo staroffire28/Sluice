@@ -974,6 +974,7 @@
   <data name="Activity.Retention.Error" xml:space="preserve"><value>El barrido de retención falló: {0}</value></data>
   <data name="Activity.SnapshotRetention.Error" xml:space="preserve"><value>El barrido de retención de snapshots falló: {0}</value></data>
   <data name="Activity.SnapshotRetention.Skip" xml:space="preserve"><value>Pipeline {0}: purga omitida — faltan parquet consolidados: {1}.</value></data>
+  <data name="Activity.SnapshotRetention.SkipUnreadableSource" xml:space="preserve"><value>Pipeline {0}: purga omitida — no se puede leer su conexión de origen: {1}</value></data>
   <data name="Activity.SnapshotRetention.DeleteFailed" xml:space="preserve"><value>Pipeline {0}: no se pudo borrar snapshot {1}: {2}</value></data>
   <data name="Activity.SnapshotRetention.DryRun" xml:space="preserve"><value>Pipeline {0}: {1:N0} snapshot(s) elegibles (simulación, sin borrar).</value></data>
   <data name="Activity.SnapshotRetention.Sweep" xml:space="preserve"><value>Pipeline {0}: {1:N0} snapshot(s) origen eliminados (antigüedad {2}d, piso {3}).</value></data>

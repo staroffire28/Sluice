@@ -140,7 +140,8 @@ public sealed class AdlsClientFactory : IAdlsClientFactory
                 var folder = LocalFolderClient.Confine(
                     Path.GetFullPath(localSourceRoot),
                     connection.Config.GetValueOrDefault("container") ?? "",
-                    allowBase: false);
+                    allowBase: false)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 return "local|" + (OperatingSystem.IsWindows() ? folder.ToUpperInvariant() : folder);
             }
 
