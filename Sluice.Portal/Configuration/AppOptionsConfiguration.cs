@@ -52,7 +52,7 @@ public static class AppOptionsConfiguration
             AuthMode = authMode,
             ExecutionMode = executionMode,
             DataDir = Get(configuration, "DATA_DIR") ?? Path.Combine(Directory.GetCurrentDirectory(), "data"),
-            HeartbeatMaxFailures = GetInt(configuration, "HEARTBEAT_MAX_FAILURES", 3),
+            HeartbeatMaxFailures = GetInt(configuration, "HEARTBEAT_MAX_FAILURES", 2),
             // Ver comentario en AppOptions.cs: 16h da margen sobre una cadencia real de ~12h.
             ChangelogStallHours = GetInt(configuration, "CHANGELOG_STALL_HOURS", 16),
             SessionExpiryHours = sessionExpiryHours,
