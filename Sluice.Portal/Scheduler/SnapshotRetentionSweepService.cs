@@ -67,6 +67,11 @@ public sealed class SnapshotRetentionSweepService : BackgroundService
         {
             await _retention.SweepAsync(DateTimeOffset.UtcNow, _settings.Get(), cancellationToken);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Apagado (redeploy) durante el barrido: no es un fallo ni merece alerta.
+            _logger.LogInformation("Barrido de retención de snapshots interrumpido por el apagado.");
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Snapshot retention sweep failed");

@@ -983,6 +983,8 @@
   <data name="Activity.SnapshotRetention.DeleteFailed" xml:space="preserve"><value>Pipeline {0}: could not delete snapshot {1}: {2}</value></data>
   <data name="Activity.SnapshotRetention.DryRun" xml:space="preserve"><value>Pipeline {0}: {1:N0} eligible snapshot(s) (dry run, nothing deleted).</value></data>
   <data name="Activity.SnapshotRetention.Sweep" xml:space="preserve"><value>Pipeline {0}: {1:N0} source snapshot(s) deleted (age {2}d, floor {3}).</value></data>
+  <data name="Activity.SnapshotRetention.SweepOne" xml:space="preserve"><value>Pipeline {0}: 1 source snapshot deleted, {1} (age {2}d, floor {3}).</value></data>
+  <data name="Activity.SnapshotRetention.SweepRange" xml:space="preserve"><value>Pipeline {0}: {1:N0} source snapshot(s) deleted, from {2} to {3} (age {4}d, floor {5}).</value></data>
   <data name="Activity.SnapshotRetention.PipelineFailed" xml:space="preserve"><value>Snapshot sweep failed on pipeline {0}: {1}</value></data>
   <data name="Activity.SnapshotRetention.DryRunTotal" xml:space="preserve"><value>Global dry run: {0:N0} snapshot(s) eligible for purge (age {1}d).</value></data>
   <data name="Activity.SnapshotRetention.SweepTotal" xml:space="preserve"><value>Source snapshot retention: {0:N0} folder(s) deleted (age {1}d, floor {2}).</value></data>
