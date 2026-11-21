@@ -20,6 +20,10 @@ public interface IAdlsClientFactory
     // guardada con ese id, para los dobles de test.
     Task<(bool Ok, string Message)> TestAsync(Connection connection, CancellationToken cancellationToken = default) =>
         TestAsync(connection.Id, cancellationToken);
+
+    // Qué almacén de snapshots abre la conexión: dos conexiones con la misma clave ven las mismas
+    // carpetas. null si no se puede resolver. Por defecto, la propia conexión, para los dobles de test.
+    string? SnapshotStoreKey(string connectionId) => connectionId;
 }
 
 public sealed class AdlsClientFactory : IAdlsClientFactory
@@ -94,6 +98,65 @@ public sealed class AdlsClientFactory : IAdlsClientFactory
 
         var settings = ConnectionSettingsFactory.ResolveAdls(connection);
         return new AdlsClient(settings);
+    }
+
+    // Sin descifrar: la cuenta y el container no son secretos. Cualquier fallo al leer la conexión
+    // (borrada, store ilegible) da null, y la retención lo trata como "podría ser cualquier almacén".
+    public string? SnapshotStoreKey(string connectionId)
+    {
+        try
+        {
+            return SnapshotStoreKey(
+                _connections.GetStored(connectionId),
+                _options.IsLocalSourceEnabled ? _options.LocalSourceRoot : null);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    // Misma resolución que Build. ADLS: la cuenta y el container de ResolveAdls (AdlsClient lista la
+    // raíz del container; no hay prefijo). ResolveAdls solo admite minúsculas en ambos, así que la
+    // comparación ordinal ya no distingue mayúsculas, y una URL en la cuenta no se acepta. Origen
+    // local: la carpeta {LOCAL_SOURCE_ROOT}/{container}, comparada como el sistema de ficheros.
+    // null si Build no podría abrir la conexión (tipo desconocido, config incompleta o inválida).
+    public static string? SnapshotStoreKey(Connection? connection, string? localSourceRoot)
+    {
+        if (connection is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            if (string.Equals(connection.Type, LocalType, StringComparison.OrdinalIgnoreCase))
+            {
+                if (localSourceRoot is null)
+                {
+                    return null;
+                }
+
+                var folder = LocalFolderClient.Confine(
+                    Path.GetFullPath(localSourceRoot),
+                    connection.Config.GetValueOrDefault("container") ?? "",
+                    allowBase: false)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                return "local|" + (OperatingSystem.IsWindows() ? folder.ToUpperInvariant() : folder);
+            }
+
+            if (!string.Equals(connection.Type, "adls", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var settings = ConnectionSettingsFactory.ResolveAdls(connection);
+            return $"adls|{settings.Account}|{settings.Container}";
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            return null;
+        }
     }
 
     public Task<(bool Ok, string Message)> TestAsync(string connectionId, CancellationToken cancellationToken = default) =>

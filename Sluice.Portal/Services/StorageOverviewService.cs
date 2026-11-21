@@ -87,7 +87,8 @@ public sealed class StorageOverviewService : IStorageOverviewService
             var allSnapshots = await adls.ListSnapshotFoldersAsync(cancellationToken);
             var currentFolder = await adls.GetSettledSnapshotAsync(cancellationToken);
             var state = _pipelines.GetState(pipelineId);
-            var retentionFloor = SnapshotRetentionService.SharedLastProcessed(_pipelines, pipeline.SourceId);
+            var storeSourceIds = SnapshotRetentionService.SameStoreSourceIds(_pipelines, _adlsFactory, pipeline.SourceId);
+            var retentionFloor = SnapshotRetentionService.SharedLastProcessed(_pipelines, storeSourceIds);
             var selection = SnapshotSelector.Select(allSnapshots, retentionFloor, currentFolder);
             var analysis = SnapshotRetentionService.Analyze(
                 DateTimeOffset.UtcNow,
@@ -95,7 +96,7 @@ public sealed class StorageOverviewService : IStorageOverviewService
                 allSnapshots,
                 retentionFloor,
                 selection,
-                SnapshotRetentionService.SharedBackfillFrom(_pipelines, pipeline.SourceId));
+                SnapshotRetentionService.SharedBackfillFrom(_pipelines, storeSourceIds));
 
             var parquets = await _parquet.ListAsync(pipelineId, cancellationToken);
             var consolidated = parquets

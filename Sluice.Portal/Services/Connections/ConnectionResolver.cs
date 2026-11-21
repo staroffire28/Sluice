@@ -10,6 +10,11 @@ public interface IConnectionResolver
     // Descifra los secretos de una conexión que no viene del store tal cual (p. ej. la del diálogo
     // de Destinos, con la contraseña guardada mezclada). Los valores en claro pasan sin tocar.
     Connection Unprotect(Connection connection) => connection;
+
+    // La conexión tal como está guardada, con los secretos aún cifrados: para leer campos que no son
+    // secretos (la cuenta y el container de un origen) sin descifrar nada. Por defecto, la de
+    // GetUnmasked, para los dobles de test (que no cifran).
+    Connection? GetStored(string id) => GetUnmasked(id);
 }
 
 public sealed class ConnectionResolver : IConnectionResolver
@@ -30,6 +35,8 @@ public sealed class ConnectionResolver : IConnectionResolver
         var connection = _store.GetById(id);
         return connection is null ? null : Unprotect(connection);
     }
+
+    public Connection? GetStored(string id) => _store.GetById(id);
 
     public Connection Unprotect(Connection connection) =>
         connection with { Config = UnprotectConfig(connection.Config) };
