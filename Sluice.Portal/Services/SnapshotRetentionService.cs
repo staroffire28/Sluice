@@ -210,7 +210,8 @@ public sealed class SnapshotRetentionService
                     floor,
                     currentFolder);
 
-                var analysis = Analyze(now, settings, allSnapshots, floor, selection, SharedBackfillFrom(_pipelines, storeSourceIds));
+                var backfillFrom = SharedBackfillFrom(_pipelines, storeSourceIds);
+                var analysis = Analyze(now, settings, allSnapshots, floor, selection, backfillFrom);
                 if (analysis.EligibleForPurge.Count == 0)
                 {
                     continue;
@@ -274,8 +275,8 @@ public sealed class SnapshotRetentionService
                 }
 
                 // Simulación: no se borra nada, así que el recuento es el del análisis de arriba. La
-                // recomprobación por carpeta de abajo (jobs, estados y análisis completo en cada una)
-                // es cuadrática, y en simulación las elegibles crecen en cada barrido sin techo.
+                // recomprobación por carpeta de abajo (jobs y estados en cada una) no hace falta, y en
+                // simulación las elegibles crecen en cada barrido sin techo.
                 if (settings.SourceSnapshotRetentionDryRun)
                 {
                     totalWouldDelete += analysis.EligibleForPurge.Count;
@@ -293,6 +294,13 @@ public sealed class SnapshotRetentionService
                 var deleted = 0;
                 string? firstDeleted = null;
                 string? lastDeleted = null;
+
+                // Antes de cada borrado se releen el suelo y el backfill; el análisis del almacén solo
+                // depende de ellos (el resto no cambia dentro del bucle), así que solo se repite cuando
+                // cambian. Repetirlo en cada carpeta hacía el borrado cuadrático.
+                var analyzedFloor = floor;
+                var analyzedBackfillFrom = backfillFrom;
+                var eligibleNow = analysis.EligibleForPurge.ToHashSet(StringComparer.Ordinal);
                 foreach (var folder in analysis.EligibleForPurge)
                 {
                     // Apagado entre borrados: se deja de borrar y se anota lo ya borrado.
@@ -310,12 +318,21 @@ public sealed class SnapshotRetentionService
                     }
 
                     var floorNow = SharedLastProcessed(_pipelines, storeSourceIds);
-                    var selectionNow = SnapshotSelector.Select(
-                        allSnapshots,
-                        floorNow,
-                        currentFolder);
-                    if (!Analyze(now, settings, allSnapshots, floorNow, selectionNow, SharedBackfillFrom(_pipelines, storeSourceIds))
-                        .EligibleForPurge.Contains(folder, StringComparer.Ordinal))
+                    var backfillFromNow = SharedBackfillFrom(_pipelines, storeSourceIds);
+                    if (!string.Equals(floorNow, analyzedFloor, StringComparison.Ordinal) ||
+                        !string.Equals(backfillFromNow, analyzedBackfillFrom, StringComparison.Ordinal))
+                    {
+                        var selectionNow = SnapshotSelector.Select(
+                            allSnapshots,
+                            floorNow,
+                            currentFolder);
+                        eligibleNow = Analyze(now, settings, allSnapshots, floorNow, selectionNow, backfillFromNow)
+                            .EligibleForPurge.ToHashSet(StringComparer.Ordinal);
+                        analyzedFloor = floorNow;
+                        analyzedBackfillFrom = backfillFromNow;
+                    }
+
+                    if (!eligibleNow.Contains(folder))
                     {
                         continue;
                     }
