@@ -174,13 +174,14 @@ services:
   api:
     environment:
       KNOWN_NETWORKS: 172.16.0.0/12   # Docker networks: trust X-Forwarded-For from the proxy
+      ALLOWED_HOSTS: sluice.example.com   # the name users type (required with AUTH_MODE=none)
 volumes:
   caddy-data:
 ```
 
-with a `Caddyfile` such as `sluice.example.com { reverse_proxy api:58472 }`. Set `KNOWN_PROXIES` or `KNOWN_NETWORKS` to the proxy: without them `X-Forwarded-For` is only trusted from loopback, and every user shares the proxy's IP in the login throttle.
+with a `Caddyfile` such as `sluice.example.com { reverse_proxy api:58472 }`. Set `KNOWN_PROXIES` or `KNOWN_NETWORKS` to the proxy: without them `X-Forwarded-For` is only trusted from loopback, and every user shares the proxy's IP in the login throttle. Put in `ALLOWED_HOSTS` the name users type: with `AUTH_MODE=none` the portal answers `400` to any other name. The portal checks the `Host` header the proxy sends, not `X-Forwarded-Host`: Caddy passes the original `Host` through; nginx needs `proxy_set_header Host $host;` (by default it sends the upstream name, `api:58472`).
 
-**Option B, HTTPS in the portal.** Mount a `.pfx` and set `ASPNETCORE_URLS=https://+:58472;http://localhost:58471`, `ASPNETCORE_Kestrel__Certificates__Default__Path=/certs/sluice.pfx` and `ASPNETCORE_Kestrel__Certificates__Default__Password` on the `api` service. The compose healthcheck probes plain HTTP, and the workers do not start until `api` is healthy: override the `api` `healthcheck` with the same `test` as your compose file but the URL `http://localhost:58471/health` (that HTTP listener only answers inside the container). Then publish on all interfaces with `SLUICE_HTTP_BIND=0.0.0.0` in `.env`. You renew the certificate yourself.
+**Option B, HTTPS in the portal.** Mount a `.pfx` and set `ASPNETCORE_URLS=https://+:58472;http://localhost:58471`, `ASPNETCORE_Kestrel__Certificates__Default__Path=/certs/sluice.pfx` and `ASPNETCORE_Kestrel__Certificates__Default__Password` on the `api` service. The compose healthcheck probes plain HTTP, and the workers do not start until `api` is healthy: override the `api` `healthcheck` with the same `test` as your compose file but the URL `http://localhost:58471/health` (that HTTP listener only answers inside the container). Then publish on all interfaces with `SLUICE_HTTP_BIND=0.0.0.0` in `.env`, and with `AUTH_MODE=none` add the portal's name to `ALLOWED_HOSTS`. You renew the certificate yourself.
 
 **Start it with both files.** Compose reads `docker-compose.override.yml` by itself only when the command gives no `-f`, and every command in this guide gives one. Name both files, and use the same pair in every later command (`up`, `down`, `logs`, and the update in step 2):
 
@@ -234,7 +235,7 @@ Edited in the portal, saved to the volume, applied without restart. If `settings
 
 ## Environment variables
 
-`UI_API_KEY`, `AUTH_MODE` and the optional `ALERT_WEBHOOK_URL`, `DEADMAN_PING_URL`, `CHANGELOG_STALL_HOURS`, `SESSION_EXPIRY_HOURS` and `TRANSLATE_ENUMS` go in `.env`; the rest are set by the compose files.
+`UI_API_KEY`, `AUTH_MODE` and the optional `ALLOWED_HOSTS`, `ALERT_WEBHOOK_URL`, `DEADMAN_PING_URL`, `CHANGELOG_STALL_HOURS`, `SESSION_EXPIRY_HOURS` and `TRANSLATE_ENUMS` go in `.env`; the rest are set by the compose files.
 
 | Variable | Purpose | Default |
 |---|---|---|
@@ -244,6 +245,7 @@ Edited in the portal, saved to the volume, applied without restart. If `settings
 | `DATA_DIR` | JSON persistence root (`/data` Linux, `C:/data` Windows). | set by compose |
 | `WORKER_STAGE` | Stage a worker processes (`ingest`, `sql` or `reconcile`; any other value stops startup); absence = orchestrator. A worker only answers `/health`: it serves neither the UI nor `/api/*`, so it does not need `UI_API_KEY`. | set by compose |
 | `KNOWN_PROXIES` / `KNOWN_NETWORKS` | Comma-separated IPs and CIDR networks of the trusted reverse proxy for `X-Forwarded-For`/`Proto`. Without them it is only trusted from loopback; behind a proxy in another container set them, or every user shares the proxy's IP in the login throttle (a warning is logged at startup). An invalid value stops startup. See *Remote access with TLS*. | empty |
+| `ALLOWED_HOSTS` | Comma-separated names users reach the portal by (no scheme or port): exact, or `*.example.com` for any subdomain (not `example.com` itself); case-insensitive. `localhost` and any IP address are always accepted. Any other name gets `400` before reaching the portal, which blocks DNS rebinding (a malicious site whose name starts resolving to the portal's IP). With `AUTH_MODE=none` the filter is always on, so set it if you reach the portal by a DNS name (behind a proxy, on an intranet, or a monitor that probes `/health` by name); with `AUTH_MODE=key` it only filters when set. Behind a proxy it checks the `Host` the proxy sends, not `X-Forwarded-Host`. The rule in force is logged at startup, and each refused name once. An invalid value stops startup. See *Remote access with TLS*. | empty |
 | `HEARTBEAT_MAX_FAILURES` | Consecutive failures renewing a task's lease after which the worker stops the stage (like a lost lease: the job is not marked as failed and the task is reclaimed when the lease expires), so that another replica never runs the same stage at the same time. A successful renewal resets the count; values below 1 count as 1. The default is 2 because the heartbeat runs every third of the lease: with 3 the stop would coincide with the lease expiring. | 2 |
 | `CHANGELOG_STALL_HOURS` | Hours without changelog update before alerting. | 16 |
 | `ALERT_WEBHOOK_URL` | Alert webhook used when the one in **Settings** is off or empty, and when `settings.json` cannot be read. The api and the workers send alerts, so the compose files pass it to all of them. | empty |

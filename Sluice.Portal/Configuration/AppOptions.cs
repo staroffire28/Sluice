@@ -51,6 +51,13 @@ public sealed class AppOptions
     public IReadOnlyList<System.Net.IPAddress> KnownProxies { get; set; } = [];
     public IReadOnlyList<System.Net.IPNetwork> KnownNetworks { get; set; } = [];
 
+    // Nombres por los que se entra al portal (ALLOWED_HOSTS: exactos o "*.dominio"), además de
+    // localhost y cualquier IP, que siempre valen. Con AUTH_MODE=none el filtro va siempre: una web
+    // que hace DNS rebinding llega con su propio nombre en Host y, sin clave, leía y escribía /api.
+    public IReadOnlyList<string> AllowedHosts { get; set; } = [];
+
+    public bool IsHostFilterActive => AllowedHosts.Count > 0 || IsOpenAccess;
+
     public bool IsDistributed => string.Equals(ExecutionMode, "distributed", StringComparison.OrdinalIgnoreCase);
 
     // AUTH_MODE: "key" (por defecto, UI_API_KEY obligatoria fuera de Development) o "none" (acceso

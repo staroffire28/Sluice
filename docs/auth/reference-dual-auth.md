@@ -10,6 +10,7 @@ Sluice Portal protects **operator access** (UI + management API) with a single s
 | `AUTH_MODE` | No | `key` | `key` requires `UI_API_KEY`. `none` is open access on purpose: no key, `/api/*` open, and the landing (`/login`) offers **Enter** instead of a key field. Any other value stops startup. |
 | `SESSION_EXPIRY_HOURS` | No | `12` | Hours until the HMAC session cookie expires. A value below 1 stops startup. |
 | `KNOWN_PROXIES` / `KNOWN_NETWORKS` | No | — | Reverse proxies (IPs / CIDR networks) trusted for `X-Forwarded-For` / `X-Forwarded-Proto`. When unset, only loopback is trusted and a warning is logged at startup. |
+| `ALLOWED_HOSTS` | Yes with `AUTH_MODE=none` reached by a DNS name | — | Comma-separated host names (exact or `*.example.com`) accepted besides `localhost` and any IP address; any other `Host` gets `400` (blocks DNS rebinding). Always enforced with `AUTH_MODE=none`; with `AUTH_MODE=key`, only when set. Checks the `Host` the proxy sends, not `X-Forwarded-Host`. An invalid value stops startup. |
 
 **Production startup rules** (when `ASPNETCORE_ENVIRONMENT` is not `Development`):
 

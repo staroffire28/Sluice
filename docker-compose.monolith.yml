@@ -29,6 +29,8 @@ services:
       DATA_DIR: C:/data
       UI_API_KEY: ${UI_API_KEY:-}
       AUTH_MODE: ${AUTH_MODE:-key}
+      # Nombres DNS por los que se entra (ver .env.example). Vacía: solo localhost e IPs con AUTH_MODE=none.
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-}
       # Alertas, deadman y sesión (opcionales, desde .env; ver .env.example). Vacías, no se usan.
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
       DEADMAN_PING_URL: ${DEADMAN_PING_URL:-}

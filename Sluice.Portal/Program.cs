@@ -238,8 +238,27 @@ if (appOptions.IsUiAuthEnabled && appOptions.UiApiKey!.Length < AuthConstants.Re
         AuthConstants.RecommendedKeyLength);
 }
 
+if (appOptions.AllowedHosts.Count > 0)
+{
+    app.Logger.LogInformation(
+        "Host filter on: only localhost, IP addresses and ALLOWED_HOSTS={AllowedHosts} are accepted.",
+        string.Join(",", appOptions.AllowedHosts));
+}
+else if (appOptions.IsOpenAccess)
+{
+    app.Logger.LogInformation(
+        "AUTH_MODE=none: host filter on, only localhost and IP addresses are accepted. To reach the portal by a DNS name, set ALLOWED_HOSTS.");
+}
+else
+{
+    app.Logger.LogInformation("ALLOWED_HOSTS not set and AUTH_MODE=key: host filter off.");
+}
+
 // Primero: lo que viene detrás (HSTS, el límite de intentos de login) ve el esquema y la IP del cliente.
 app.UseForwardedHeaders();
+// Justo después: un Host desconocido (DNS rebinding con AUTH_MODE=none) no llega a nada más. Cuenta el
+// Host que reenvía el proxy: X-Forwarded-Host no se procesa.
+app.UseAllowedHosts(appOptions);
 
 if (!app.Environment.IsDevelopment())
 {
