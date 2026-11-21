@@ -273,6 +273,21 @@ public sealed class SnapshotRetentionService
                     }
                 }
 
+                // Simulación: no se borra nada, así que el recuento es el del análisis de arriba. La
+                // recomprobación por carpeta de abajo (jobs, estados y análisis completo en cada una)
+                // es cuadrática, y en simulación las elegibles crecen en cada barrido sin techo.
+                if (settings.SourceSnapshotRetentionDryRun)
+                {
+                    totalWouldDelete += analysis.EligibleForPurge.Count;
+                    _activity.LogSystem(
+                        "snapshot-retention.dry-run",
+                        $"Pipeline {pipeline.Id}: {analysis.EligibleForPurge.Count} snapshot(s) elegibles " +
+                        $"(simulación, sin borrar).",
+                        pipeline.Id, null, "info",
+                        "Activity.SnapshotRetention.DryRun", pipeline.Id, analysis.EligibleForPurge.Count);
+                    continue;
+                }
+
                 // Las carpetas se borran en orden (su nombre es la fecha): la primera y la última
                 // borradas dan el rango que queda anotado; la lista exacta va al log de la aplicación.
                 var deleted = 0;
@@ -302,12 +317,6 @@ public sealed class SnapshotRetentionService
                     if (!Analyze(now, settings, allSnapshots, floorNow, selectionNow, SharedBackfillFrom(_pipelines, storeSourceIds))
                         .EligibleForPurge.Contains(folder, StringComparer.Ordinal))
                     {
-                        continue;
-                    }
-
-                    if (settings.SourceSnapshotRetentionDryRun)
-                    {
-                        totalWouldDelete++;
                         continue;
                     }
 
@@ -343,16 +352,7 @@ public sealed class SnapshotRetentionService
                     }
                 }
 
-                if (settings.SourceSnapshotRetentionDryRun && analysis.EligibleForPurge.Count > 0)
-                {
-                    _activity.LogSystem(
-                        "snapshot-retention.dry-run",
-                        $"Pipeline {pipeline.Id}: {analysis.EligibleForPurge.Count} snapshot(s) elegibles " +
-                        $"(simulación, sin borrar).",
-                        pipeline.Id, null, "info",
-                        "Activity.SnapshotRetention.DryRun", pipeline.Id, analysis.EligibleForPurge.Count);
-                }
-                else if (deleted == 1)
+                if (deleted == 1)
                 {
                     _activity.LogSystem(
                         "snapshot-retention.sweep",
