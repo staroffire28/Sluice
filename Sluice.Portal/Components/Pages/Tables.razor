@@ -76,7 +76,20 @@
                     }
                 </TemplateColumn>
                 <TemplateColumn Title="@L["Common.Status"]">
-                    <StatusBadge Status="@context.Status" />
+                    @* La marca de columnas va junto al estado (sin columna propia: la rejilla tiene que caber a
+                       1366px) y con wrap, como la insignia "Pausada". El detalle, en un diálogo. *@
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" VerticalGap="4" Wrap="true" VerticalAlignment="VerticalAlignment.Center">
+                        <StatusBadge Status="@context.Status" />
+                        @if (context.TypeMismatches is not null || context.ColumnsNotInSource is not null)
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Subtle" IconOnly="true"
+                                          IconStart="@(new Icons.Regular.Size20.Warning().WithColor(Color.Warning))"
+                                          Title="@L["Page.Tables.ColumnDrift.Aria", context.Entity]"
+                                          aria-label="@L["Page.Tables.ColumnDrift.Aria", context.Entity]" aria-haspopup="dialog"
+                                          data-testid="@($"column-drift-{context.Entity}")"
+                                          OnClick="@(() => _drift = context)" />
+                        }
+                    </FluentStack>
                 </TemplateColumn>
                 <TemplateColumn Title="@L["Page.Tables.Sync"]">
                     @* Wrap: si no hay sitio (1366px con una tabla de nombre largo y datos anchos), la
@@ -115,6 +128,41 @@
     </PanelState>
     </PageSection>
 </FluentStack>
+
+<InlineDialog Visible="@(_drift is not null)" VisibleChanged="@(v => { if (!v) _drift = null; })"
+              Title="@L["Page.Tables.ColumnDrift.Title", _drift?.Entity ?? ""]" Class="dialog-wide">
+    <ChildContent>
+        @if (_drift is { } d)
+        {
+            @if (d.TypeMismatches is { } mismatches)
+            {
+                <h3 class="dialog-form-subtitle">@L["Page.Tables.ColumnDrift.TypeTitle"]</h3>
+                <p class="field-hint">@L["Page.Tables.ColumnDrift.TypeHint"]</p>
+                <dl class="detail-list" data-testid="column-drift-types">
+                    @foreach (var m in mismatches)
+                    {
+                        <dt class="cell-mono">@m.Column</dt>
+                        <dd>@L["Page.Tables.ColumnDrift.Types", m.SqlType, m.SourceType]</dd>
+                    }
+                </dl>
+            }
+            @if (d.ColumnsNotInSource is { } notInSource)
+            {
+                <h3 class="dialog-form-subtitle">@L["Page.Tables.ColumnDrift.NotInSourceTitle"]</h3>
+                <p class="field-hint">@L["Page.Tables.ColumnDrift.NotInSourceHint"]</p>
+                <ul class="detail-ids cell-mono" data-testid="column-drift-not-in-source">
+                    @foreach (var column in notInSource)
+                    {
+                        <li>@column</li>
+                    }
+                </ul>
+            }
+        }
+    </ChildContent>
+    <Actions>
+        <FluentButton Appearance="ButtonAppearance.Subtle" data-testid="column-drift-close" OnClick="@(() => _drift = null)">@L["Common.Close"]</FluentButton>
+    </Actions>
+</InlineDialog>
 
 @code {
     private string _pipelineId = "";
@@ -181,6 +229,8 @@
                 DivergencePct = divergence.TryGetValue(kv.Key, out var pct) ? pct : null,
                 ReportIsPartial = reportIsPartial,
                 Paused = paused.Contains(kv.Key),
+                TypeMismatches = kv.Value.TypeMismatches,
+                ColumnsNotInSource = kv.Value.ColumnsNotInSource,
             })
             .OrderBy(r => r.Entity, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -220,8 +270,13 @@
 
     private int _staleTableDays;
 
+    // Tabla cuya marca de columnas se ve en el diálogo.
+    private TableRow? _drift;
+
     private sealed class TableRow
     {
+        public List<ColumnTypeMismatch>? TypeMismatches { get; init; }
+        public List<string>? ColumnsNotInSource { get; init; }
         public string Entity { get; init; } = "";
         public long RowCount { get; init; }
         public DateTimeOffset? Watermark { get; init; }

@@ -182,6 +182,10 @@ public sealed class SqlExecutor : ISqlExecutor
         var incrementalDelta = job.Type == JobType.Incremental && !reload;
         var loaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Lo que la comprobación de columnas vio en cada tabla (ver ColumnDrift), también en las que
+        // fallaron después: va a su TableState al final, con el resto del estado.
+        var columnDrift = new Dictionary<string, (List<ColumnTypeMismatch>? TypeMismatches, List<string>? NotInSource)>(StringComparer.OrdinalIgnoreCase);
+
         var failedEntities = 0;
         progress.StartStep(JobStepCatalog.Merge, total: entries.Count);
         using var stallWatch = new SqlStallWatch(StallAlertAfter, (step, elapsed) => WarnPossibleBlock(pipeline, task.JobId, step, elapsed), _logger);
@@ -239,6 +243,22 @@ public sealed class SqlExecutor : ISqlExecutor
                             $"{entry.Entity}: {stale.Count} columna(s) excluida(s) siguen en la tabla SQL y ya no se actualizan ({string.Join(", ", stale)}): conservan su último valor y quedan vacías en las filas nuevas.",
                             null, "Event.Sql.ExcludedColumnsRemain", entry.Entity, stale.Count, string.Join(", ", stale));
                     }
+                }
+
+                // EnsureTableAsync no cambia tipos ni borra columnas: la tabla se compara con el esquema que
+                // se carga (ya sin las excluidas, con las etiquetas). Un tipo distinto se avisa en cada carga,
+                // antes del MERGE (si este falla, el aviso queda junto al error); la columna que el origen no
+                // envía solo se marca en el estado.
+                var drift = ColumnDrift.Compare(
+                    await _mergeExecutor.GetColumnTypesAsync(connection, schema, entry.Entity, cancellationToken), cdmSchema, excludedColumns);
+                columnDrift[entry.Entity] = drift;
+                if (drift.TypeMismatches is { } mismatches)
+                {
+                    var list = string.Join(", ", mismatches.Select(m => $"{m.Column} ({m.SqlType} → {m.SourceType})"));
+                    _jobs.AppendEvent(task.JobId, EventLevel.Warning,
+                        $"{entry.Entity}: {mismatches.Count} columna(s) con un tipo en la tabla SQL distinto al del origen (tipo en SQL → tipo del origen): {list}. " +
+                        "SQL convierte los valores al tipo de la tabla, así que puede truncarlos o hacer fallar la carga. El aviso desaparece cuando el tipo de la columna en SQL coincida con el del origen.",
+                        null, "Event.Sql.ColumnTypeMismatch", entry.Entity, mismatches.Count, list);
                 }
                 if (!await _mergeExecutor.EnsureUniqueIdIndexAsync(connection, schema, entry.Entity, cancellationToken))
                 {
@@ -433,7 +453,11 @@ public sealed class SqlExecutor : ISqlExecutor
                 .Where(e => string.Equals(e.Status, "error", StringComparison.OrdinalIgnoreCase) && !loaded.Contains(e.Entity))
                 .Select(e => e.Entity)
                 .ToList();
+        // La marca de columnas de cada tabla ya registrada se guarda solo si cambió (por valor).
+        var driftChanged = state is not null
+            && columnDrift.Any(d => state.Tables.TryGetValue(d.Key, out var table) && !SameDrift(table, d.Value));
         if (_stateStore is not null && (refreshTables
+            || driftChanged
             || pendingSql?.Keys.Any(clearPending.Contains) == true
             || (pendingSql is not null && failedPending.Any(e => !pendingSql.ContainsKey(e)))))
         {
@@ -446,12 +470,25 @@ public sealed class SqlExecutor : ISqlExecutor
                 }
 
                 var updated = current with { PendingSql = remaining };
-                if (!refreshTables)
+                if (!refreshTables && !driftChanged)
                 {
                     return updated;
                 }
 
                 var tables = new Dictionary<string, TableState>(current.Tables, StringComparer.OrdinalIgnoreCase);
+                foreach (var (entity, (mismatches, notInSource)) in columnDrift)
+                {
+                    if (tables.TryGetValue(entity, out var table))
+                    {
+                        tables[entity] = table with { TypeMismatches = mismatches, ColumnsNotInSource = notInSource };
+                    }
+                }
+
+                if (!refreshTables)
+                {
+                    return updated with { Tables = tables };
+                }
+
                 foreach (var (entity, rows) in entitySqlRows)
                 {
                     if (tables.TryGetValue(entity, out var table))
@@ -543,6 +580,12 @@ public sealed class SqlExecutor : ISqlExecutor
         keys is null
             ? Task.CompletedTask
             : keys.AddAsync(batch.Where(r => r.ContainsKey("Id")).Select(r => r["Id"]).ToList(), cancellationToken);
+
+    private static bool SameDrift(TableState table, (List<ColumnTypeMismatch>? TypeMismatches, List<string>? NotInSource) drift) =>
+        SameList(table.TypeMismatches, drift.TypeMismatches) && SameList(table.ColumnsNotInSource, drift.NotInSource);
+
+    private static bool SameList<T>(List<T>? saved, List<T>? seen) =>
+        saved is null ? seen is null : seen is not null && saved.SequenceEqual(seen);
 
     // PendingSql sin esas tablas; null sigue siendo null (un estado de una versión sin el campo).
     private static Dictionary<string, string>? WithoutPending(Dictionary<string, string>? pending, IReadOnlySet<string> entities) =>

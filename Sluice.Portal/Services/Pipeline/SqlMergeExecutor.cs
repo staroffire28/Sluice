@@ -129,6 +129,15 @@ public interface ISqlMergeExecutor
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlySet<string>>(new HashSet<string>());
 
+    // Columnas de la tabla destino con su tipo, en el orden de la tabla (vacío si no existe). Por
+    // defecto vacío, para los dobles de test que no ejercitan SQL.
+    Task<IReadOnlyList<SqlColumnType>> GetColumnTypesAsync(
+        SqlConnection connection,
+        string schema,
+        string entity,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<SqlColumnType>>([]);
+
     // Lee la tabla entera (solo las columnas pedidas, en ese orden) para la comparación de valores.
     // DBNull llega como null. Por defecto no soportado, para los dobles de test que no lo ejercitan.
     IAsyncEnumerable<object?[]> ReadRowsAsync(
@@ -625,6 +634,33 @@ public sealed class SqlMergeExecutor : ISqlMergeExecutor
         }
 
         return existing;
+    }
+
+    public async Task<IReadOnlyList<SqlColumnType>> GetColumnTypesAsync(
+        SqlConnection connection,
+        string schema,
+        string entity,
+        CancellationToken cancellationToken = default)
+    {
+        var columns = new List<SqlColumnType>();
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, DATETIME_PRECISION
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
+            ORDER BY ORDINAL_POSITION
+            """;
+        cmd.Parameters.AddWithValue("@schema", schema);
+        cmd.Parameters.AddWithValue("@table", entity);
+
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            int? Number(int ordinal) => reader.IsDBNull(ordinal) ? null : Convert.ToInt32(reader.GetValue(ordinal), CultureInfo.InvariantCulture);
+            columns.Add(new SqlColumnType(reader.GetString(0), reader.GetString(1), Number(2), Number(3), Number(4), Number(5)));
+        }
+
+        return columns;
     }
 
     private async Task EnsureColumnsAsync(

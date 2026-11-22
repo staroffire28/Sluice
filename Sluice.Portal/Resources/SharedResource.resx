@@ -813,6 +813,13 @@
   <data name="App.DemoTitle" xml:space="preserve"><value>Modo demo: datos sintéticos de Dynamics 365 F&amp;O y un SQL Server propio. No usar en producción.</value></data>
   <data name="Page.Tables.LastData" xml:space="preserve"><value>Último dato</value></data>
   <data name="Page.Tables.LastDataStale" xml:space="preserve"><value>{0} días sin datos nuevos: revisa si la tabla sigue en el perfil de Synapse Link.</value></data>
+  <data name="Page.Tables.ColumnDrift.Aria" xml:space="preserve"><value>{0}: la tabla SQL no cuadra con el origen</value></data>
+  <data name="Page.Tables.ColumnDrift.Title" xml:space="preserve"><value>{0}: tabla SQL y origen</value></data>
+  <data name="Page.Tables.ColumnDrift.TypeTitle" xml:space="preserve"><value>Tipo distinto al del origen</value></data>
+  <data name="Page.Tables.ColumnDrift.TypeHint" xml:space="preserve"><value>SQL convierte los valores al tipo de la tabla, así que puede truncarlos o hacer fallar la carga. La marca se quita cuando el tipo de la columna en SQL coincida con el del origen.</value></data>
+  <data name="Page.Tables.ColumnDrift.Types" xml:space="preserve"><value>Tipo en SQL: {0} · tipo en el origen: {1}</value></data>
+  <data name="Page.Tables.ColumnDrift.NotInSourceTitle" xml:space="preserve"><value>Columnas de la tabla SQL que el origen no envía</value></data>
+  <data name="Page.Tables.ColumnDrift.NotInSourceHint" xml:space="preserve"><value>Conservan su último valor y quedan vacías en las filas nuevas.</value></data>
   <data name="Page.Settings.StaleTableDays" xml:space="preserve"><value>Días sin datos para resaltar una tabla</value></data>
   <data name="Page.Settings.StaleTableDays.Hint" xml:space="preserve"><value>En Tablas, «Último dato» se resalta cuando la última carga con filas es más antigua. 0 o negativo lo desactiva.</value></data>
   <data name="Page.Settings.ParquetVersionDays" xml:space="preserve"><value>Días de versiones del parquet</value></data>
@@ -943,6 +950,7 @@
   <data name="Event.Schema.ColumnsRemoved" xml:space="preserve"><value>{0}: columnas que ya no llegan del origen: {1} (en SQL conservan su último valor).</value></data>
   <data name="Event.Schema.TypeChanged" xml:space="preserve"><value>{0}: cambio de tipo en el origen: {1}. SQL mantiene el tipo anterior; revisa la tabla.</value></data>
   <data name="Event.Sql.ExcludedColumnsRemain" xml:space="preserve"><value>{0}: {1:N0} columna(s) excluida(s) siguen en la tabla SQL y ya no se actualizan ({2}): conservan su último valor y quedan vacías en las filas nuevas.</value></data>
+  <data name="Event.Sql.ColumnTypeMismatch" xml:space="preserve"><value>{0}: {1:N0} columna(s) con un tipo en la tabla SQL distinto al del origen (tipo en SQL → tipo del origen): {2}. SQL convierte los valores al tipo de la tabla, así que puede truncarlos o hacer fallar la carga. El aviso desaparece cuando el tipo de la columna en SQL coincida con el del origen.</value></data>
   <data name="Event.Sql.DuplicateIds" xml:space="preserve"><value>{0}: la tabla destino tiene Ids duplicados; no se crea el índice único sobre [Id] (el MERGE sigue sin él).</value></data>
   <data name="Event.Sql.NoReloadKeys" xml:space="preserve"><value>{0}: el parquet no trae claves; no se eliminan huérfanas para no vaciar la tabla.</value></data>
   <data name="Event.Sql.OrphansDeleted" xml:space="preserve"><value>{0}: {1:N0} fila(s) huérfana(s) eliminada(s) (recarga).</value></data>

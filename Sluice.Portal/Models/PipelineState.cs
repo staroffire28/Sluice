@@ -88,4 +88,12 @@ public sealed record TableState
     public DateTimeOffset? LastLoad { get; init; }
     public string? LastSnapshot { get; init; }
     public string Status { get; init; } = "ok";
+
+    // Lo que la etapa SQL vio en la tabla destino al cargarla (ver ColumnDrift): columnas cuyo tipo
+    // en SQL no coincide con el del origen y columnas de la tabla SQL que el origen no envía. null
+    // cuando no hay ninguna; se recalculan en cada carga y la página Tablas las marca.
+    public List<ColumnTypeMismatch>? TypeMismatches { get; init; }
+    public List<string>? ColumnsNotInSource { get; init; }
 }
+
+public sealed record ColumnTypeMismatch(string Column, string SqlType, string SourceType);
