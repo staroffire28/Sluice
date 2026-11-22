@@ -76,4 +76,4 @@ El estado se muestra en todas partes como una insignia de color: **Running/Claim
 
 **Obtener un reporte.** Botón **Reporte** (PDF) en el detalle del job, o Jobs → **Acciones** → **Reporte** (PDF) o **JSON**, por job. No hay una pantalla de Reportes aparte.
 
-Para saber qué significa cada estado y término, ver [Referencia](04-reference.md).
+Para saber qué significa cada estado y término, ver [Referencia](04-reference.es.md).
