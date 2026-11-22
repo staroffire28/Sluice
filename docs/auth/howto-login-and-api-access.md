@@ -85,7 +85,7 @@ Rotating `UI_API_KEY` and restarting signs out every open session: cookies issue
 
 | Check | Expected |
 |-------|----------|
-| `GET /health` | `{"status":"ok","scheduler":"ok","disk":"ok"}` |
+| `GET /health` | `{"status":"ok","scheduler":"ok","disk":"ok","config":"ok","alerts":"ok"}` |
 | `GET /api/status` without cookie | `401 Unauthorized` |
 | `GET /api/status` after JSON login | `200` with JSON body |
 

@@ -129,7 +129,7 @@ docker compose -f docker-compose.yml up -d --build
 **3. Verify:**
 
 ```bash
-curl http://localhost:58472/health      # → {"status":"ok","scheduler":"ok","disk":"ok"}
+curl http://localhost:58472/health      # → {"status":"ok","scheduler":"ok","disk":"ok","config":"ok","alerts":"ok"}
 ```
 
 Then open `http://localhost:58472/login`, sign in with your `UI_API_KEY` (with `AUTH_MODE=none`, press **Enter**), and confirm the header health pill reads **Online**.
