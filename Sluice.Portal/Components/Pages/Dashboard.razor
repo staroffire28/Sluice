@@ -20,6 +20,7 @@
 @inject Sluice.Portal.Services.Stores.SettingsStore Settings
 @inject Sluice.Portal.Services.Stores.RunQueueService RunQueue
 @inject Sluice.Portal.Services.Stores.UnreadableFileRegistry UnreadableFiles
+@inject AlertService Alerts
 @inject CircuitAuditActor Audit
 @implements IAsyncDisposable
 
@@ -72,6 +73,16 @@
     else if (_unreadableJobs > 0)
     {
         <FluentMessageBar Intent="MessageBarIntent.Info" data-testid="dashboard-unreadable-jobs">@L["Page.Dashboard.UnreadableJobs", _unreadableJobs]</FluentMessageBar>
+    }
+
+    @* La última entrega al webhook configurado falló: las alertas de un solo disparo de ese periodo no
+       llegan ni se reenvían. Sin el detalle ni el host (Ajustes los muestra). Sin fallo no se pinta nada. *@
+    @if (_alertDeliveryFailing is { } failing)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Warning" data-testid="dashboard-alert-delivery-failing">
+            @L["Page.Dashboard.AlertDeliveryFailing", Math.Max(1, failing.FailedSinceLastSuccess), FormatDateTime(failing.FailingSince ?? failing.LastFailureAt ?? failing.LastAttemptAt)]
+            <a href="/settings">@L["Page.Dashboard.AlertDeliveryFailing.Settings"]</a>
+        </FluentMessageBar>
     }
 
     @if (!_loading && _tableCount == 0)
@@ -284,6 +295,7 @@
     private int _pendingSnapshots;
     private List<string> _unreadableConfig = [];
     private int _unreadableJobs;
+    private AlertDeliveryStatus? _alertDeliveryFailing;
     private bool _testingConnections;
     private StorageRow? _storageRow;
     private bool _storageLoading;
@@ -378,6 +390,7 @@
             var unreadable = UnreadableFiles.Confirmed();
             _unreadableConfig = unreadable.Where(f => f.AffectsScheduling).Select(f => f.RelativePath).ToList();
             _unreadableJobs = unreadable.Count(f => !f.AffectsScheduling);
+            _alertDeliveryFailing = Alerts.FailingDelivery();
 
             // ListRunning = JobProgressHelper.IsActive (incluye Partial sin FinishedAt, que sigue
             // con SQL/Conciliación). El % sale del mismo JobFlowBuilder que el detalle del job.

@@ -40,6 +40,10 @@ public sealed class AlertDeliveryStatusStore
                 LastStatusCode = result.StatusCode,
                 LastSuccessAt = result.Success ? at : previous?.LastSuccessAt,
                 LastFailureAt = result.Success ? previous?.LastFailureAt : at,
+                // Una racha empezada por una versión sin el campo se fija en el fallo más antiguo que se conoce.
+                FailingSince = result.Success ? null
+                    : previous is { LastSucceeded: false } ? previous.FailingSince ?? previous.LastFailureAt ?? at
+                    : at,
                 FailedSinceLastSuccess = result.Success ? 0 : (previous?.FailedSinceLastSuccess ?? 0) + 1,
             });
             return previous;

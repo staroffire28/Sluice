@@ -129,7 +129,7 @@ docker compose -f docker-compose.yml up -d --build
 **3. Verifica:**
 
 ```bash
-curl http://localhost:58472/health      # → {"status":"ok","scheduler":"ok","disk":"ok"}
+curl http://localhost:58472/health      # → {"status":"ok","scheduler":"ok","disk":"ok","config":"ok","alerts":"ok"}
 ```
 
 Luego abre `http://localhost:58472/login`, inicia sesión con tu `UI_API_KEY` (con `AUTH_MODE=none`, pulsa **Entrar**) y confirma que la pastilla de salud diga **Online**.

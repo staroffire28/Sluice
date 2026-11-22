@@ -61,6 +61,10 @@ public sealed record AlertDeliveryStatus
     public DateTimeOffset? LastSuccessAt { get; init; }
     public DateTimeOffset? LastFailureAt { get; init; }
 
+    // Primer fallo de la racha actual (null tras una entrega correcta). Un estado escrito por una
+    // versión anterior no lo trae: quien lo muestra cae a LastFailureAt.
+    public DateTimeOffset? FailingSince { get; init; }
+
     // Intentos de entrega fallidos desde la última entrega correcta, incluidos los reintentos de
     // las alertas deduplicadas en cada poll. El aviso de recuperación los cita y recuerda que las
     // de un solo disparo (fallo, Partial, divergencia...) no se reenvían.

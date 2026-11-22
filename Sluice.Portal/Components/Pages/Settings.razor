@@ -76,7 +76,8 @@
                 </FluentMessageBar>
             }
 
-            @* Última entrega real (no las pruebas), la registre la api o un worker. *@
+            @* Última entrega real, la registre la api o un worker. Una prueba solo cuenta si recupera una
+               entrega que fallaba (correcta y al webhook guardado). *@
             <div data-testid="settings-alert-delivery">
                 <h3 class="dialog-form-subtitle">@L["Page.Settings.Alerts.LastDelivery"]</h3>
                 @if (_delivery is null)
@@ -390,6 +391,7 @@
         }
         finally
         {
+            _delivery = DeliveryStatusStore.Get();
             _testingAlert = false;
         }
     }

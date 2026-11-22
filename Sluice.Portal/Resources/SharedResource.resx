@@ -132,6 +132,7 @@
   <data name="Common.Health.Reason.SchedulerStale" xml:space="preserve"><value>Scheduler parado</value></data>
   <data name="Common.Health.Reason.DiskLow" xml:space="preserve"><value>Poco espacio en disco</value></data>
   <data name="Common.Health.Reason.ConfigUnreadable" xml:space="preserve"><value>Fichero de pipeline o conexión ilegible</value></data>
+  <data name="Common.Health.Reason.AlertsFailing" xml:space="preserve"><value>Las alertas no llegan al webhook</value></data>
   <data name="Common.Loading" xml:space="preserve"><value>Cargando…</value></data>
   <data name="Common.NoData" xml:space="preserve"><value>Sin datos.</value></data>
   <data name="Common.Add" xml:space="preserve"><value>Añadir</value></data>
@@ -759,6 +760,8 @@
   <data name="Page.Dashboard.UnreadableConfig" xml:space="preserve"><value>No se pueden leer estos ficheros de configuración: {0}. Los pipelines o conexiones que definen no aparecen en el portal y el scheduler no los ejecuta hasta que se reparen o se restauren los ficheros.</value></data>
   <data name="Page.Dashboard.UnreadableConfigJobs" xml:space="preserve"><value>Además, {0} fichero(s) de jobs no se pueden leer y no aparecen en el historial.</value></data>
   <data name="Page.Dashboard.UnreadableJobs" xml:space="preserve"><value>{0} fichero(s) de jobs no se pueden leer y no aparecen en el historial de jobs.</value></data>
+  <data name="Page.Dashboard.AlertDeliveryFailing" xml:space="preserve"><value>Las alertas no llegan al webhook desde {1}: {0} intento(s) de entrega fallido(s) desde entonces. Las alertas de un solo disparo emitidas mientras tanto (job en error, parcial, divergencia) no han llegado y no se reenvían.</value></data>
+  <data name="Page.Dashboard.AlertDeliveryFailing.Settings" xml:space="preserve"><value>Revisar el webhook en Ajustes</value></data>
   <data name="Page.Dashboard.ChangelogStalledShort" xml:space="preserve"><value>Changelog estancado</value></data>
   <data name="Common.Status.Idle" xml:space="preserve"><value>Libre</value></data>
   <data name="Page.Dashboard.MoreActiveJobs" xml:space="preserve"><value>y {0} más</value></data>

@@ -148,7 +148,10 @@ public sealed class AlertService
         }, cancellationToken);
     }
 
-    // No reintenta ni toca el estado de entrega: una prueba a mano no debe tapar una caída real.
+    // No reintenta. Solo toca el estado de entrega para registrar la recuperación: si la entrega está
+    // fallando y la prueba llega al webhook al que van ahora las alertas, el arreglo se comprueba sin
+    // esperar a la siguiente alerta real. Una prueba fallida, o a otra URL (escrita y sin guardar), no
+    // cambia nada: no debe tapar una caída real ni sumar al recuento.
     public async Task<AlertDeliveryResult> SendTestAlertAsync(string? webhookUrl, CancellationToken cancellationToken = default)
     {
         var url = string.IsNullOrWhiteSpace(webhookUrl) ? ResolveWebhookUrl() : webhookUrl.Trim();
@@ -170,7 +173,28 @@ public sealed class AlertService
             timestamp = DateTimeOffset.UtcNow,
             message = "Sluice portal alert test",
         }, cancellationToken);
+
+        if (result.Success && !cancellationToken.IsCancellationRequested && FailingDelivery() is not null)
+        {
+            _settings.TryGet(out var settings);
+            if (url == ConfiguredWebhookUrl(settings))
+            {
+                RecordDelivery(url, "test.ping", result);
+            }
+        }
+
         return result;
+    }
+
+    // La entrega al webhook está fallando: hay uno configurado ahora y la última entrega real falló.
+    // Devuelve ese estado (null si no falla, no hay estado o no se puede leer); lo leen el Panel y
+    // /health. Sin webhook no se avisa: un fallo de uno que ya se quitó no degrada el portal para siempre.
+    public AlertDeliveryStatus? FailingDelivery()
+    {
+        // Sin log: se llama en cada /health y en cada refresco del Panel. Con settings.json ilegible
+        // cuenta solo ALERT_WEBHOOK_URL, como al enviar.
+        _settings.TryGet(out var settings);
+        return ConfiguredWebhookUrl(settings) is not null && _status.Get() is { LastSucceeded: false } status ? status : null;
     }
 
     private string? ResolveWebhookUrl()
@@ -189,6 +213,12 @@ public sealed class AlertService
             }
         }
 
+        return ConfiguredWebhookUrl(settings);
+    }
+
+    // El webhook al que van ahora las alertas: el de Ajustes si está activo; si no, ALERT_WEBHOOK_URL.
+    private string? ConfiguredWebhookUrl(AppSettings settings)
+    {
         if (settings.AlertEnabled && !string.IsNullOrWhiteSpace(settings.AlertWebhookUrl))
         {
             return settings.AlertWebhookUrl.Trim();
@@ -226,6 +256,13 @@ public sealed class AlertService
             return result;
         }
 
+        RecordDelivery(url, eventType, result);
+        return result;
+    }
+
+    // Guarda el resultado en el estado compartido y anota en actividad solo las transiciones.
+    private void RecordDelivery(string url, string eventType, AlertDeliveryResult result)
+    {
         try
         {
             var previous = _status.Record(eventType, result, DateTimeOffset.UtcNow);
@@ -250,8 +287,6 @@ public sealed class AlertService
             // El estado es informativo: no poder guardarlo no cambia el resultado del envío.
             _logger.LogWarning(ex, "No se pudo guardar el estado de entrega de alertas.");
         }
-
-        return result;
     }
 
     // Un POST con su propio timeout. Distingue la respuesta HTTP (con el cuerpo recortado), el
