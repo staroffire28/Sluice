@@ -673,6 +673,9 @@ public sealed class IngestExecutor : IIngestExecutor
         var updatedTables = new Dictionary<string, TableState>(pipelineState.Tables, StringComparer.OrdinalIgnoreCase);
         foreach (var entry in manifestEntities)
         {
+            // La marca de columnas es de la tabla SQL, no de esta ingesta: se conserva hasta que la etapa
+            // SQL la recalcule.
+            var registered = pipelineState.Tables.GetValueOrDefault(entry.Entity);
             updatedTables[entry.Entity] = new TableState
             {
                 RowCount = entry.FilteredRows,
@@ -680,6 +683,8 @@ public sealed class IngestExecutor : IIngestExecutor
                 LastLoad = DateTimeOffset.UtcNow,
                 LastSnapshot = entry.Snapshot,
                 Status = "ok",
+                TypeMismatches = registered?.TypeMismatches,
+                ColumnsNotInSource = registered?.ColumnsNotInSource,
             };
         }
 

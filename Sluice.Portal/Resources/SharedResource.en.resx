@@ -814,6 +814,13 @@
   <data name="App.DemoTitle" xml:space="preserve"><value>Demo mode: synthetic Dynamics 365 F&amp;O data and its own SQL Server. Not for production.</value></data>
   <data name="Page.Tables.LastData" xml:space="preserve"><value>Last data</value></data>
   <data name="Page.Tables.LastDataStale" xml:space="preserve"><value>{0} days without new data: check whether the table is still in the Synapse Link profile.</value></data>
+  <data name="Page.Tables.ColumnDrift.Aria" xml:space="preserve"><value>{0}: the SQL table does not match the source</value></data>
+  <data name="Page.Tables.ColumnDrift.Title" xml:space="preserve"><value>{0}: SQL table and source</value></data>
+  <data name="Page.Tables.ColumnDrift.TypeTitle" xml:space="preserve"><value>Type different from the source</value></data>
+  <data name="Page.Tables.ColumnDrift.TypeHint" xml:space="preserve"><value>SQL converts the values to the table's type, so it may truncate them or make the load fail. The mark goes away once the column's type in SQL matches the source's.</value></data>
+  <data name="Page.Tables.ColumnDrift.Types" xml:space="preserve"><value>Type in SQL: {0} · type in the source: {1}</value></data>
+  <data name="Page.Tables.ColumnDrift.NotInSourceTitle" xml:space="preserve"><value>SQL table columns the source does not send</value></data>
+  <data name="Page.Tables.ColumnDrift.NotInSourceHint" xml:space="preserve"><value>They keep their last value and stay empty in new rows.</value></data>
   <data name="Page.Settings.StaleTableDays" xml:space="preserve"><value>Days without data to flag a table</value></data>
   <data name="Page.Settings.StaleTableDays.Hint" xml:space="preserve"><value>In Tables, "Last data" is highlighted when the last load with rows is older. 0 or negative disables it.</value></data>
   <data name="Page.Settings.ParquetVersionDays" xml:space="preserve"><value>Days of Parquet versions</value></data>
@@ -944,6 +951,7 @@
   <data name="Event.Schema.ColumnsRemoved" xml:space="preserve"><value>{0}: columns no longer coming from the source: {1} (in SQL they keep their last value).</value></data>
   <data name="Event.Schema.TypeChanged" xml:space="preserve"><value>{0}: type change in the source: {1}. SQL keeps the previous type; check the table.</value></data>
   <data name="Event.Sql.ExcludedColumnsRemain" xml:space="preserve"><value>{0}: {1:N0} excluded column(s) are still in the SQL table and no longer updated ({2}): they keep their last value and stay empty in new rows.</value></data>
+  <data name="Event.Sql.ColumnTypeMismatch" xml:space="preserve"><value>{0}: {1:N0} column(s) have a type in the SQL table that differs from the source (SQL type → source type): {2}. SQL converts the values to the table's type, so it may truncate them or make the load fail. The warning goes away once the column's type in SQL matches the source's.</value></data>
   <data name="Event.Sql.DuplicateIds" xml:space="preserve"><value>{0}: the destination table has duplicate Ids; the unique index on [Id] is not created (MERGE goes on without it).</value></data>
   <data name="Event.Sql.NoReloadKeys" xml:space="preserve"><value>{0}: the Parquet has no keys; orphan rows are not deleted so the table is not emptied.</value></data>
   <data name="Event.Sql.OrphansDeleted" xml:space="preserve"><value>{0}: {1:N0} orphan row(s) deleted (reload).</value></data>
