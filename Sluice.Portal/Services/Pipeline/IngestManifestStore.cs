@@ -45,6 +45,10 @@ public sealed class IngestManifestStore
         Snapshot = "",
     };
 
+    // Copias locales de los consolidados (DATA_DIR/cache/consolidated), en el mismo volumen: las usan
+    // la etapa SQL y la comparación de valores para no bajar el consolidado entero.
+    public ConsolidatedCache ConsolidatedCache => new(_options.DataDir);
+
     // Staging LOCAL (volumen) para los parquet transitorios por snapshot: efímeros, se
     // consumen al consolidar y se borran. No van a ADLS.
     public string GetStagingRoot(string jobId) =>

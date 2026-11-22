@@ -1022,10 +1022,8 @@ public sealed class IngestExecutor : IIngestExecutor
             return ct => parquetStore.OpenParquetReadAsync(consolidatedBlobPath, ct);
         }
 
-        if (await parquetStore.GetParquetPropertiesAsync(consolidatedBlobPath, cancellationToken) is { } remoteProperties)
+        if (await _consolidatedCache.TryGetCopyAsync(parquetStore, pipelineId, entity, consolidatedBlobPath, cancellationToken) is { } cached)
         {
-            var cached = await _consolidatedCache.GetOrDownloadAsync(
-                parquetStore, pipelineId, entity, consolidatedBlobPath, remoteProperties, cancellationToken);
             return _ => Task.FromResult<Stream>(File.OpenRead(cached));
         }
 

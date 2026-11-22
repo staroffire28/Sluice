@@ -13,6 +13,37 @@ public sealed class ConsolidatedCache(string dataDir)
     public string GetPath(string pipelineId, string entity) =>
         Path.Combine(dataDir, "cache", "consolidated", pipelineId, $"{entity}.parquet");
 
+    // Abre el consolidado de una tabla para leerlo entero (la etapa SQL y la comparación de valores):
+    // la copia local si el remoto no cambió; si no, lee del store como siempre. Una copia que no se
+    // puede escribir (disco lleno, permisos, otro proceso con el fichero) no hace fallar la lectura:
+    // se lee del remoto, como antes de la caché.
+    public async Task<Stream> OpenReadAsync(
+        IParquetStore store, string pipelineId, string entity, string blobPath, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (await TryGetCopyAsync(store, pipelineId, entity, blobPath, cancellationToken) is { } copy)
+            {
+                return File.OpenRead(copy);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && !cancellationToken.IsCancellationRequested)
+        {
+        }
+
+        return await store.OpenParquetReadAsync(blobPath, cancellationToken);
+    }
+
+    // Ruta de la copia local del blob, validada con un HEAD en este momento (ETag y tamaño) y bajada si
+    // no casa. null si no hay caché: el store no da propiedades, o es el disco del portal (ya es local).
+    // Indexada por pipeline y entidad, no por ruta: otra ruta de la tabla (una versión) tiene otro ETag,
+    // así que nunca se sirve con la copia del consolidado vigente (la baja y la sustituye).
+    public async Task<string?> TryGetCopyAsync(
+        IParquetStore store, string pipelineId, string entity, string blobPath, CancellationToken cancellationToken) =>
+        store is not LocalParquetStore && await store.GetParquetPropertiesAsync(blobPath, cancellationToken) is { } remote
+            ? await GetOrDownloadAsync(store, pipelineId, entity, blobPath, remote, cancellationToken)
+            : null;
+
     // Ruta de una copia local válida del consolidado remoto con estas propiedades, bajándolo si la
     // copia no está, es de otra versión (ETag) o no tiene el tamaño esperado (p. ej. cortada a medias).
     public async Task<string> GetOrDownloadAsync(

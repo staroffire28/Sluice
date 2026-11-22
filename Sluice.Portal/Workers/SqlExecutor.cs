@@ -297,9 +297,11 @@ public sealed class SqlExecutor : ISqlExecutor
                     deleteKeys.Clear();
                 }
 
+                // El consolidado, de la copia local si el remoto no cambió (ConsolidatedCache): en ADLS
+                // abrirlo es bajarlo entero, y el ingest de este job acaba de dejarlo como copia.
                 await using (var parquetStream = fromDelta
                     ? File.OpenRead(deltaPath)
-                    : await parquetStore.OpenParquetReadAsync(entry.ParquetPath, cancellationToken))
+                    : await _manifestStore.ConsolidatedCache.OpenReadAsync(parquetStore, task.PipelineId, entry.Entity, entry.ParquetPath, cancellationToken))
                 {
                     var batch = new List<Dictionary<string, object?>>(mergeBatch);
                     await foreach (var row in ParquetMaterializer.ReadStreamingAsync(parquetStream, cdmSchema, cancellationToken))

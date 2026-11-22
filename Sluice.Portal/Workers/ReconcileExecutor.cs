@@ -398,7 +398,8 @@ public sealed class ReconcileExecutor : IReconcileExecutor
 
             // Las columnas de etiqueta de enum ([<col>_$label]) se derivan al cargar: no están en el parquet.
             var columns = schema.Attributes.Where(a => a.EnumSourceColumn is null).ToList();
-            await using var stream = await parquetStore.OpenParquetReadAsync(parquetPath, cancellationToken);
+            // De la copia local si el remoto no cambió (ConsolidatedCache): en ADLS abrirlo es bajarlo entero.
+            await using var stream = await _manifestStore.ConsolidatedCache.OpenReadAsync(parquetStore, pipelineId, entity, parquetPath, cancellationToken);
             var parquetRows = ParquetMaterializer.ReadStreamingAsync(stream, schema, cancellationToken);
             return await ValueComparer.CompareAsync(
                 entity,
