@@ -67,6 +67,6 @@ public sealed record AlertDeliveryStatus
 
     // Intentos de entrega fallidos desde la última entrega correcta, incluidos los reintentos de
     // las alertas deduplicadas en cada poll. El aviso de recuperación los cita y recuerda que las
-    // de un solo disparo (fallo, Partial, divergencia...) no se reenvían.
+    // de un solo disparo (fallo, Partial, divergencia...) se guardan y se reintentan durante 24 h.
     public int FailedSinceLastSuccess { get; init; }
 }
