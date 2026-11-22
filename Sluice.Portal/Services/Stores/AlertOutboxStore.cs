@@ -79,8 +79,9 @@ public sealed class AlertOutboxStore
         }
     }
 
-    // Borra las que llevan más de 24 h desde el primer fallo y devuelve cuántas. Un fichero ilegible
-    // caduca por la fecha de su nombre, para que no cuente en el tope ni en el Panel para siempre.
+    // Borra las que llevan más de 24 h desde el primer fallo y devuelve cuántas. Basta la fecha del
+    // nombre (Enqueue la toma del mismo instante que FirstFailedAt), sin abrir cada fichero; así también
+    // caduca uno ilegible, para que no cuente en el tope ni en el Panel para siempre.
     public int RemoveExpired()
     {
         var limit = Now - MaxAge;
@@ -89,8 +90,7 @@ public sealed class AlertOutboxStore
         {
             foreach (var path in Files())
             {
-                var firstFailedAt = Read(path)?.FirstFailedAt ?? NameTime(path);
-                if (firstFailedAt is { } at && at <= limit && TryDelete(path))
+                if (NameTime(path) is { } at && at <= limit && TryDelete(path))
                 {
                     removed++;
                 }
