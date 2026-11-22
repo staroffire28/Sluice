@@ -33,7 +33,7 @@ public sealed class AdlsClient : IAdlsClient, IParquetStore
     private DataLakeFileSystemClient ParquetFileSystem() =>
         string.IsNullOrWhiteSpace(_parquetContainer)
             ? throw new InvalidOperationException(
-                "ADLS parquet destination container is not configured. Set 'parquet_container' on the ADLS connection or AZURE_PARQUET_CONTAINER.")
+                "ADLS parquet destination container is not configured. Set 'parquet_container' on the ADLS connection.")
             : _serviceClient.GetFileSystemClient(_parquetContainer);
 
     public async Task UploadParquetAsync(string blobPath, Stream content, CancellationToken cancellationToken = default)
