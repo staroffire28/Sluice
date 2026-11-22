@@ -18,9 +18,9 @@ Desde el portal creas conexiones, defines pipelines, lanzas corridas (manuales o
 
 ## Para quién es
 
-- **Operadores** que usan el portal en el día a día: ver [Funcionalidad](02-functionality.md).
-- **Quien instala y ejecuta la infraestructura**: ver [Instalación](03-installation.md).
-- **Cualquiera que necesite saber qué significa un término**: ver el glosario en [Referencia](04-reference.md).
+- **Operadores** que usan el portal en el día a día: ver [Funcionalidad](02-functionality.es.md).
+- **Quien instala y ejecuta la infraestructura**: ver [Instalación](03-installation.es.md).
+- **Cualquiera que necesite saber qué significa un término**: ver el glosario en [Referencia](04-reference.es.md).
 
 ## Conceptos clave de un vistazo
 
@@ -30,7 +30,7 @@ Desde el portal creas conexiones, defines pipelines, lanzas corridas (manuales o
 - **Conciliación (Reconcile)** — la verificación de que SQL tiene las mismas filas que el Parquet.
 - **Divergencia** — el porcentaje en que SQL y el origen no coinciden.
 
-Las definiciones completas están en [Referencia · Glosario](04-reference.md#glosario).
+Las definiciones completas están en [Referencia · Glosario](04-reference.es.md#glosario).
 
 ## Acceso e idioma
 
