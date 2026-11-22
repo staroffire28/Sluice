@@ -15,8 +15,10 @@ public static class HealthEndpoints
         // orquestador añade, solo como indicadores, si el scheduler sigue sondeando y si queda poco
         // disco: "degraded" sigue siendo 200 (el contenedor no está caído, hay que mirarlo). También si
         // hay un pipeline o una conexión cuyo fichero no se puede leer (lo que dejaron los últimos
-        // listados en UnreadableFileRegistry: no lee nada aquí); un job ilegible no degrada.
-        app.MapGet("/health", (IOptions<AppOptions> options, SettingsStore settings, SchedulerHeartbeat heartbeat, IDiskSpaceProbe disk, UnreadableFileRegistry unreadable) =>
+        // listados en UnreadableFileRegistry: no lee nada aquí); un job ilegible no degrada. Y si la
+        // última entrega al webhook de alertas configurado falló (lee alerts/status.json, un fichero
+        // pequeño): sin URL ni detalle, que llevan secretos o la respuesta del servidor remoto.
+        app.MapGet("/health", (IOptions<AppOptions> options, SettingsStore settings, SchedulerHeartbeat heartbeat, IDiskSpaceProbe disk, UnreadableFileRegistry unreadable, AlertService alerts) =>
         {
             if (DataDirProbe.CheckWritable(options.Value.DataDir) is not null)
             {
@@ -27,12 +29,14 @@ public static class HealthEndpoints
             var space = disk.Get(options.Value.DataDir);
             var diskLow = space?.IsLow == true;
             var configUnreadable = unreadable.Confirmed().Any(f => f.AffectsScheduling);
+            var alertsFailing = alerts.FailingDelivery() is not null;
             return Results.Ok(new
             {
-                status = schedulerStale || diskLow || configUnreadable ? "degraded" : "ok",
+                status = schedulerStale || diskLow || configUnreadable || alertsFailing ? "degraded" : "ok",
                 scheduler = schedulerStale ? "stale" : "ok",
                 disk = space is null ? "unknown" : diskLow ? "low" : "ok",
                 config = configUnreadable ? "unreadable" : "ok",
+                alerts = alertsFailing ? "failing" : "ok",
             });
         });
         app.MapGet("/internal/health", (IOptions<AppOptions> options) => LivenessResult(options.Value));

@@ -52,7 +52,7 @@ Login page (no session required). Exempt from auth middleware.
 
 ### `GET /health`
 
-Public health check. On the orchestrator it returns `{ "status": "ok", "scheduler": "ok", "disk": "ok", "config": "ok" }`, with `status` `degraded` (still HTTP 200) when the scheduler stopped polling, the `DATA_DIR` volume runs low or a pipeline or connection file cannot be read (`config: "unreadable"`); 503 when `DATA_DIR`, or its `logs` folder where the activity log is written, is not writable. A worker (`WORKER_STAGE`) returns `{ "status": "ok" }`. Used by the Docker healthcheck, and the only route a worker answers.
+Public health check. On the orchestrator it returns `{ "status": "ok", "scheduler": "ok", "disk": "ok", "config": "ok", "alerts": "ok" }`, with `status` `degraded` (still HTTP 200) when the scheduler stopped polling, the `DATA_DIR` volume runs low, a pipeline or connection file cannot be read (`config: "unreadable"`) or the last delivery to the configured alert webhook failed (`alerts: "failing"`); 503 when `DATA_DIR`, or its `logs` folder where the activity log is written, is not writable. A worker (`WORKER_STAGE`) returns `{ "status": "ok" }`. Used by the Docker healthcheck, and the only route a worker answers.
 
 ### `GET /internal/health`
 

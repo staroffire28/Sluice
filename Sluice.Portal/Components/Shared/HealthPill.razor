@@ -102,6 +102,11 @@
                 reasons.Add("Common.Health.Reason.ConfigUnreadable");
             }
 
+            if (Field(root, "alerts") == "failing")
+            {
+                reasons.Add("Common.Health.Reason.AlertsFailing");
+            }
+
             return reasons;
         }
         catch (JsonException)
