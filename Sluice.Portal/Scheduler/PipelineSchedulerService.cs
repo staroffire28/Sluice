@@ -53,6 +53,14 @@ public sealed class PipelineSchedulerService : BackgroundService
     private bool _diskLowNoticed;
     private bool _diskLowAlerted;
     private bool _alertDeliveryFailedThisPoll;
+    // Ficheros de pipelines o conexiones ilegibles (ruta relativa y desde cuándo): aviso registrado y
+    // alerta entregada, una vez por episodio. En memoria: tras un reinicio se avisa una vez más. Se rearman
+    // cuando el fichero sale del registro (se lee bien o ya no está).
+    private readonly UnreadableFileRegistry? _unreadable;
+    private readonly ConnectionStore? _connections;
+    private readonly HashSet<string> _unreadableNoticed = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _unreadableAlerted = new(StringComparer.OrdinalIgnoreCase);
+    private bool _connectionListFailed;
 
     public PipelineSchedulerService(
         IOptions<AppOptions> options,
@@ -71,8 +79,12 @@ public sealed class PipelineSchedulerService : BackgroundService
         RunQueueService runQueue,
         PipelineStateStore stateStore,
         SchedulerHeartbeat heartbeat,
-        IDiskSpaceProbe disk)
+        IDiskSpaceProbe disk,
+        UnreadableFileRegistry? unreadableFiles = null,
+        ConnectionStore? connections = null)
     {
+        _unreadable = unreadableFiles;
+        _connections = connections;
         _stateStore = stateStore;
         _heartbeat = heartbeat;
         _disk = disk;
@@ -405,6 +417,17 @@ public sealed class PipelineSchedulerService : BackgroundService
             }
         }
 
+        // Después del listado de pipelines de este ciclo, que ya dejó en el registro los ilegibles.
+        try
+        {
+            await CheckUnreadableConfigAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            degraded = true;
+            _logger.LogError(ex, "La vigilancia de ficheros ilegibles falló; se reintenta en el próximo poll.");
+        }
+
         // Al final, y solo si el ciclo terminó sin excepción ni fallos de sus vigilantes, y no fallaron
         // todos los pipelines evaluados (el fallo de alguno suelto ya alerta por su cuenta): un scheduler
         // que falla en cada poll deja de hacer ping y el monitor externo lo da por caído.
@@ -528,6 +551,63 @@ public sealed class PipelineSchedulerService : BackgroundService
         if (await TrySendPendingAlertAsync(message, ct))
         {
             _lagAlertsSent.Add(pipeline.Id);
+        }
+    }
+
+    // Pipeline o conexión cuyo fichero no se puede leer (confirmado, ver UnreadableFileRegistry): sale
+    // de los listados y el scheduler deja de ejecutarlo. Una alerta por fichero y episodio, deduplicada
+    // y reintentada como las demás; los jobs ilegibles no alertan. Solo en el orquestador.
+    private async Task CheckUnreadableConfigAsync(CancellationToken ct)
+    {
+        if (_unreadable is null || !_options.IsOrchestrator)
+        {
+            return;
+        }
+
+        // Las conexiones solo las listaba la UI: se listan aquí (el listado no descifra nada) para que
+        // una conexión ilegible llegue al registro sin nadie con el portal abierto. Un fallo de ese
+        // listado no tumba el ciclo y se registra una vez hasta que vuelva a funcionar.
+        try
+        {
+            _connections?.ListAll();
+            _connectionListFailed = false;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            if (!_connectionListFailed)
+            {
+                _connectionListFailed = true;
+                _logger.LogWarning(ex, "No se pudo listar las conexiones para vigilar ficheros ilegibles; se reintenta en el próximo poll.");
+            }
+        }
+
+        // El episodio es la ruta y desde cuándo está ilegible: si la UI lo vio reparado y roto otra vez
+        // entre dos sondeos, se avisa de nuevo aunque el scheduler no llegara a verlo legible.
+        var confirmed = _unreadable.Confirmed().Where(f => f.AffectsScheduling)
+            .Select(f => (File: f, Episode: $"{f.RelativePath}|{f.FirstSeenAt:O}"))
+            .ToList();
+        var episodes = confirmed.Select(c => c.Episode).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _unreadableNoticed.IntersectWith(episodes);
+        _unreadableAlerted.IntersectWith(episodes);
+        foreach (var (file, episode) in confirmed)
+        {
+            if (_unreadableAlerted.Contains(episode))
+            {
+                continue;
+            }
+
+            var message = $"Fichero de configuración ilegible: {file.RelativePath} ({file.Error}). El pipeline o la conexión que define " +
+                "no aparece en el portal y no se ejecuta hasta que se repare o se restaure el fichero.";
+            if (_unreadableNoticed.Add(episode))
+            {
+                _activity.LogSystem("config.unreadable", message, null, null, "error",
+                    "Activity.Config.Unreadable", file.RelativePath, file.Error);
+            }
+
+            if (await TrySendPendingAlertAsync(message, ct))
+            {
+                _unreadableAlerted.Add(episode);
+            }
         }
     }
 

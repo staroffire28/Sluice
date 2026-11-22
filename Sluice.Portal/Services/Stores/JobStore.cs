@@ -19,7 +19,8 @@ public sealed class JobStore : JsonFileStore<Job>
     // crezca en un proceso que guarda jobs sin listarlos nunca (un worker de SQL).
     private HashSet<string>? _forgotten;
 
-    public JobStore(IOptions<AppOptions> options, ILogger<JobStore>? logger = null) : base(options, "jobs", logger)
+    public JobStore(IOptions<AppOptions> options, ILogger<JobStore>? logger = null, UnreadableFileRegistry? unreadable = null)
+        : base(options, "jobs", logger, unreadable)
     {
         _locksDir = Path.Combine(options.Value.DataDir, "locks");
     }
@@ -66,6 +67,8 @@ public sealed class JobStore : JsonFileStore<Job>
             // Se lee el Job entero (no solo los campos del índice): su deserialización es la que valida
             // el fichero, y un job ilegible como Job no debe entrar en los listados.
             var read = new List<(string Id, DateTime WriteTime, long Length, JobIndexEntry? Entry)>(stale.Count);
+            // Un corrupto nunca entra en el índice, así que se relee (y se cuenta) en cada listado.
+            var corrupt = new List<(string Path, Exception Error)>();
             foreach (var (id, path, writeTime, length) in stale)
             {
                 Job? job;
@@ -84,6 +87,7 @@ public sealed class JobStore : JsonFileStore<Job>
                 {
                     // Corrupto: se omite, como en ListAll.
                     WarnUnreadable(path, ex);
+                    corrupt.Add((path, ex));
                     job = null;
                 }
 
@@ -91,6 +95,8 @@ public sealed class JobStore : JsonFileStore<Job>
                 read.Add((id, writeTime, length, job is null ? null
                     : new JobIndexEntry(job.Id, job.PipelineId, job.Type, job.Status, job.StartedAt, job.FinishedAt)));
             }
+
+            ReportUnreadable(corrupt);
 
             List<JobIndexEntry> entries;
             lock (_indexLock)

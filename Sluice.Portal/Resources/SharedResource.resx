@@ -131,6 +131,7 @@
   <data name="Common.Health.Offline" xml:space="preserve"><value>Sin conexión</value></data>
   <data name="Common.Health.Reason.SchedulerStale" xml:space="preserve"><value>Scheduler parado</value></data>
   <data name="Common.Health.Reason.DiskLow" xml:space="preserve"><value>Poco espacio en disco</value></data>
+  <data name="Common.Health.Reason.ConfigUnreadable" xml:space="preserve"><value>Fichero de pipeline o conexión ilegible</value></data>
   <data name="Common.Loading" xml:space="preserve"><value>Cargando…</value></data>
   <data name="Common.NoData" xml:space="preserve"><value>Sin datos.</value></data>
   <data name="Common.Add" xml:space="preserve"><value>Añadir</value></data>
@@ -755,6 +756,9 @@
   <data name="Page.Dashboard.ViewDetail" xml:space="preserve"><value>Ver detalle</value></data>
   <data name="Page.Dashboard.SinceTime" xml:space="preserve"><value>desde {0}</value></data>
   <data name="Page.Dashboard.MoreWorkers" xml:space="preserve"><value>y {0} más</value></data>
+  <data name="Page.Dashboard.UnreadableConfig" xml:space="preserve"><value>No se pueden leer estos ficheros de configuración: {0}. Los pipelines o conexiones que definen no aparecen en el portal y el scheduler no los ejecuta hasta que se reparen o se restauren los ficheros.</value></data>
+  <data name="Page.Dashboard.UnreadableConfigJobs" xml:space="preserve"><value>Además, {0} fichero(s) de jobs no se pueden leer y no aparecen en el historial.</value></data>
+  <data name="Page.Dashboard.UnreadableJobs" xml:space="preserve"><value>{0} fichero(s) de jobs no se pueden leer y no aparecen en el historial de jobs.</value></data>
   <data name="Page.Dashboard.ChangelogStalledShort" xml:space="preserve"><value>Changelog estancado</value></data>
   <data name="Common.Status.Idle" xml:space="preserve"><value>Libre</value></data>
   <data name="Page.Dashboard.MoreActiveJobs" xml:space="preserve"><value>y {0} más</value></data>
@@ -971,6 +975,7 @@
   <data name="Activity.Scheduler.Error" xml:space="preserve"><value>El scheduler falló en el pipeline {0}: {1}</value></data>
   <data name="Activity.Pipeline.Lag" xml:space="preserve"><value>Pipeline {0} atrasado: {1:N0} snapshot(s) cerrado(s) sin procesar; el más antiguo ({2}) espera desde hace {3:0} h (umbral {4} h).</value></data>
   <data name="Activity.Disk.Low" xml:space="preserve"><value>Poco espacio en disco en DATA_DIR: quedan {0:0.0} GB libres de {1:0.0} GB ({2:0.#} %), por debajo del umbral de {3:0.0} GB. Libera espacio o amplía el volumen antes de que los jobs fallen al escribir.</value></data>
+  <data name="Activity.Config.Unreadable" xml:space="preserve"><value>Fichero de configuración ilegible: {0} ({1}). El pipeline o la conexión que define no aparece en el portal y no se ejecuta hasta que se repare o se restaure el fichero.</value></data>
   <data name="Activity.Snapshot.Incomplete" xml:space="preserve"><value>Pipeline {0} parado: el snapshot {1} está cerrado pero incompleto desde hace {2} ({3}). No se procesa nada más hasta que el volcado de Synapse Link se complete; revisa la exportación.</value></data>
   <data name="Activity.Changelog.Blocked" xml:space="preserve"><value>Pipeline {0} parado: el changelog de Synapse Link lo bloquea desde hace {1} ({2}). No se procesa nada hasta que el changelog nombre una carpeta existente; revisa la exportación.</value></data>
   <data name="Activity.Retention.Sweep" xml:space="preserve"><value>Retención: {0:N0} jobs, {1:N0} reportes, {2:N0} tareas, {3:N0} runs, {4:N0} staging, {5:N0} logs de actividad eliminados (antigüedad {6}d, piso {7}/pipeline).</value></data>

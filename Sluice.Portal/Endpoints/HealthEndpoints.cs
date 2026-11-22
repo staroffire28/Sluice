@@ -13,8 +13,10 @@ public static class HealthEndpoints
         // cada 30s, y arranque de e2e tests que esperan /health en un loop ajustado). Solo
         // confirma que el proceso responde y que DATA_DIR y su logs/ son escribibles — nunca toca SQL/ADLS. En el
         // orquestador añade, solo como indicadores, si el scheduler sigue sondeando y si queda poco
-        // disco: "degraded" sigue siendo 200 (el contenedor no está caído, hay que mirarlo).
-        app.MapGet("/health", (IOptions<AppOptions> options, SettingsStore settings, SchedulerHeartbeat heartbeat, IDiskSpaceProbe disk) =>
+        // disco: "degraded" sigue siendo 200 (el contenedor no está caído, hay que mirarlo). También si
+        // hay un pipeline o una conexión cuyo fichero no se puede leer (lo que dejaron los últimos
+        // listados en UnreadableFileRegistry: no lee nada aquí); un job ilegible no degrada.
+        app.MapGet("/health", (IOptions<AppOptions> options, SettingsStore settings, SchedulerHeartbeat heartbeat, IDiskSpaceProbe disk, UnreadableFileRegistry unreadable) =>
         {
             if (DataDirProbe.CheckWritable(options.Value.DataDir) is not null)
             {
@@ -24,11 +26,13 @@ public static class HealthEndpoints
             var schedulerStale = heartbeat.IsStale(settings.Get().SchedulerPollMinutes);
             var space = disk.Get(options.Value.DataDir);
             var diskLow = space?.IsLow == true;
+            var configUnreadable = unreadable.Confirmed().Any(f => f.AffectsScheduling);
             return Results.Ok(new
             {
-                status = schedulerStale || diskLow ? "degraded" : "ok",
+                status = schedulerStale || diskLow || configUnreadable ? "degraded" : "ok",
                 scheduler = schedulerStale ? "stale" : "ok",
                 disk = space is null ? "unknown" : diskLow ? "low" : "ok",
+                config = configUnreadable ? "unreadable" : "ok",
             });
         });
         app.MapGet("/internal/health", (IOptions<AppOptions> options) => LivenessResult(options.Value));

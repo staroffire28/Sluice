@@ -97,6 +97,11 @@
                 reasons.Add("Common.Health.Reason.DiskLow");
             }
 
+            if (Field(root, "config") == "unreadable")
+            {
+                reasons.Add("Common.Health.Reason.ConfigUnreadable");
+            }
+
             return reasons;
         }
         catch (JsonException)

@@ -6,7 +6,8 @@ namespace Sluice.Portal.Services.Stores;
 
 public sealed class PipelineStore : JsonFileStore<PipelineModel>
 {
-    public PipelineStore(IOptions<AppOptions> options, ILogger<PipelineStore>? logger = null) : base(options, "pipelines", logger)
+    public PipelineStore(IOptions<AppOptions> options, ILogger<PipelineStore>? logger = null, UnreadableFileRegistry? unreadable = null)
+        : base(options, "pipelines", logger, unreadable)
     {
     }
 

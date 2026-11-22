@@ -130,6 +130,7 @@ builder.Services.AddSingleton<IConnectionSecretProtector, ConnectionSecretProtec
 
 builder.Services.AddSingleton<ITaskStore, TaskStore>();
 builder.Services.AddSingleton<WorkerRegistry>();
+builder.Services.AddSingleton<UnreadableFileRegistry>();
 builder.Services.AddSingleton<ConnectionStore>();
 builder.Services.AddSingleton<PipelineStore>();
 builder.Services.AddSingleton<JobStore>();
