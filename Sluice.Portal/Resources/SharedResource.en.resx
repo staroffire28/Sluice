@@ -817,7 +817,7 @@
   <data name="Page.Tables.ColumnDrift.Aria" xml:space="preserve"><value>{0}: the SQL table does not match the source</value></data>
   <data name="Page.Tables.ColumnDrift.Title" xml:space="preserve"><value>{0}: SQL table and source</value></data>
   <data name="Page.Tables.ColumnDrift.TypeTitle" xml:space="preserve"><value>Type different from the source</value></data>
-  <data name="Page.Tables.ColumnDrift.TypeHint" xml:space="preserve"><value>SQL converts the values to the table's type, so it may truncate them or make the load fail. The mark goes away once the column's type in SQL matches the source's.</value></data>
+  <data name="Page.Tables.ColumnDrift.TypeHint" xml:space="preserve"><value>SQL converts the values to the table's type, so it may truncate them or make the load fail. The mark is rechecked each time the table loads: after you fix the type in SQL, it goes away on the table's next load or when you re-sync the table.</value></data>
   <data name="Page.Tables.ColumnDrift.Types" xml:space="preserve"><value>Type in SQL: {0} · type in the source: {1}</value></data>
   <data name="Page.Tables.ColumnDrift.NotInSourceTitle" xml:space="preserve"><value>SQL table columns the source does not send</value></data>
   <data name="Page.Tables.ColumnDrift.NotInSourceHint" xml:space="preserve"><value>They keep their last value and stay empty in new rows.</value></data>

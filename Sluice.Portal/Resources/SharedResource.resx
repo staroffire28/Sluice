@@ -816,7 +816,7 @@
   <data name="Page.Tables.ColumnDrift.Aria" xml:space="preserve"><value>{0}: la tabla SQL no cuadra con el origen</value></data>
   <data name="Page.Tables.ColumnDrift.Title" xml:space="preserve"><value>{0}: tabla SQL y origen</value></data>
   <data name="Page.Tables.ColumnDrift.TypeTitle" xml:space="preserve"><value>Tipo distinto al del origen</value></data>
-  <data name="Page.Tables.ColumnDrift.TypeHint" xml:space="preserve"><value>SQL convierte los valores al tipo de la tabla, así que puede truncarlos o hacer fallar la carga. La marca se quita cuando el tipo de la columna en SQL coincida con el del origen.</value></data>
+  <data name="Page.Tables.ColumnDrift.TypeHint" xml:space="preserve"><value>SQL convierte los valores al tipo de la tabla, así que puede truncarlos o hacer fallar la carga. La marca se comprueba cada vez que se carga la tabla: tras corregir el tipo en SQL, se quita en la siguiente carga de la tabla o al re-sincronizarla.</value></data>
   <data name="Page.Tables.ColumnDrift.Types" xml:space="preserve"><value>Tipo en SQL: {0} · tipo en el origen: {1}</value></data>
   <data name="Page.Tables.ColumnDrift.NotInSourceTitle" xml:space="preserve"><value>Columnas de la tabla SQL que el origen no envía</value></data>
   <data name="Page.Tables.ColumnDrift.NotInSourceHint" xml:space="preserve"><value>Conservan su último valor y quedan vacías en las filas nuevas.</value></data>
