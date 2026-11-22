@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Options;
 using Sluice.Portal.Configuration;
 using Sluice.Portal.Models;
@@ -15,12 +17,17 @@ public sealed class AlertService
     private static readonly TimeSpan HttpTimeout = TimeSpan.FromSeconds(10);
     private const int MaxResponseBodyInDetail = 300;
 
+    // Reenvíos de la cola por sondeo del scheduler: con el timeout de 10 s, una cola larga sin tope
+    // dejaría el ciclo parado (y el scheduler "stale").
+    public const int OutboxMaxPerPoll = 20;
+
     private readonly AppOptions _options;
     private readonly SettingsStore _settings;
     private readonly ILogger<AlertService> _logger;
     private readonly IHttpClientFactory _httpFactory;
     private readonly AlertDeliveryStatusStore _status;
     private readonly IActivityLog? _activity;
+    private readonly AlertOutboxStore _outbox;
 
     public AlertService(
         IOptions<AppOptions> options,
@@ -28,7 +35,8 @@ public sealed class AlertService
         ILogger<AlertService> logger,
         IHttpClientFactory httpFactory,
         AlertDeliveryStatusStore? status = null,
-        IActivityLog? activity = null)
+        IActivityLog? activity = null,
+        AlertOutboxStore? outbox = null)
     {
         _options = options.Value;
         _settings = settings;
@@ -36,12 +44,16 @@ public sealed class AlertService
         _httpFactory = httpFactory;
         _status = status ?? new AlertDeliveryStatusStore(options);
         _activity = activity;
+        _outbox = outbox ?? new AlertOutboxStore(options);
     }
 
     // Espera antes del único reintento (5xx o timeout). internal: los tests no esperan.
     internal TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(2);
 
-    public async Task<AlertDeliveryResult> SendAsync(string message, CancellationToken cancellationToken = default)
+    // queueOnFailure: si no llega, se guarda en la cola y el scheduler la reintenta hasta 24 h. Lo que
+    // quien llama ya reintenta por su cuenta (las alertas deduplicadas del scheduler, que vuelven a
+    // intentarse en cada sondeo hasta llegar) pasa false: si no, cada sondeo fallido añadiría otra copia.
+    public async Task<AlertDeliveryResult> SendAsync(string message, CancellationToken cancellationToken = default, bool queueOnFailure = true)
     {
         _logger.LogWarning("ALERT: {Message}", message);
 
@@ -57,7 +69,7 @@ public sealed class AlertService
             timestamp = DateTimeOffset.UtcNow,
             text = message,
             message,
-        }, cancellationToken);
+        }, queueOnFailure, cancellationToken);
     }
 
     public async Task<AlertDeliveryResult> SendPipelineFailureAsync(PipelineFailureAlert alert, CancellationToken cancellationToken = default)
@@ -83,11 +95,12 @@ public sealed class AlertService
             stage = alert.Stage,
             status = alert.Status,
             message = alert.Message,
-        }, cancellationToken);
+        }, outbox: true, cancellationToken);
     }
 
     // Snapshot cerrado pero incompleto que frena el pipeline: es un aviso (el pipeline se reanuda solo
-    // cuando Synapse completa el volcado), no un fallo de un job.
+    // cuando Synapse completa el volcado), no un fallo de un job. No se encola: sus dos llamantes (el
+    // scheduler y el ingest) solo lo dan por avisado si llega, y lo repiten.
     public async Task<AlertDeliveryResult> SendSnapshotIncompleteAsync(
         string pipelineId, string? pipelineName, string snapshot, string message, CancellationToken cancellationToken = default)
     {
@@ -109,7 +122,7 @@ public sealed class AlertService
             status = "warning",
             text = message,
             message,
-        }, cancellationToken);
+        }, outbox: false, cancellationToken);
     }
 
     // Conciliación: estructurado para que el receptor (p. ej. la Logic App de correo) pinte la tabla
@@ -145,7 +158,7 @@ public sealed class AlertService
             maxDivergencePct = alert.MaxDivergencePct,
             entities = alert.Entities,
             autoRemediation,
-        }, cancellationToken);
+        }, outbox: true, cancellationToken);
     }
 
     // No reintenta. Solo toca el estado de entrega para registrar la recuperación: si la entrega está
@@ -235,7 +248,8 @@ public sealed class AlertService
     // Un reintento ante 5xx o timeout (un 4xx o un fallo de red/DNS no se arreglan reintentando al
     // momento). El resultado queda en el estado compartido; el activity log solo registra las
     // transiciones (empieza a fallar / se recupera), no cada alerta perdida.
-    private async Task<AlertDeliveryResult> DeliverAsync(string url, string eventType, object payload, CancellationToken cancellationToken)
+    // outbox: si al final no llega (también si el apagado corta el envío), se guarda en la cola.
+    private async Task<AlertDeliveryResult> DeliverAsync(string url, string eventType, object payload, bool outbox, CancellationToken cancellationToken)
     {
         var (result, retryable) = await PostOnceAsync(url, payload, cancellationToken);
         if (retryable)
@@ -248,6 +262,11 @@ public sealed class AlertService
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
             }
+        }
+
+        if (outbox && !result.Success)
+        {
+            Enqueue(eventType, payload);
         }
 
         // Cancelado por quien llama (apagado, job cancelado): no dice nada del webhook.
@@ -278,8 +297,8 @@ public sealed class AlertService
                 // Un estado escrito por una versión sin recuento cuenta al menos el último fallo.
                 var failed = Math.Max(1, previous.FailedSinceLastSuccess);
                 _activity?.LogSystem("alert.delivery.recovered",
-                    $"El webhook de alertas ({host}) vuelve a responder (alerta {eventType}). Mientras estaba caído fallaron {failed} intento(s) de entrega: las alertas de un solo disparo de ese periodo (fallo de job, Partial, divergencia...) no se reenvían; las deduplicadas se reintentan.",
-                    null, null, "info", "Activity.Alert.DeliveryRecovered.Lost", host, eventType, failed);
+                    $"El webhook de alertas ({host}) vuelve a responder (alerta {eventType}). Mientras estaba caído fallaron {failed} intento(s) de entrega: las alertas de un solo disparo de ese periodo (fallo de job, Partial, divergencia...) se guardaron y se reintentan durante 24 h, marcadas como retrasadas; las deduplicadas se reintentan.",
+                    null, null, "info", "Activity.Alert.DeliveryRecovered.Queued", host, eventType, failed);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -287,6 +306,113 @@ public sealed class AlertService
             // El estado es informativo: no poder guardarlo no cambia el resultado del envío.
             _logger.LogWarning(ex, "No se pudo guardar el estado de entrega de alertas.");
         }
+    }
+
+    // Cuántas alertas esperan en la cola de reenvío (0 si no se puede leer); lo muestra el Panel.
+    public int QueuedAlerts()
+    {
+        try
+        {
+            return _outbox.Count();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return 0;
+        }
+    }
+
+    // Lo llama solo el scheduler del orquestador, una vez por sondeo. Caduca siempre, aunque otra entrega
+    // del sondeo ya fallara (si no, con una alerta deduplicada fallando en cada sondeo nada caducaría), y
+    // reenvía solo con deliver: como mucho OutboxMaxPerPoll, de la más antigua a la más reciente, un POST
+    // por alerta (la espera creciente ya es el reintento). Un 4xx es de ese payload: cuenta el intento y
+    // sigue con la siguiente. Devuelve true si se paró porque el webhook no responde (red, timeout, 5xx o 429).
+    public async Task<bool> ProcessOutboxAsync(bool deliver, CancellationToken cancellationToken)
+    {
+        var expired = _outbox.RemoveExpired();
+        if (expired > 0)
+        {
+            _activity?.LogSystem("alert.outbox.expired",
+                $"{expired} alerta(s) sin entregar caducaron tras {AlertOutboxStore.MaxAge.TotalHours:0} h en la cola de reenvío y se descartaron.",
+                null, null, "error", "Activity.Alert.OutboxExpired", expired, AlertOutboxStore.MaxAge.TotalHours);
+        }
+
+        // Sin webhook ahora no se intenta nada: la cola espera (y caduca) sin contar intentos.
+        _settings.TryGet(out var settings);
+        if (!deliver || ConfiguredWebhookUrl(settings) is not { } url)
+        {
+            return false;
+        }
+
+        foreach (var (path, entry) in _outbox.Due(OutboxMaxPerPoll))
+        {
+            var (result, _) = await PostOnceAsync(url, Delayed(entry), cancellationToken);
+            // Cortado por el apagado: el fichero queda como estaba.
+            if (!result.Success && cancellationToken.IsCancellationRequested)
+            {
+                return false;
+            }
+
+            if (result.Success)
+            {
+                RecordDelivery(url, entry.EventType, result);
+                _outbox.Delete(path);
+                continue;
+            }
+
+            _outbox.RecordFailedAttempt(path, entry);
+            if (result.StatusCode is null or >= 500 or 429)
+            {
+                RecordDelivery(url, entry.EventType, result);
+                return true;
+            }
+
+            // Un 4xx es de ese payload, no del webhook: no toca el estado global, o una alerta que siempre
+            // lo da haría alternar el Panel y /health en cada reintento. Con la URL mal, todo da 4xx y el
+            // estado ya queda en fallo por las entregas reales.
+        }
+
+        return false;
+    }
+
+    // Nunca lanza: las alertas salen en caminos de fallo (un job que se cierra, un barrido que falla), y
+    // no poder guardar la cola no debe tumbarlos. Se guarda el payload tal como se envió (mismas opciones
+    // que PostAsJsonAsync), con su timestamp original; nunca la URL.
+    private void Enqueue(string eventType, object payload)
+    {
+        try
+        {
+            var node = JsonSerializer.SerializeToNode(payload, payload.GetType(), JsonSerializerOptions.Web)!;
+            var dropped = _outbox.Enqueue(eventType, node);
+            if (dropped > 0)
+            {
+                _activity?.LogSystem("alert.outbox.dropped",
+                    $"La cola de reenvío de alertas llegó al tope de {AlertOutboxStore.MaxEntries}: se descartaron {dropped} alerta(s), las más antiguas.",
+                    null, null, "warning", "Activity.Alert.OutboxDropped", AlertOutboxStore.MaxEntries, dropped);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "No se pudo guardar la alerta {EventType} en la cola de reenvío: no se reintentará.", eventType);
+        }
+    }
+
+    // Copia del payload guardado con la marca de entrega tardía; el fichero no cambia, así que un
+    // reenvío que vuelve a fallar no acumula prefijos.
+    private JsonObject Delayed(AlertOutboxEntry entry)
+    {
+        var minutes = (int)Math.Max(0, (_outbox.Now - entry.FirstFailedAt).TotalMinutes);
+        var payload = (JsonObject)entry.Payload!.DeepClone();
+        payload["delayed"] = true;
+        payload["delayedMinutes"] = minutes;
+        foreach (var field in new[] { "message", "text" })
+        {
+            if (payload[field] is JsonValue value && value.TryGetValue<string>(out var text))
+            {
+                payload[field] = $"[Entrega retrasada: {minutes} min] {text}";
+            }
+        }
+
+        return payload;
     }
 
     // Un POST con su propio timeout. Distingue la respuesta HTTP (con el cuerpo recortado), el

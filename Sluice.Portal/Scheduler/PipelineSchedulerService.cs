@@ -231,7 +231,7 @@ public sealed class PipelineSchedulerService : BackgroundService
 
         // Job en curso con su tarea viva pero sin actividad: el vigilante de huérfanos no lo ve. El aviso
         // queda como evento del job (no cambia su estado) y se repite cada 6 h mientras siga parado; si
-        // la alerta no llega, la siguiente sale en el próximo aviso.
+        // la alerta no llega, va a la cola de reenvío.
         try
         {
             foreach (var stalled in _watchdog.WarnStalled(DateTimeOffset.UtcNow))
@@ -426,6 +426,24 @@ public sealed class PipelineSchedulerService : BackgroundService
         {
             degraded = true;
             _logger.LogError(ex, "La vigilancia de ficheros ilegibles falló; se reintenta en el próximo poll.");
+        }
+
+        // Después de los avisos deduplicados del ciclo: la cola de alertas de un solo disparo que no
+        // llegaron. Solo el orquestador la vacía; si una entrega ya falló en este poll no se reenvía nada
+        // (solo caducan las viejas), y si el vaciado se para por el webhook cuenta como ese fallo.
+        if (_options.IsOrchestrator)
+        {
+            try
+            {
+                if (await _alerts.ProcessOutboxAsync(deliver: !_alertDeliveryFailedThisPoll, ct))
+                {
+                    _alertDeliveryFailedThisPoll = true;
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "El reenvío de alertas en cola falló; se reintenta en el próximo poll.");
+            }
         }
 
         // Al final, y solo si el ciclo terminó sin excepción ni fallos de sus vigilantes, y no fallaron
@@ -651,9 +669,11 @@ public sealed class PipelineSchedulerService : BackgroundService
     }
 
     // Alertas deduplicadas que se reintentan en cada poll hasta llegar: tras el primer fallo de entrega
-    // del poll las demás esperan al siguiente, para no bloquear el ciclo con un webhook caído.
+    // del poll las demás esperan al siguiente, para no bloquear el ciclo con un webhook caído. Como ya se
+    // reintentan aquí, no van a la cola de reenvío (queueOnFailure: false): cada poll fallido añadiría
+    // otra copia. Una alerta nueva que se manda una sola vez usa _alerts.SendAsync directamente.
     private Task<bool> TrySendPendingAlertAsync(string message, CancellationToken ct) =>
-        TrySendPendingAlertAsync(() => _alerts.SendAsync(message, ct));
+        TrySendPendingAlertAsync(() => _alerts.SendAsync(message, ct, queueOnFailure: false));
 
     private async Task<bool> TrySendPendingAlertAsync(Func<Task<AlertDeliveryResult>> send)
     {

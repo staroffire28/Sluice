@@ -760,7 +760,7 @@
   <data name="Page.Dashboard.UnreadableConfig" xml:space="preserve"><value>No se pueden leer estos ficheros de configuración: {0}. Los pipelines o conexiones que definen no aparecen en el portal y el scheduler no los ejecuta hasta que se reparen o se restauren los ficheros.</value></data>
   <data name="Page.Dashboard.UnreadableConfigJobs" xml:space="preserve"><value>Además, {0} fichero(s) de jobs no se pueden leer y no aparecen en el historial.</value></data>
   <data name="Page.Dashboard.UnreadableJobs" xml:space="preserve"><value>{0} fichero(s) de jobs no se pueden leer y no aparecen en el historial de jobs.</value></data>
-  <data name="Page.Dashboard.AlertDeliveryFailing" xml:space="preserve"><value>Las alertas no llegan al webhook desde {1}: {0} intento(s) de entrega fallido(s) desde entonces. Las alertas de un solo disparo emitidas mientras tanto (job en error, parcial, divergencia) no han llegado y no se reenvían.</value></data>
+  <data name="Page.Dashboard.AlertDeliveryFailing.Queued" xml:space="preserve"><value>Las alertas no llegan al webhook desde {1}: {0} intento(s) de entrega fallido(s) desde entonces. Las alertas de un solo disparo emitidas mientras tanto (job en error, parcial, divergencia) se guardan y se reintentan durante 24 h; ahora hay {2:N0} en cola.</value></data>
   <data name="Page.Dashboard.AlertDeliveryFailing.Settings" xml:space="preserve"><value>Revisar el webhook en Ajustes</value></data>
   <data name="Page.Dashboard.ChangelogStalledShort" xml:space="preserve"><value>Changelog estancado</value></data>
   <data name="Common.Status.Idle" xml:space="preserve"><value>Libre</value></data>
@@ -997,6 +997,9 @@
   <data name="Activity.SnapshotRetention.SweepTotal" xml:space="preserve"><value>Retención snapshots origen: {0:N0} carpeta(s) eliminadas (antigüedad {1}d, piso {2}).</value></data>
   <data name="Activity.Alert.DeliveryFailed" xml:space="preserve"><value>No se pudo entregar la alerta {0} al webhook ({1}): {2}. Las alertas no llegan hasta que se avise de que se ha recuperado.</value></data>
   <data name="Activity.Alert.DeliveryRecovered" xml:space="preserve"><value>El webhook de alertas ({0}) vuelve a responder (alerta {1}).</value></data>
+  <data name="Activity.Alert.DeliveryRecovered.Queued" xml:space="preserve"><value>El webhook de alertas ({0}) vuelve a responder (alerta {1}). Mientras estaba caído fallaron {2:N0} intento(s) de entrega: las alertas de un solo disparo de ese periodo (fallo de job, Partial, divergencia...) se guardaron y se reintentan durante 24 h, marcadas como retrasadas; las deduplicadas se reintentan.</value></data>
+  <data name="Activity.Alert.OutboxExpired" xml:space="preserve"><value>{0:N0} alerta(s) sin entregar caducaron tras {1:0} h en la cola de reenvío y se descartaron.</value></data>
+  <data name="Activity.Alert.OutboxDropped" xml:space="preserve"><value>La cola de reenvío de alertas llegó al tope de {0:N0}: se descartaron {1:N0} alerta(s), las más antiguas.</value></data>
   <data name="Activity.Alert.DeliveryRecovered.Lost" xml:space="preserve"><value>El webhook de alertas ({0}) vuelve a responder (alerta {1}). Mientras estaba caído fallaron {2:N0} intento(s) de entrega: las alertas de un solo disparo de ese periodo (fallo de job, Partial, divergencia...) no se reenvían; las deduplicadas se reintentan.</value></data>
   <data name="Activity.Demo.Failed" xml:space="preserve"><value>No se pudo preparar la demo: {0}</value></data>
   <data name="Activity.Failure" xml:space="preserve"><value>{0}: {1}</value></data>
