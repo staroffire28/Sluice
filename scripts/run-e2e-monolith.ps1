@@ -19,18 +19,20 @@ function Wait-Health {
                 Write-Host "Health OK"
                 return
             }
-            # 200 con "degraded": el portal arrancó, pero el scheduler o el disco piden atención.
+            # 200 con "degraded": el portal arrancó, pero el scheduler, el disco, la configuración o
+            # las alertas piden atención.
             if ($health.status -eq "degraded") {
-                Write-Warning "Health degraded (scheduler=$($health.scheduler), disk=$($health.disk))"
+                Write-Warning "Health degraded (scheduler=$($health.scheduler), disk=$($health.disk), config=$($health.config), alerts=$($health.alerts))"
                 return
             }
         }
         catch {
-            if ((Get-Date) -gt $deadline) {
-                throw "Health check timed out after ${TimeoutSeconds}s"
-            }
-            Start-Sleep -Seconds 3
+            # Aún no responde: se reintenta igual que con cualquier otro estado.
         }
+        if ((Get-Date) -gt $deadline) {
+            throw "Health check timed out after ${TimeoutSeconds}s"
+        }
+        Start-Sleep -Seconds 3
     } while ($true)
 }
 
