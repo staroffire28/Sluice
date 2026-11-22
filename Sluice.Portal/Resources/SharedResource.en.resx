@@ -131,6 +131,7 @@
   <data name="Common.Health.Offline" xml:space="preserve"><value>Offline</value></data>
   <data name="Common.Health.Reason.SchedulerStale" xml:space="preserve"><value>Scheduler stalled</value></data>
   <data name="Common.Health.Reason.DiskLow" xml:space="preserve"><value>Low disk space</value></data>
+  <data name="Common.Health.Reason.ConfigUnreadable" xml:space="preserve"><value>Unreadable pipeline or connection file</value></data>
   <data name="Common.Loading" xml:space="preserve"><value>Loading…</value></data>
   <data name="Common.NoData" xml:space="preserve"><value>No data.</value></data>
   <data name="Common.Add" xml:space="preserve"><value>Add</value></data>
@@ -756,6 +757,9 @@
   <data name="Page.Dashboard.ViewDetail" xml:space="preserve"><value>View details</value></data>
   <data name="Page.Dashboard.SinceTime" xml:space="preserve"><value>since {0}</value></data>
   <data name="Page.Dashboard.MoreWorkers" xml:space="preserve"><value>and {0} more</value></data>
+  <data name="Page.Dashboard.UnreadableConfig" xml:space="preserve"><value>These configuration files cannot be read: {0}. The pipelines or connections they define do not appear in the portal and the scheduler does not run them until the files are repaired or restored.</value></data>
+  <data name="Page.Dashboard.UnreadableConfigJobs" xml:space="preserve"><value>Also, {0} job file(s) cannot be read and are missing from the history.</value></data>
+  <data name="Page.Dashboard.UnreadableJobs" xml:space="preserve"><value>{0} job file(s) cannot be read and are missing from the job history.</value></data>
   <data name="Page.Dashboard.ChangelogStalledShort" xml:space="preserve"><value>Changelog stalled</value></data>
   <data name="Common.Status.Idle" xml:space="preserve"><value>Idle</value></data>
   <data name="Page.Dashboard.MoreActiveJobs" xml:space="preserve"><value>and {0} more</value></data>
@@ -972,6 +976,7 @@
   <data name="Activity.Scheduler.Error" xml:space="preserve"><value>The scheduler failed on pipeline {0}: {1}</value></data>
   <data name="Activity.Pipeline.Lag" xml:space="preserve"><value>Pipeline {0} is behind: {1:N0} closed snapshot(s) not processed; the oldest ({2}) has been waiting for {3:0} h (threshold {4} h).</value></data>
   <data name="Activity.Disk.Low" xml:space="preserve"><value>Low disk space on DATA_DIR: {0:0.0} GB free of {1:0.0} GB ({2:0.#} %), below the {3:0.0} GB threshold. Free up space or grow the volume before jobs fail to write.</value></data>
+  <data name="Activity.Config.Unreadable" xml:space="preserve"><value>Unreadable configuration file: {0} ({1}). The pipeline or connection it defines does not appear in the portal and does not run until the file is repaired or restored.</value></data>
   <data name="Activity.Snapshot.Incomplete" xml:space="preserve"><value>Pipeline {0} on hold: snapshot {1} has been closed but incomplete for {2} ({3}). Nothing else is processed until the Synapse Link export completes; check the export.</value></data>
   <data name="Activity.Changelog.Blocked" xml:space="preserve"><value>Pipeline {0} on hold: the Synapse Link changelog has blocked it for {1} ({2}). Nothing is processed until the changelog names an existing folder; check the export.</value></data>
   <data name="Activity.Retention.Sweep" xml:space="preserve"><value>Retention: {0:N0} jobs, {1:N0} reports, {2:N0} tasks, {3:N0} runs, {4:N0} staging, {5:N0} activity logs deleted (age {6}d, floor {7}/pipeline).</value></data>

@@ -19,6 +19,7 @@
 @inject WorkerRegistry WorkerRegistry
 @inject Sluice.Portal.Services.Stores.SettingsStore Settings
 @inject Sluice.Portal.Services.Stores.RunQueueService RunQueue
+@inject Sluice.Portal.Services.Stores.UnreadableFileRegistry UnreadableFiles
 @inject CircuitAuditActor Audit
 @implements IAsyncDisposable
 
@@ -56,6 +57,22 @@
             </div>
         </Actions>
     </PageHeader>
+
+    @* Ficheros de configuración que no se pueden leer (confirmados): sin ellos no se pinta nada. *@
+    @if (_unreadableConfig.Count > 0)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Warning" data-testid="dashboard-unreadable-config">
+            @L["Page.Dashboard.UnreadableConfig", string.Join(", ", _unreadableConfig)]
+            @if (_unreadableJobs > 0)
+            {
+                @(" " + L["Page.Dashboard.UnreadableConfigJobs", _unreadableJobs].Value)
+            }
+        </FluentMessageBar>
+    }
+    else if (_unreadableJobs > 0)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Info" data-testid="dashboard-unreadable-jobs">@L["Page.Dashboard.UnreadableJobs", _unreadableJobs]</FluentMessageBar>
+    }
 
     @if (!_loading && _tableCount == 0)
     {
@@ -265,6 +282,8 @@
     private List<WorkerStatus> _workers = [];
     private bool _changelogStalled;
     private int _pendingSnapshots;
+    private List<string> _unreadableConfig = [];
+    private int _unreadableJobs;
     private bool _testingConnections;
     private StorageRow? _storageRow;
     private bool _storageLoading;
@@ -354,6 +373,11 @@
             _lastJob = JobService.List(1, 1).FirstOrDefault();
             _hasSource = Connections.List(ConnectionRole.Source).Count > 0;
             _hasDestination = Connections.List(ConnectionRole.Destination).Count > 0;
+
+            // Tras los listados de arriba, que dejan en el registro lo que no pudieron leer.
+            var unreadable = UnreadableFiles.Confirmed();
+            _unreadableConfig = unreadable.Where(f => f.AffectsScheduling).Select(f => f.RelativePath).ToList();
+            _unreadableJobs = unreadable.Count(f => !f.AffectsScheduling);
 
             // ListRunning = JobProgressHelper.IsActive (incluye Partial sin FinishedAt, que sigue
             // con SQL/Conciliación). El % sale del mismo JobFlowBuilder que el detalle del job.

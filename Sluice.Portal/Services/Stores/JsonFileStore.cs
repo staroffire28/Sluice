@@ -14,12 +14,15 @@ public abstract class JsonFileStore<T>
     // Ficheros ilegibles ya avisados, con la fecha de modificación que tenían: un aviso por versión
     // del fichero, no en cada listado.
     private readonly Dictionary<string, DateTime> _unreadableWarned = new(StringComparer.OrdinalIgnoreCase);
+    // Registro compartido de ficheros ilegibles (lo leen el Panel, /health y el scheduler).
+    private readonly UnreadableFileRegistry? _unreadable;
 
-    protected JsonFileStore(IOptions<AppOptions> options, string subDirectory, ILogger? logger = null)
+    protected JsonFileStore(IOptions<AppOptions> options, string subDirectory, ILogger? logger = null, UnreadableFileRegistry? unreadable = null)
     {
         _options = options.Value;
         _subDirectory = subDirectory;
         _logger = logger ?? NullLogger.Instance;
+        _unreadable = unreadable;
         Directory.CreateDirectory(GetDirectory());
     }
 
@@ -41,19 +44,26 @@ public abstract class JsonFileStore<T>
                 return [];
             }
 
-            return Directory.GetFiles(GetDirectory(), "*.json")
-                .Select(f => TryDeserialize(f, deserialize))
+            var unreadable = new List<(string Path, Exception Error)>();
+            var items = Directory.GetFiles(GetDirectory(), "*.json")
+                .Select(f => TryDeserialize(f, deserialize, unreadable))
                 .Where(x => x is not null)
                 .Cast<T>()
                 .ToList();
+            ReportUnreadable(unreadable);
+            return items;
         }
     }
+
+    // Deja en el registro el conjunto de ficheros de la carpeta que este listado no pudo leer.
+    protected void ReportUnreadable(IEnumerable<(string Path, Exception Error)> unreadable) =>
+        _unreadable?.Report(_subDirectory, unreadable);
 
     // Un archivo corrupto (o a medio escribir por otro proceso) se omite en vez de tumbar la
     // lista entera: sin esto, un solo JSON malo dejaba sin lista de jobs, scheduler incluido.
     // Otros errores (p. ej. secretos que no se pueden descifrar) se siguen propagando. El omitido
     // deja un aviso en el log, para que no desaparezca de los listados sin rastro.
-    private T? TryDeserialize(string path, Func<string, T?> deserialize)
+    private T? TryDeserialize(string path, Func<string, T?> deserialize, List<(string Path, Exception Error)> unreadable)
     {
         try
         {
@@ -62,6 +72,7 @@ public abstract class JsonFileStore<T>
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
             WarnUnreadable(path, ex);
+            unreadable.Add((path, ex));
             return default;
         }
     }
