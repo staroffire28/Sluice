@@ -62,12 +62,13 @@ public abstract class JsonFileStore<T>
     // Un archivo corrupto (o a medio escribir por otro proceso) se omite en vez de tumbar la
     // lista entera: sin esto, un solo JSON malo dejaba sin lista de jobs, scheduler incluido.
     // Otros errores (p. ej. secretos que no se pueden descifrar) se siguen propagando. El omitido
-    // deja un aviso en el log, para que no desaparezca de los listados sin rastro.
+    // deja un aviso en el log, para que no desaparezca de los listados sin rastro. Un fichero con el
+    // literal JSON null se lee sin error y no da nada: cuenta como ilegible, igual que uno corrupto.
     private T? TryDeserialize(string path, Func<string, T?> deserialize, List<(string Path, Exception Error)> unreadable)
     {
         try
         {
-            return deserialize(path);
+            return deserialize(path) ?? throw new JsonException("The file holds the JSON literal null.");
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
