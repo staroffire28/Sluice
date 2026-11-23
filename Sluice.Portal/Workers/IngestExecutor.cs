@@ -1027,9 +1027,18 @@ public sealed class IngestExecutor : IIngestExecutor
             return ct => parquetStore.OpenParquetReadAsync(consolidatedBlobPath, ct);
         }
 
-        if (await _consolidatedCache.TryGetCopyAsync(parquetStore, pipelineId, entity, consolidatedBlobPath, cancellationToken) is { } cached)
+        // Una copia que no se puede escribir (disco lleno, permisos, otro proceso con el fichero) no
+        // hace fallar la tabla: se baja a staging, como sin caché (igual que ConsolidatedCache.OpenReadAsync).
+        try
         {
-            return _ => Task.FromResult<Stream>(File.OpenRead(cached));
+            if (await _consolidatedCache.TryGetCopyAsync(parquetStore, pipelineId, entity, consolidatedBlobPath, cancellationToken) is { } cached)
+            {
+                return _ => Task.FromResult<Stream>(File.OpenRead(cached));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && !cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "No se pudo usar la copia local del consolidado de {Entity}; se baja a staging.", entity);
         }
 
         var local = _manifestStore.GetStagingPreviousConsolidatedPath(jobId, entity);
