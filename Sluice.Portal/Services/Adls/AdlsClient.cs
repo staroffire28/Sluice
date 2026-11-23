@@ -66,7 +66,10 @@ public sealed class AdlsClient : IAdlsClient, IParquetStore
 
     // Parquet.Net necesita un stream con seek para leer el footer. A un fichero temporal y no a
     // memoria: un MemoryStream retenía el parquet entero (consolidados de GB en el worker).
-    // DeleteOnClose lo borra al disponer el stream (también si el proceso muere, en Windows).
+    // El fichero no sobrevive al proceso. En Windows, DeleteOnClose lo borra el sistema al cerrarse el
+    // handle, también si el proceso muere. En Linux lo borraría el propio proceso al disponer el
+    // stream, y uno matado dejaba el parquet en /tmp: se quita del directorio nada más abrirlo (el
+    // stream sigue leyendo y escribiendo, y el espacio se libera al cerrarlo o al morir el proceso).
     internal static async Task<Stream> CopyToTempFileAsync(Stream source, CancellationToken cancellationToken = default)
     {
         var path = Path.Combine(Path.GetTempPath(), $"sluice-{Guid.NewGuid():N}.parquet");
@@ -74,6 +77,11 @@ public sealed class AdlsClient : IAdlsClient, IParquetStore
             FileOptions.DeleteOnClose | FileOptions.Asynchronous);
         try
         {
+            if (!OperatingSystem.IsWindows())
+            {
+                File.Delete(path);
+            }
+
             await source.CopyToAsync(buffer, cancellationToken);
             buffer.Position = 0;
             return buffer;
