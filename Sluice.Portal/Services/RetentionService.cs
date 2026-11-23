@@ -26,6 +26,10 @@ public sealed class RetentionService
     // job): se purga pasado este margen aunque el job siga dentro de la retención.
     public static readonly TimeSpan FailedStagingRetention = TimeSpan.FromHours(24);
 
+    // Una descarga a la caché de consolidados que nadie escribe desde hace este margen es de un
+    // proceso que murió: una viva escribe sin parar y tarda minutos, no un día.
+    public static readonly TimeSpan CacheDownloadGracePeriod = TimeSpan.FromHours(24);
+
     private readonly AppOptions _options;
     private readonly IActivityLog _activity;
     private readonly ILogger<RetentionService> _logger;
@@ -46,15 +50,19 @@ public sealed class RetentionService
     {
         var (jobs, unreadableJobIds) = LoadJobs();
 
+        // Las descargas a medias de la caché de consolidados no son de ningún job: se purgan siempre.
+        var cacheTempFiles = new Pipeline.ConsolidatedCache(_options.DataDir).StaleDownloads((now - CacheDownloadGracePeriod).UtcDateTime);
+
         // RetentionDays <= 0 desactiva la purga: no se borra nada, salvo el staging de los jobs
-        // fallidos o cancelados, que se purga siempre (FailedStagingRetention), y el registro de
-        // actividad, que tiene su propia retención (AuditRetentionDays).
+        // fallidos o cancelados, que se purga siempre (FailedStagingRetention), las descargas a medias
+        // de la caché y el registro de actividad, que tiene su propia retención (AuditRetentionDays).
         if (settings.RetentionDays <= 0)
         {
             return new RetentionPlan
             {
                 StagingDirectories = OrphanStagingDirectories(null, FailedJobIds(jobs, now)),
                 ActivityLogFiles = OldActivityLogFiles(now, settings),
+                CacheTempFiles = cacheTempFiles,
             };
         }
 
@@ -102,6 +110,7 @@ public sealed class RetentionService
             RunDirectories = OrphanRunDirectories(orphans),
             StagingDirectories = OrphanStagingDirectories(orphans, FailedJobIds(jobs, now)),
             ActivityLogFiles = OldActivityLogFiles(now, settings),
+            CacheTempFiles = cacheTempFiles,
         };
     }
 
@@ -120,6 +129,7 @@ public sealed class RetentionService
             Runs = DeleteDirectories(plan.RunDirectories, failures),
             Staging = DeleteDirectories(plan.StagingDirectories, failures),
             ActivityLogs = DeleteFiles(plan.ActivityLogFiles, failures),
+            CacheTemps = DeleteFiles(plan.CacheTempFiles, failures),
             Failed = failures.Count,
         };
 
@@ -139,7 +149,7 @@ public sealed class RetentionService
                 null, null, "warning", "Activity.Retention.SweepFailures",
                 result.Jobs, result.Reports, result.Tasks, result.Runs, result.Staging, result.ActivityLogs, result.Failed, failures.First?.Message);
         }
-        else if (result.Total > 0)
+        else if (result.Total > result.CacheTemps)
         {
             _activity.LogSystem(
                 "retention.sweep",
@@ -148,6 +158,16 @@ public sealed class RetentionService
                 $"(antigüedad {settings.RetentionDays}d, piso {KeepLastPerPipeline}/pipeline).",
                 null, null, "info", "Activity.Retention.Sweep",
                 result.Jobs, result.Reports, result.Tasks, result.Runs, result.Staging, result.ActivityLogs, settings.RetentionDays, KeepLastPerPipeline);
+        }
+
+        // Entrada aparte: las de arriba se guardan con sus argumentos y un argumento más dejaría las
+        // ya escritas sin traducir.
+        if (result.CacheTemps > 0)
+        {
+            _activity.LogSystem(
+                "retention.sweep",
+                $"Retención: {result.CacheTemps} descargas a medias de la caché de consolidados eliminadas.",
+                null, null, "info", "Activity.Retention.CacheTemps", result.CacheTemps);
         }
 
         return result;
@@ -425,6 +445,7 @@ public sealed record RetentionPlan
     public IReadOnlyList<string> RunDirectories { get; init; } = [];
     public IReadOnlyList<string> StagingDirectories { get; init; } = [];
     public IReadOnlyList<string> ActivityLogFiles { get; init; } = [];
+    public IReadOnlyList<string> CacheTempFiles { get; init; } = [];
 }
 
 public sealed record RetentionSweepResult
@@ -435,8 +456,9 @@ public sealed record RetentionSweepResult
     public int Runs { get; init; }
     public int Staging { get; init; }
     public int ActivityLogs { get; init; }
+    public int CacheTemps { get; init; }
 
     // Elementos que tocaba borrar y no se pudieron (permisos, bloqueos): no cuentan en Total.
     public int Failed { get; init; }
-    public int Total => Jobs + Reports + Tasks + Runs + Staging + ActivityLogs;
+    public int Total => Jobs + Reports + Tasks + Runs + Staging + ActivityLogs + CacheTemps;
 }
