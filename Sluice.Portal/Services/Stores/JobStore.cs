@@ -74,7 +74,7 @@ public sealed class JobStore : JsonFileStore<Job>
                 Job? job;
                 try
                 {
-                    job = Read(path);
+                    job = Read(path) ?? throw new System.Text.Json.JsonException("The file holds the JSON literal null.");
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
