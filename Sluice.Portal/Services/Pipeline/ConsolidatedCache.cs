@@ -10,8 +10,21 @@ namespace Sluice.Portal.Services.Pipeline;
 // el consolidado nuevo pasa a ser la copia, así que el run siguiente no baja nada.
 public sealed class ConsolidatedCache(string dataDir)
 {
+    private string Root => Path.Combine(dataDir, "cache", "consolidated");
+
     public string GetPath(string pipelineId, string entity) =>
-        Path.Combine(dataDir, "cache", "consolidated", pipelineId, $"{entity}.parquet");
+        Path.Combine(Root, pipelineId, $"{entity}.parquet");
+
+    // Descargas que no terminaron: el proceso murió mientras bajaba el consolidado y su .tmp (del
+    // tamaño del consolidado) se queda hasta que otra descarga de esa tabla lo sobrescriba. Los que
+    // nadie escribe desde antes de olderThanUtc; solo la antigüedad prueba que no hay una descarga en
+    // curso, porque los workers son otros procesos sobre el mismo DATA_DIR. Los borra la retención.
+    public IReadOnlyList<string> StaleDownloads(DateTime olderThanUtc) =>
+        Directory.Exists(Root)
+            ? Directory.EnumerateFiles(Root, "*.parquet.tmp", SearchOption.AllDirectories)
+                .Where(file => File.GetLastWriteTimeUtc(file) < olderThanUtc)
+                .ToList()
+            : [];
 
     // Abre el consolidado de una tabla para leerlo entero (la etapa SQL y la comparación de valores):
     // la copia local si el remoto no cambió; si no, lee del store como siempre. Una copia que no se
