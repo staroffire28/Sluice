@@ -19,11 +19,18 @@ public sealed class AdlsClient : IAdlsClient, IParquetStore
     private readonly string? _parquetContainer;
 
     public AdlsClient(AdlsConnectionSettings settings)
+        : this(
+            new DataLakeServiceClient(
+                new Uri($"https://{settings.Account}.dfs.core.windows.net"),
+                AzureCredentialFactory.CreateClientSecret(settings.TenantId, settings.ClientId, settings.ClientSecret)),
+            settings)
     {
-        _serviceClient = new DataLakeServiceClient(
-            new Uri($"https://{settings.Account}.dfs.core.windows.net"),
-            AzureCredentialFactory.CreateClientSecret(settings.TenantId, settings.ClientId, settings.ClientSecret));
+    }
 
+    // El cliente del SDK ya construido: los tests pasan un doble en memoria en vez de una cuenta real.
+    internal AdlsClient(DataLakeServiceClient serviceClient, AdlsConnectionSettings settings)
+    {
+        _serviceClient = serviceClient;
         _fileSystem = _serviceClient.GetFileSystemClient(settings.Container);
         _parquetContainer = settings.ParquetContainer;
     }
