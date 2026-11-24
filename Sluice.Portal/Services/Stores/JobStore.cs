@@ -241,7 +241,7 @@ public sealed record JobHeader
     public string PipelineId { get; init; } = "";
     public JobType Type { get; init; } = JobType.Incremental;
     public JobStatus Status { get; init; } = JobStatus.Running;
-    public DateTimeOffset StartedAt { get; init; }
+    public DateTimeOffset StartedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? FinishedAt { get; init; }
     public Dictionary<string, object?> Summary { get; init; } = new();
 }
