@@ -38,6 +38,21 @@ public interface IJobService
             }
             : null;
 
+    // El job sin sus tablas ni sus eventos, sin leerlo entero (la página Analítica). Por defecto se
+    // deriva de Get, para los dobles de test.
+    JobHeader? GetHeader(string id) =>
+        Get(id) is { } job
+            ? new JobHeader
+            {
+                PipelineId = job.PipelineId,
+                Type = job.Type,
+                Status = job.Status,
+                StartedAt = job.StartedAt,
+                FinishedAt = job.FinishedAt,
+                Summary = job.Summary,
+            }
+            : null;
+
     Job Create(Job job);
     Job? Update(string id, Job job);
     void AppendEvent(string jobId, EventLevel level, string message);
@@ -111,6 +126,8 @@ public sealed class JobService : IJobService
     public Job? Get(string id) => _store.GetById(id);
 
     public JobTableRows? GetTableRows(string id) => _store.GetTableRows(id);
+
+    public JobHeader? GetHeader(string id) => _store.GetHeader(id);
 
     public Job Create(Job job)
     {

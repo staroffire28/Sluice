@@ -140,6 +140,15 @@ public sealed class JobStore : JsonFileStore<Job>
             return System.Text.Json.JsonSerializer.Deserialize<JobTableRows>(stream, JsonDefaults.Options);
         });
 
+    // El job sin sus tablas ni sus eventos (la página Analítica). Como GetTableRows: bajo el lock del
+    // almacén, y un id no válido o un fichero que no existe dan null.
+    public JobHeader? GetHeader(string id) =>
+        ReadLocked(id, path =>
+        {
+            using var stream = File.OpenRead(path);
+            return System.Text.Json.JsonSerializer.Deserialize<JobHeader>(stream, JsonDefaults.Options);
+        });
+
     // Una escritura de este proceso invalida su entrada: la fecha del fichero podría no cambiar si dos
     // escrituras caen en el mismo instante.
     public void Save(Job job)
@@ -224,6 +233,17 @@ public sealed record JobTableRows
 {
     public DateTimeOffset StartedAt { get; init; }
     public List<JobTableRowsEntry> Entities { get; init; } = [];
+}
+
+// Lo que la página Analítica lee de un job: todo lo que usa, sin sus tablas ni sus eventos.
+public sealed record JobHeader
+{
+    public string PipelineId { get; init; } = "";
+    public JobType Type { get; init; } = JobType.Incremental;
+    public JobStatus Status { get; init; } = JobStatus.Running;
+    public DateTimeOffset StartedAt { get; init; }
+    public DateTimeOffset? FinishedAt { get; init; }
+    public Dictionary<string, object?> Summary { get; init; } = new();
 }
 
 public sealed record JobTableRowsEntry

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Sluice.Portal.Models;
+using Sluice.Portal.Services.Stores;
 
 namespace Sluice.Portal.Services.Analytics;
 
@@ -185,34 +186,19 @@ public sealed class AnalyticsService : IAnalyticsService
         };
     }
 
-    // Lista hasta HistorySize jobs recientes (de un pipeline o de todos) paginando con List();
-    // ordena por fecha desc.
-    private List<Job> LoadRecentJobs(string? pipelineId)
-    {
-        var collected = new List<Job>();
-        const int pageSize = 50;
-        var maxPages = (HistorySize / pageSize) + 1;
-
-        for (var page = 1; page <= maxPages && collected.Count < HistorySize; page++)
-        {
-            var batch = _jobs.List(page: page, pageSize: pageSize, pipelineId: pipelineId);
-            if (batch.Count == 0)
-            {
-                break;
-            }
-
-            collected.AddRange(batch);
-        }
-
-        return collected
+    // Los HistorySize jobs más recientes (de un pipeline o de todos), por fecha desc. Se eligen sobre
+    // el índice y de cada uno se lee solo la cabecera, sin sus tablas ni sus eventos.
+    private List<JobHeader> LoadRecentJobs(string? pipelineId) =>
+        _jobs.ListIndex(pipelineId, null, null)
             .Take(HistorySize)
+            .Select(e => _jobs.GetHeader(e.Id))
+            .OfType<JobHeader>()
             .OrderByDescending(j => j.StartedAt)
             .ToList();
-    }
 
     // ---- KPIs ----
 
-    private static double ComputeSuccessRate(IReadOnlyCollection<Job> jobs)
+    private static double ComputeSuccessRate(IReadOnlyCollection<JobHeader> jobs)
     {
         var finished = jobs.Where(IsTerminal).ToList();
         if (finished.Count == 0)
@@ -224,7 +210,7 @@ public sealed class AnalyticsService : IAnalyticsService
         return Math.Round(ok * 100.0 / finished.Count, 1);
     }
 
-    private static double ComputeCurrentMaxDivergence(IEnumerable<Job> jobs)
+    private static double ComputeCurrentMaxDivergence(IEnumerable<JobHeader> jobs)
     {
         // Toma la divergencia del job más reciente que la reporte.
         foreach (var job in jobs)
@@ -268,7 +254,7 @@ public sealed class AnalyticsService : IAnalyticsService
 
     // ---- Gráficos ----
 
-    private static IReadOnlyList<LabeledValue> BuildStatusDistribution(IEnumerable<Job> jobs)
+    private static IReadOnlyList<LabeledValue> BuildStatusDistribution(IEnumerable<JobHeader> jobs)
     {
         var byStatus = jobs
             .GroupBy(j => j.Status)
@@ -281,7 +267,7 @@ public sealed class AnalyticsService : IAnalyticsService
             .ToList();
     }
 
-    private static IReadOnlyList<DailyJobCount> BuildJobsPerDay(IEnumerable<Job> jobs, TimeZoneInfo? zone)
+    private static IReadOnlyList<DailyJobCount> BuildJobsPerDay(IEnumerable<JobHeader> jobs, TimeZoneInfo? zone)
     {
         var today = Day(DateTimeOffset.UtcNow, zone);
         var startDay = today.AddDays(-(DaysWindow - 1));
@@ -311,7 +297,7 @@ public sealed class AnalyticsService : IAnalyticsService
         return result;
     }
 
-    private IReadOnlyList<LabeledValue> BuildMergedRowsByPipeline(IEnumerable<Job> jobs)
+    private IReadOnlyList<LabeledValue> BuildMergedRowsByPipeline(IEnumerable<JobHeader> jobs)
     {
         var names = PipelineNames();
 
@@ -329,7 +315,7 @@ public sealed class AnalyticsService : IAnalyticsService
             .ToList();
     }
 
-    private static IReadOnlyList<DivergencePoint> BuildDivergenceOverTime(IEnumerable<Job> jobs)
+    private static IReadOnlyList<DivergencePoint> BuildDivergenceOverTime(IEnumerable<JobHeader> jobs)
     {
         // Últimos N jobs Reconcile/Force con maxDivergencePct, en orden cronológico.
         var points = jobs
@@ -347,7 +333,7 @@ public sealed class AnalyticsService : IAnalyticsService
         return points;
     }
 
-    private static IReadOnlyList<LabeledValue> BuildAvgDurationByType(IEnumerable<Job> jobs)
+    private static IReadOnlyList<LabeledValue> BuildAvgDurationByType(IEnumerable<JobHeader> jobs)
     {
         // Duración media (en minutos) de jobs terminados, agrupada por tipo.
         var durations = jobs
@@ -413,8 +399,8 @@ public sealed class AnalyticsService : IAnalyticsService
 
     // ---- Helpers de parseo robusto de Summary ----
 
-    private static bool IsTerminal(Job j) =>
-        !JobProgressHelper.IsActive(j);
+    private static bool IsTerminal(JobHeader j) =>
+        !JobProgressHelper.IsActive(j.Status, j.FinishedAt);
 
     // Día de un instante en la zona pedida (UTC si no se indica).
     private static DateOnly Day(DateTimeOffset at, TimeZoneInfo? zone) =>
